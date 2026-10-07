@@ -728,7 +728,7 @@ Applying it sets the defaults for new files and rewrites every edited frame in t
 *   **Profile**: the sensor matrix. Custom `.toml` matrices go in `<Documents>/NegPy/sensor/`.
 *   **Calibrate** (vials icon on the header): build a profile from three bare-light R/G/B exposures. Pick them as files, or press **Capture from Camera…** to shoot and measure them with a tethered camera and a Scanlight, with no film in the holder; it asks before the first exposure, and the button is grayed out until both are connected. A Single Capture Scanlight preset can save one during its own calibration.
 
-Needs **Linear RAW**; grayed out on Transparency and on a Trichrome triplet. **Re-run Roll Analysis** after changing it.
+Needs **Linear RAW**; grayed out on Transparency and on a Trichrome triplet. **Re-run Roll Analysis** after changing it. CAMERA_SCANNING.md has a workflow for each way to build and assign a profile.
 
 **Crosstalk** (hidden in B&W Negative): a channel unmix on the densities before inversion. Dyes, light and sensor all mix the channels, so a matrix describes your whole scanning setup.
 
