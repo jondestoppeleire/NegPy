@@ -102,7 +102,7 @@ three LEDs lit: each sensor channel also reads the neighboring LEDs, so the run 
 that overlap and lowers the levels to match. If the overlap leaves no levels that balance
 the channels, the run stops and says so. Calibrate a triplet preset instead.
 
-With **Sensor Profile** on, a Single Capture run also saves a
+With **Create Sensor Profile** on, a Single Capture run also saves a
 [sensor calibration](#sensor-calibration) profile under the preset's name, measured from the
 same exposures. A roll scanned with the preset takes that profile and turns Linear RAW on.
 Turn the toggle off to keep a profile you made yourself.
@@ -150,7 +150,7 @@ property of your sensor and light pair, independent of the film.
 There are three ways to build a profile, and they give near-identical corrections.
 [Sensor profile workflows](#sensor-profile-workflows) puts each one in a full scan:
 
-- **With a preset.** A Single Capture preset calibrated with **Sensor Profile** on saves a
+- **With a preset.** A Single Capture preset calibrated with **Create Sensor Profile** on saves a
   profile under the preset's name, measured through the film base. Rolls scanned with the
   preset take it automatically. Use this if you scan with Single Capture presets.
 - **Capture from Camera…** With the camera tethered, a Scanlight connected and no film in
@@ -199,7 +199,7 @@ Once per film stock:
    dropdown. The calibration window opens with its own live view.
 2. Set the ISO and the aperture you scan with, click the clear film base and name the
    preset after the stock.
-3. Pick **Single Capture**, leave **Sensor Profile** on and press **Calibrate & Save**.
+3. Pick **Single Capture**, leave **Create Sensor Profile** on and press **Calibrate & Save**.
 
 For every roll of that stock, this one and later ones:
 
@@ -232,7 +232,7 @@ that its exposures were too dim to measure one.
    **Calibration** panel, turn **Linear RAW** on, press the calibrate button, name the
    profile and press **Capture from Camera…**. To build it from three bare-light files
    you shot yourself instead, pick them in the same dialog as in workflow D, step 1.
-2. Load the film. Calibrate the preset as in workflow A, with **Sensor Profile** off.
+2. Load the film. Calibrate the preset as in workflow A, with **Create Sensor Profile** off.
 3. Scan the first frame. In the **Calibration** panel, check that **Linear RAW** is on,
    pick the profile under **Profile**, and press **Roll** on the panel header.
 4. Scan the rest of the roll. New frames take the roll's profile.
