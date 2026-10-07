@@ -726,7 +726,7 @@ Applying it sets the defaults for new files and rewrites every edited frame in t
 **Single-Shot Narrowband Calibration**: for single-shot camera scans under narrowband light, where each color leaks into the others through the sensor's filters.
 
 *   **Profile**: the sensor matrix. Custom `.toml` matrices go in `<Documents>/NegPy/sensor/`.
-*   **Calibrate** (vials icon on the header): build a profile from three bare-light R/G/B exposures. Pick them as files, or press **Capture from Camera** to shoot and measure them with a tethered camera and a Scanlight, with no film in the holder; the button is grayed out until both are connected. A Single Capture Scanlight preset can save one during its own calibration.
+*   **Calibrate** (vials icon on the header): build a profile from three bare-light R/G/B exposures. Pick them as files, or press **Capture from Camera…** to shoot and measure them with a tethered camera and a Scanlight, with no film in the holder; it asks before the first exposure, and the button is grayed out until both are connected. A Single Capture Scanlight preset can save one during its own calibration.
 
 Needs **Linear RAW**; grayed out on Transparency and on a Trichrome triplet. **Re-run Roll Analysis** after changing it.
 

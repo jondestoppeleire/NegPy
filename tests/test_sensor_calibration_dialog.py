@@ -82,8 +82,9 @@ class _Controller(QObject):
         self.requests.append(req)
 
 
-def _tethered(monkeypatch, saved: list):
+def _tethered(monkeypatch, saved: list, *, confirm: bool = True):
     controller = _Controller()
+    monkeypatch.setattr(mod, "confirm_sensor_capture", lambda _parent: confirm)
     dlg = SensorCalibrationDialog(controller=controller)
     monkeypatch.setattr(mod.SensorProfiles, "save", lambda name, matrix: saved.append((name, matrix)))
     dlg.name_edit.setText("Test Rig")
@@ -117,8 +118,14 @@ def test_a_measured_response_saves_the_profile(qapp, monkeypatch):
     controller.capture_sensor_response_measured.emit(response)
     assert names == ["Test Rig"] and saved[0][0] == "Test Rig"
     assert saved[0][1] == pytest.approx(list(mod.build_sensor_matrix(*_CAPTURES.values())))
-    assert dlg.cancel_btn.text() == "Close" and dlg.capture_btn.text() == "Capture from Camera"
+    assert dlg.cancel_btn.text() == "Close" and dlg.capture_btn.text() == "Capture from Camera…"
     assert dlg.capture_btn.isEnabled() and not dlg.capture_btn.isDefault()
+
+
+def test_a_declined_confirmation_shoots_nothing(qapp, monkeypatch):
+    dlg, controller = _tethered(monkeypatch, [], confirm=False)
+    dlg.capture_btn.click()
+    assert not controller.requests and dlg.capture_btn.isEnabled() and dlg.result_label.isHidden()
 
 
 def test_a_failed_capture_reports_and_allows_a_retry(qapp, monkeypatch):

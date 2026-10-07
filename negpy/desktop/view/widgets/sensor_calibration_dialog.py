@@ -20,6 +20,7 @@ from PyQt6.QtWidgets import (
 )
 
 from negpy.kernel.system.text import plural
+from negpy.desktop.view.confirm import confirm_sensor_capture
 from negpy.desktop.view.styles.templates import hint_label, pin_dialog_default, wrap_tooltip
 from negpy.desktop.view.widgets.dialog_geometry import remember_dialog_geometry
 from negpy.desktop.view.widgets.file_dialogs import pick_start_dir
@@ -31,10 +32,10 @@ from negpy.services.assets.sensor import SensorProfiles
 _BANDS = (("R", "Red exposure"), ("G", "Green exposure"), ("B", "Blue exposure"))
 _CLIP_LEVEL = 0.98
 _CLIP_FRACTION = 0.02
-_CAPTURE_LABEL = "Capture from Camera"
+_CAPTURE_LABEL = "Capture from Camera…"
 _CAPTURE_TOOLTIP = (
     "Shoot the red, green and blue exposures with the tethered camera and the Scanlight, then save "
-    "the profile under the name above. Take the film out of the holder first."
+    "the profile under the name above. It asks before the first exposure."
 )
 _PRESENCE_POLL_MS = 3000
 _LED_SETTLE_S = 0.05  # the Scanlight panel's settle before each exposure
@@ -74,7 +75,7 @@ class SensorCalibrationDialog(QDialog):
             "Pick three <b>bare-light</b> exposures — red-only, green-only and blue-only, with no film in the "
             "holder and the same light and camera settings you scan with. NegPy measures the sensor's response "
             "to each band and builds the correction. Expose just below clipping. With a tethered camera and a "
-            "Scanlight, <b>Capture from Camera</b> shoots and measures the three exposures for you."
+            "Scanlight, <b>Capture from Camera…</b> shoots and measures the three exposures for you."
         )
         intro.setWordWrap(True)
         intro.setStyleSheet(f"color: {THEME.text_secondary};")
@@ -219,6 +220,8 @@ class SensorCalibrationDialog(QDialog):
     def _capture_and_save(self) -> None:
         from negpy.desktop.workers.capture_worker import SensorResponseRequest
 
+        if not confirm_sensor_capture(self):
+            return
         self._capture = SensorResponseRequest(port=self._light_port(), settle_s=_LED_SETTLE_S)
         self._refresh()
         self._show_result("Waiting for the camera…")

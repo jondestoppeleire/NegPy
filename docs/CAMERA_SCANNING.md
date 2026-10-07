@@ -152,9 +152,9 @@ There are three ways to build a profile, and they give near-identical correction
 - **With a preset.** A Single Capture preset calibrated with **Sensor Profile** on saves a
   profile under the preset's name, measured through the film base. Rolls scanned with the
   preset take it automatically. Use this if you scan with Single Capture presets.
-- **Capture from Camera.** With the camera tethered, a Scanlight connected and no film in
+- **Capture from Camera…** With the camera tethered, a Scanlight connected and no film in
   the holder, open the **Calibration** panel, find *Single-Shot Narrowband Calibration*,
-  press the calibrate button, name the profile and press **Capture from Camera**. NegPy
+  press the calibrate button, name the profile and press **Capture from Camera…**, then confirm. NegPy
   lights each LED in turn, sets the shutter itself and saves the profile. It uses the ISO
   and aperture the camera is set to, and needs no live view. One profile serves every film
   stock. Use this for a rig you scan with outside the presets.
