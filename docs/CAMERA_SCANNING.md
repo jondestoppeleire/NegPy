@@ -147,13 +147,29 @@ camera's color-filter passbands overlap the source's bands, so the green pixel s
 blue LED and some red, and every channel carries a share of its neighbours. It is a fixed
 property of your sensor and light pair, independent of the film.
 
-A Single Capture preset calibrated with **Sensor Profile** on measures this for you. To
-build a profile by hand, photograph the bare light three times with no film in the holder: red only,
-green only, blue only. Use the same settings you scan with, exposed just below clipping.
-Then open the **Calibration** panel, find *Single-Shot Narrowband Calibration*, press the calibrate
-button, pick the three captures, name the profile and save it. The selected profile un-mixes
-every scan with a 3×3 matrix in the linear domain, before inversion. Profiles are TOML
-files in the `NegPy/sensor` folder. Re-run **Roll Analysis** after you change the profile.
+There are three ways to build a profile, and they give near-identical corrections:
+
+- **With a preset.** A Single Capture preset calibrated with **Sensor Profile** on saves a
+  profile under the preset's name, measured through the film base. Rolls scanned with the
+  preset take it automatically. Use this if you scan with Single Capture presets.
+- **Capture from Camera.** With the camera tethered, a Scanlight connected and no film in
+  the holder, open the **Calibration** panel, find *Single-Shot Narrowband Calibration*,
+  press the calibrate button, name the profile and press **Capture from Camera**. NegPy
+  lights each LED in turn, sets the shutter itself and saves the profile. It uses the ISO
+  and aperture the camera is set to, and needs no live view. One profile serves every film
+  stock. Use this for a rig you scan with outside the presets.
+- **From files.** Photograph the bare light three times with no film in the holder: red
+  only, green only, blue only, exposed just below clipping. In the same dialog, pick the
+  three captures, name the profile and save it. Use this for a light NegPy cannot control.
+
+A profile measured through the film base and one measured on the bare light differ
+slightly, because the base tints each LED's light. The leak also changes a little with
+the density of the picture, so no single profile is exact, and neither method is the more
+accurate one. One profile for a sensor and light pair is enough.
+
+The selected profile un-mixes every scan with a 3×3 matrix in the linear domain, before
+inversion. Profiles are TOML files in the `NegPy/sensor` folder. Re-run **Roll Analysis**
+after you change the profile.
 
 Do not use it on RGB-triplet (trichrome) scans. They are crosstalk-free by construction,
 because each channel comes from its own single-light exposure, and NegPy skips the
