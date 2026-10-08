@@ -1700,7 +1700,13 @@ class GPUEngine:
                 settings.exposure.highlight_yellow * t_cmy_m,
                 float(t_wb_k),
             )
-            + struct.pack("ffff", float(ZONE_BLACK_TAPER), 1.0 if t_positive_source else 0.0, 0.0, 0.0)
+            + struct.pack(
+                "ffff",
+                float(ZONE_BLACK_TAPER),
+                1.0 if t_positive_source else 0.0,
+                math.radians(float(settings.process.hue_trim)),
+                0.0,
+            )
             + struct.pack("ffff", t_cast_gain[0], t_cast_gain[1], t_cast_gain[2], 0.0)
             + struct.pack(
                 "ffff",

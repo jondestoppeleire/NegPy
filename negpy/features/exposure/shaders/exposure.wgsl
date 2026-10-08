@@ -142,7 +142,7 @@ fn oetf_encode(t: f32) -> f32 {
 
 // Copied verbatim from lab.wgsl's rgb_to_lab/lab_to_rgb (WGSL has no includes):
 // Adobe RGB 1998 primaries, D65, scene-linear both ways. A primaries or
-// white-point change must update both copies.
+// white-point change must update every copy (lab.wgsl, exposure.wgsl, transfer.wgsl).
 fn hue_rgb_to_lab(rgb: vec3<f32>) -> vec3<f32> {
     let r = max(rgb.r, 0.0);
     let g = max(rgb.g, 0.0);
