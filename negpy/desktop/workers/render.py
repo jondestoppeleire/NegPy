@@ -756,9 +756,15 @@ class AssetDiscoveryWorker(QObject):
 
     @pyqtSlot(AssetDiscoveryTask)
     def process(self, task: AssetDiscoveryTask) -> None:
-        """
-        Scans paths for supported images and calculates hashes.
-        """
+        """Scans paths for supported images and calculates hashes. Emits `finished` or
+        `error`: either one releases the import lane."""
+        try:
+            self._discover(task)
+        except Exception as e:
+            logger.exception("Asset discovery failed")
+            self.error.emit(str(e))
+
+    def _discover(self, task: AssetDiscoveryTask) -> None:
         import os
 
         from negpy.infrastructure.loaders.constants import is_hidden_path, is_ir_sidecar_path
@@ -791,17 +797,14 @@ class AssetDiscoveryWorker(QObject):
             if digest is None:
                 continue
             f_hash, legacy = digest
-            if not f_hash.startswith("err_"):
-                # Stamped once here so sorting and date search never stat per row.
-                valid_assets.append(
-                    {
-                        "name": os.path.basename(path),
-                        "path": path,
-                        "hash": f_hash,
-                        "legacy_hash": legacy,
-                        "mtime": os.path.getmtime(path),
-                    }
-                )
+            if f_hash.startswith("err_"):
+                continue
+            # Stamped once here so sorting and date search never stat per row.
+            try:
+                mtime = os.path.getmtime(path)
+            except OSError:
+                continue  # Removed or renamed since it was hashed.
+            valid_assets.append({"name": os.path.basename(path), "path": path, "hash": f_hash, "legacy_hash": legacy, "mtime": mtime})
 
         blank_ambiguous_legacy_hashes(valid_assets)
 
