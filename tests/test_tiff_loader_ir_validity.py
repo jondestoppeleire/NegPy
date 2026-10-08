@@ -152,3 +152,27 @@ def test_a_two_sample_gray_tiff_loads_as_gray(tmp_path, extrasamples, expect_ir)
     assert wrapper.data.shape == (6, 8, 3)
     np.testing.assert_allclose(wrapper.data, np.float32(20000 / 65535), rtol=1e-6)
     assert (metadata["ir"] is not None) is expect_ir
+
+
+def test_a_planar_tiff_loads_with_samples_last(tmp_path) -> None:
+    rgb = np.zeros((3, 40, 60), dtype=np.uint16)
+    rgb[0], rgb[1], rgb[2] = 10000, 20000, 30000
+    path = tmp_path / "planar.tif"
+    tifffile.imwrite(path, rgb, photometric="rgb", planarconfig="separate")
+
+    wrapper, _ = TiffLoader().load(str(path), linear_raw=True)
+
+    assert wrapper.data.shape == (40, 60, 3)
+    np.testing.assert_allclose(wrapper.data[5, 5], np.array([10000, 20000, 30000]) / 65535, rtol=1e-6)
+
+
+def test_linear_output_reads_a_planar_tiff_with_samples_last(tmp_path) -> None:
+    from negpy.services.export.linear_output import _decode_tiff
+
+    rgb = np.full((3, 40, 60), 20000, dtype=np.uint16)
+    path = tmp_path / "planar.tif"
+    tifffile.imwrite(path, rgb, photometric="rgb", planarconfig="separate")
+
+    out, _ = _decode_tiff(str(path))
+
+    assert out.shape[:2] == (40, 60)

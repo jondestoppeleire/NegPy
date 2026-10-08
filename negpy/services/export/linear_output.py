@@ -508,9 +508,11 @@ def _decode_tiff(
     from negpy.infrastructure.loaders.ir_planes import find_ir_plane
     from negpy.infrastructure.loaders.tiff_loader import _extract_ir_from_extrasamples, _read_sidecar_ir
 
+    from negpy.infrastructure.loaders.tiff_loader import planar_to_chunky
+
     with _tifffile.TiffFile(file_path) as tif:
         page = tif.pages[0]
-        arr = page.asarray()
+        arr = planar_to_chunky(page.asarray(), getattr(page, "planarconfig", 1))
     if arr.dtype == np.uint16:
         scale = 1.0 / 65535.0
     elif arr.dtype == np.uint8:

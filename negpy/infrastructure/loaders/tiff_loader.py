@@ -131,6 +131,21 @@ def _extract_ir_from_extrasamples(file_path: str, img: np.ndarray) -> Tuple[np.n
     return np.ascontiguousarray(img[:, :, :3]), None
 
 
+def planar_to_chunky(img: np.ndarray, planarconfig: int) -> np.ndarray:
+    """(samples, H, W) from a PlanarConfiguration=2 TIFF as (H, W, samples)."""
+    if int(planarconfig) == 2 and img.ndim == 3:
+        return np.moveaxis(img, 0, -1)
+    return img
+
+
+def _planarconfig(file_path: str) -> int:
+    try:
+        with tifffile.TiffFile(file_path) as tif:
+            return int(getattr(tif.pages[0], "planarconfig", 1))
+    except Exception:
+        return 1
+
+
 class TiffLoader(IImageLoader):
     """
     Loader for TIFF scans. Surfaces an IR channel via `metadata["ir"]` when present
@@ -138,7 +153,7 @@ class TiffLoader(IImageLoader):
     """
 
     def load(self, file_path: str, linear_raw: bool = False, positive_source: bool = False) -> Tuple[ContextManager[Any], dict]:
-        img = iio.imread(file_path)
+        img = planar_to_chunky(iio.imread(file_path), _planarconfig(file_path))
         ir: Optional[np.ndarray] = None
         ir_valid_mask: Optional[np.ndarray] = None
 
