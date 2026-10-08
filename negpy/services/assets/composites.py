@@ -13,6 +13,7 @@ re-forming the same composite finds its edit again.
 from typing import Any, Callable, Dict, Optional
 
 from negpy.features.hdr.models import ANCHOR_EV_UNSET
+from negpy.services.assets.rolls import unforked_hash
 
 COMPOSITES_KEY = "composites_by_path"
 
@@ -57,7 +58,8 @@ def restore_maps(repo: Any) -> tuple:
 def composite_entry(asset: dict) -> Optional[dict]:
     """The storable record of an asset's composite membership, or None when it is a
     plain frame. Settings that ride on the asset (align, render exposure) are part of
-    the record: they are the composite's, not the edit's."""
+    the record: they are the composite's, not the edit's. The hash is the shared one, as a
+    roll fork belongs to the roll that made it."""
     if asset.get("stitch_paths"):
         return {
             "kind": "stitch",
@@ -67,7 +69,7 @@ def composite_entry(asset: dict) -> Optional[dict]:
             "sizes": [list(s) for s in asset["stitch_sizes"]],
             "triplets": [list(t) for t in asset.get("stitch_triplets") or ()],
             "align": bool(asset.get("stitch_align", True)),
-            "hash": asset["hash"],
+            "hash": unforked_hash(asset["hash"]),
             "process_mode": asset.get("process_mode", ""),
         }
     if asset.get("hdr_paths"):
@@ -78,7 +80,7 @@ def composite_entry(asset: dict) -> Optional[dict]:
             "align": bool(asset.get("hdr_align", True)),
             "anchor": str(asset.get("hdr_anchor", "") or ""),
             "anchor_ev": float(asset.get("hdr_anchor_ev", ANCHOR_EV_UNSET)),
-            "hash": asset["hash"],
+            "hash": unforked_hash(asset["hash"]),
             "process_mode": asset.get("process_mode", ""),
         }
     return None

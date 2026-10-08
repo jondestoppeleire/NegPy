@@ -334,3 +334,10 @@ def test_the_reported_scenario(tmp_path):
     assert [a["name"] for a in back] == ["a+b (Stitch)"]
     assert back[0]["hash"] == "digest#stitch"
     assert back[0]["stitch_paths"] == (parts[1]["path"],)
+
+
+def test_a_composite_record_keeps_the_shared_hash_of_a_forked_composite():
+    from negpy.services.assets.composites import composite_entry
+
+    asset = {**_stitch_asset(), "hash": "digest#stitch#roll:r1"}
+    assert composite_entry(asset)["hash"] == "digest#stitch"
