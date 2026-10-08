@@ -2019,15 +2019,16 @@ class AppController(QObject):
             return
         path = self._path_for_base_hash(file_hash)
         for half in (1, 2):
-            h = half_hash(file_hash, half)
-            saved = self.session.repo.load_file_settings(h)
-            if saved is None:
-                continue
-            updated = remap_workspace_config(saved, half, old_geom, new_geom)
-            if updated == saved:
-                continue
-            self.session.push_external_history(h, saved, updated)
-            self.session.repo.save_file_settings(h, updated, file_path=path)
+            shared = half_hash(file_hash, half)
+            for h in (shared, *rolls.forked_edit_hashes(self.session.repo, shared)):
+                saved = self.session.repo.load_file_settings(h)
+                if saved is None:
+                    continue
+                updated = remap_workspace_config(saved, half, old_geom, new_geom)
+                if updated == saved:
+                    continue
+                self.session.push_external_history(h, saved, updated)
+                self.session.repo.save_file_settings(h, updated, file_path=path)
 
     _HALF_FRAME_APPLY_SCOPE_KEY = "half_frame_apply_scope"
 

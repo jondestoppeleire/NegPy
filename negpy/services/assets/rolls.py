@@ -296,6 +296,11 @@ def unforked_hash(file_hash: str) -> str:
     return file_hash[:idx] if idx != -1 else file_hash
 
 
+def forked_edit_hashes(repo: Any, from_hash: str) -> List[str]:
+    """Every roll's own edit hash for *from_hash*, where a roll forked it."""
+    return [roll_edit_hash(from_hash, rid) for rid, entry in _read(repo).items() if from_hash in entry.get("forked_hashes", [])]
+
+
 def is_forked(repo: Any, roll_id: str, from_hash: str) -> bool:
     """Whether *from_hash* has its own edit under *roll_id*, rather than the shared one.
 

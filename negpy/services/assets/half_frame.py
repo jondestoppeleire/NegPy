@@ -265,7 +265,7 @@ def remap_workspace_config(config: "WorkspaceConfig", half: int, old_geom: HalfG
     heal stroke, dust spot, scratch line or dodge/burn mask stays on the same
     physical film location after that half's crop/split changes.
 
-    ``geometry.crop_rect`` is cleared instead: unlike these, it lives in
+    ``geometry.crop_rect`` and ``process.analysis_rect`` are cleared instead: unlike these, they live in
     transformed-image space (after rotation/flip/keystone/distortion), not raw
     space, so the same point-remap does not apply to it, and a rect drawn
     against the old half's frame boundary has no correct position in the new
@@ -292,6 +292,8 @@ def remap_workspace_config(config: "WorkspaceConfig", half: int, old_geom: HalfG
     heal_strokes = [stroke(*s) for s in retouch.manual_heal_strokes]
     dust_spots = [(*pt((x, y)), size) for (x, y, size) in retouch.manual_dust_spots]
     scratch_lines = [(*pt((x0, y0)), *pt((x1, y1)), width) for (x0, y0, x1, y1, width) in retouch.scratch_lines]
+    clone_strokes = [(*stroke(*c[:4]), *c[4:]) for c in retouch.clone_strokes]
+    exclusions = [([pt(p) for p in points], size, *rest) for points, size, *rest in retouch.dust_exclusion_strokes]
     masks = tuple(replace(m, vertices=tuple(tuple(pt(v)) for v in m.vertices)) for m in config.local.masks)
 
     geometry = config.geometry
@@ -302,9 +304,12 @@ def remap_workspace_config(config: "WorkspaceConfig", half: int, old_geom: HalfG
             manual_heal_strokes=heal_strokes,
             manual_dust_spots=dust_spots,
             scratch_lines=scratch_lines,
+            clone_strokes=clone_strokes,
+            dust_exclusion_strokes=exclusions,
         ),
         local=replace(config.local, masks=masks),
         geometry=replace(geometry, crop_rect=None) if geometry.crop_rect is not None else geometry,
+        process=replace(config.process, analysis_rect=None) if config.process.analysis_rect is not None else config.process,
     )
 
 
