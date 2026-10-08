@@ -5891,14 +5891,14 @@ class AppController(QObject):
             return
         asset = self.state.uploaded_files[idx]
         roll_id, path, from_hash = self.state.active_roll_id, asset.get("path"), asset.get("hash")
-        if not roll_id or not path or not from_hash:
+        if not roll_id or not path or not from_hash or rolls.unforked_hash(from_hash) != from_hash:
             return
         is_active = from_hash == self.state.current_file_hash
         seed = self.state.config if is_active else self.session.config_for_asset(asset)
         asset["hash"] = rolls.fork_edit(self.session.repo, roll_id, from_hash, path, seed)
         self.session.asset_model.refresh()
         if is_active:
-            self.load_file(path)
+            self._reselect_active_frame()
         self.set_status("This roll now has its own edit for this frame", 3000)
 
     def request_unfork_edit_for_roll(self) -> None:
@@ -5917,8 +5917,14 @@ class AppController(QObject):
         asset["hash"] = from_hash
         self.session.asset_model.refresh()
         if forked_hash == self.state.current_file_hash:
-            self.load_file(path)
+            self._reselect_active_frame()
         self.set_status("Reverted to this roll's shared edit", 3000)
+
+    def _reselect_active_frame(self) -> None:
+        """Re-enter the active frame after its hash changed, so edits save under the new
+        hash. The unsaved change is already in the new row, so it is not saved to the old one."""
+        self.state.is_dirty = False
+        self.session.select_file(self.state.selected_file_idx, selection_override=list(self.state.selected_indices))
 
     def _select_file_by_path(self, path: str) -> bool:
         """Find a file by path in uploaded_files and select it."""
