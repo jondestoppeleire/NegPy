@@ -2648,6 +2648,9 @@ class GPUEngine:
             halo = max(halo, int(np.ceil(max(3.0, 15.0 * scale_factor))))
         if settings.lab.halation_strength > 0.0:
             halo = max(halo, int(np.ceil(max(5.0, 25.0 * scale_factor))))
+        # Chroma Denoise taps reach 2 * chroma_denoise * scale_factor px (lab.wgsl).
+        if settings.lab.chroma_denoise > 0.0:
+            halo = max(halo, int(np.ceil(2.0 * settings.lab.chroma_denoise * scale_factor)) + 1)
         halo = min(halo, 512)
 
         # Opt-in (AppConfig.low_vram_export_tiling, off by default): a smaller tile
