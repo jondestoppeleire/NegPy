@@ -1689,9 +1689,7 @@ class DesktopSessionManager(QObject):
             config,
             file_path=self.state.current_file_path or "",
         )
-        self.state.config = config
-        self._config_dirty = True
-        self.settings_saved.emit()
+        self.update_config(config, persist=True, render=False)
 
     def push_external_history(self, file_hash: str, old_config: WorkspaceConfig, new_config: WorkspaceConfig) -> None:
         """Record a bulk apply (roll bake, apply-to-roll…) in a NON-ACTIVE file's

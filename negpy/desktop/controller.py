@@ -3652,7 +3652,8 @@ class AppController(QObject):
                 self.state.config,
                 geometry=replace(self.state.config.geometry, crop_rect=None, crop_from_auto=False),
                 process=new_proc,
-            )
+            ),
+            persist=True,
         )
         self._render_crop_change()
 
@@ -3683,7 +3684,8 @@ class AppController(QObject):
                     crop_from_auto=True,
                 ),
                 process=new_proc,
-            )
+            ),
+            persist=True,
         )
         self._render_crop_change()
 
@@ -3791,6 +3793,7 @@ class AppController(QObject):
                         active_changed = True
                     else:
                         self.session.repo.save_file_settings(asset["hash"], updated, file_path=asset["path"])
+                        self.session.push_external_history(asset["hash"], latest, updated)
                         changed_hashes.append(asset["hash"])
                     saved += 1
                 except Exception:
