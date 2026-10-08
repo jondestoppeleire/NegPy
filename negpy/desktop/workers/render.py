@@ -113,6 +113,9 @@ class RenderTask:
     split_x: float = 0.5
     split_axis: str = "x"
     gutter_thickness: float = 0.0
+    # The slice_half cuts that took `buffer` out of the decoded frame (a half, or a
+    # diptych's crop), for the flat-field gain to take too.
+    gain_slices: tuple = ()
 
 
 @dataclass(frozen=True)
@@ -352,6 +355,7 @@ class RenderWorker(QObject):
                 crop_preview_full=task.crop_preview_full,
                 cam_xyz=task.cam_xyz,
                 camera_wb=task.camera_wb,
+                gain_slices=task.gain_slices + ((n, task.split_x, None, task.gutter_thickness, task.split_axis),),
             )
             if isinstance(out, GPUTexture):
                 out = np.ascontiguousarray(out.readback()[:, :, :3])
@@ -387,6 +391,7 @@ class RenderWorker(QObject):
                     crop_preview_full=task.crop_preview_full,
                     cam_xyz=task.cam_xyz,
                     camera_wb=task.camera_wb,
+                    gain_slices=task.gain_slices,
                 )
 
             # CPU renders have no in-shader histogram; bin the float output here.
@@ -1448,6 +1453,24 @@ def decode_asset_preview(
     return _decode_asset_preview_with_meta(preview_service, file_info, config, workspace_color_space)[0]
 
 
+def gain_slices_for_asset(file_info: dict) -> tuple:
+    """The slice_half cuts a thumbnail's buffer took, for run_pipeline's gain_slices."""
+    from negpy.services.assets.half_frame import asset_slice
+
+    args = asset_slice(file_info)
+    return () if args is None else (args,)
+
+
+def _slice_meta_planes(meta: dict, file_info: dict) -> dict:
+    """The IR and dust-detect planes cut like the buffer they ride with."""
+    from negpy.services.assets.half_frame import slice_for_asset
+
+    return {
+        k: np.ascontiguousarray(slice_for_asset(v, file_info)) if k in ("ir_preview", "detect_preview") and v is not None else v
+        for k, v in meta.items()
+    }
+
+
 def _decode_asset_preview_with_meta(
     preview_service,
     file_info: dict,
@@ -1505,7 +1528,7 @@ def _decode_asset_preview_with_meta(
             lens_flatfield=config.flatfield,
             **common,
         )
-    return slice_for_asset(raw, file_info), meta
+    return slice_for_asset(raw, file_info), _slice_meta_planes(meta, file_info)
 
 
 class BatchAutoCropWorker(QObject):
@@ -1739,7 +1762,7 @@ class ThumbnailRenderWorker(QObject):
         raw, _dims, meta = hit
         # The navigation cache still serves these arrays, so the pipeline gets its own.
         meta = {k: np.copy(v) if isinstance(v, np.ndarray) else v for k, v in meta.items()}
-        return slice_for_asset(np.copy(raw), frame.file_info), meta
+        return slice_for_asset(np.copy(raw), frame.file_info), _slice_meta_planes(meta, frame.file_info)
 
     def _decode(self, frame: ThumbnailRenderInput, workspace_color_space: str) -> tuple[np.ndarray, dict]:
         hit = self._peek_live_preview(frame, workspace_color_space)
@@ -1806,6 +1829,7 @@ class ThumbnailRenderWorker(QObject):
                             detect_buffer=meta.get("detect_preview"),
                             cam_xyz=cam_xyz,
                             camera_wb=meta.get("camera_wb"),
+                            gain_slices=gain_slices_for_asset(frame.file_info),
                         )
                         render_s = time.perf_counter() - started
                         if isinstance(result, np.ndarray) and not self._cancel_requested(generation):

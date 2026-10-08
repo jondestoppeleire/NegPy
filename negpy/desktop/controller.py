@@ -2391,6 +2391,13 @@ class AppController(QObject):
         """The whole-frame (half 0) slice of a diptych."""
         return (0, info["split_x"], info["crop_rect"], info["gutter_thickness"], str(info.get("split_axis") or "x"))
 
+    def _preview_gain_slices(self, dip: Optional[tuple]) -> tuple:
+        """The slice_half cuts the preview buffer took out of the decoded frame."""
+        if dip is not None:
+            return (self._half_slice_for_diptych(dip[0]),)
+        half = self._active_half()
+        return () if half is None else (half,)
+
     def _active_half(self) -> Optional[tuple[int, float, tuple[float, float, float, float] | None, float, str]]:
         """(half, split_x, crop_rect, gutter_thickness, split_axis) of the active asset, or None for whole-frame."""
         return self._half_slice_for_asset(self.state.current_file_path, self.state.current_file_hash)
@@ -6366,6 +6373,7 @@ class AppController(QObject):
             split_x=dip[0]["split_x"] if dip is not None else 0.5,
             gutter_thickness=dip[0]["gutter_thickness"] if dip is not None else 0.0,
             split_axis=str(dip[0].get("split_axis") or "x") if dip is not None else "x",
+            gain_slices=self._preview_gain_slices(dip),
         )
 
         self._cancel_neighbor_prefetch()

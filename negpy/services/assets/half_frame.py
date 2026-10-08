@@ -4,7 +4,7 @@ Its hash is the file hash plus ``#<half>``, so hash-keyed stores are per frame; 
 """
 
 from dataclasses import dataclass, replace
-from typing import TYPE_CHECKING, Any, Dict, Optional
+from typing import TYPE_CHECKING, Any, Dict, Optional, Sequence
 
 import numpy as np
 
@@ -171,24 +171,37 @@ def slice_half(
     return buf[y1:y2, x1:x2]
 
 
+def asset_slice(file_info: Dict[str, Any]) -> Optional[tuple]:
+    """``slice_half``'s (half, split_x, crop_rect, gutter_thickness, split_axis) for the asset,
+    or None for a whole-frame asset without a crop rect."""
+    half = int(file_info.get("half") or 0)
+    if not half and not file_info.get("crop_rect"):
+        return None
+    raw_rect = file_info.get("crop_rect")
+    crop_rect = tuple(float(v) for v in raw_rect) if isinstance(raw_rect, (tuple, list)) else None
+    return (
+        half,
+        float(file_info.get("split_x") or 0.5),
+        crop_rect,
+        float(file_info.get("gutter_thickness") or 0.0),
+        str(file_info.get("split_axis") or "x"),
+    )
+
+
+def slice_chain(buf: np.ndarray, slices: Sequence[tuple]) -> np.ndarray:
+    """*buf* cut by each ``slice_half`` argument tuple in turn."""
+    for half, split_x, crop_rect, gutter_thickness, split_axis in slices:
+        buf = slice_half(buf, half, split_x, crop_rect=crop_rect, gutter_thickness=gutter_thickness, split_axis=split_axis)
+    return buf
+
+
 def slice_for_asset(buf: np.ndarray, file_info: Dict[str, Any]) -> np.ndarray:
     """Apply the asset's half slice; no-op for whole-frame assets without a crop rect.
 
     A whole-frame asset with a ``crop_rect`` is a diptych: cropped to the rect, still whole, split later per half.
     """
-    half = int(file_info.get("half") or 0)
-    if not half and not file_info.get("crop_rect"):
-        return buf
-    raw_rect = file_info.get("crop_rect")
-    crop_rect = tuple(float(v) for v in raw_rect) if isinstance(raw_rect, (tuple, list)) else None
-    return slice_half(
-        buf,
-        half,
-        float(file_info.get("split_x") or 0.5),
-        crop_rect=crop_rect,
-        gutter_thickness=float(file_info.get("gutter_thickness") or 0.0),
-        split_axis=str(file_info.get("split_axis") or "x"),
-    )
+    args = asset_slice(file_info)
+    return buf if args is None else slice_chain(buf, (args,))
 
 
 @dataclass(frozen=True)

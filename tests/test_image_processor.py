@@ -420,7 +420,7 @@ def test_run_pipeline_skip_flatfield(monkeypatch) -> None:
     monkeypatch.setattr(service.engine_cpu, "process", lambda img, s, sh, ctx: img)
     calls = []
     real = ip.apply_flatfield
-    monkeypatch.setattr(ip, "apply_flatfield", lambda img, ff: (calls.append(1), real(img, ff))[1])
+    monkeypatch.setattr(ip, "apply_flatfield", lambda img, ff, *a: (calls.append(1), real(img, ff, *a))[1])
 
     img = np.full((64, 64, 3), 0.5, dtype=np.float32)
     service.run_pipeline(img, WorkspaceConfig(), "h", render_size_ref=512, prefer_gpu=False, readback_metrics=False)

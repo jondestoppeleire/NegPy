@@ -686,11 +686,14 @@ class ImageProcessor:
         cam_xyz: Optional[list] = None,
         camera_wb: Optional[list] = None,
         cache_stages: bool = True,
+        gain_slices: tuple = (),
     ) -> Tuple[Any, Dict[str, Any]]:
         """
         Executes rendering pipeline. Returns result (ndarray/GPUTexture) and metrics.
 
         ``skip_flatfield``: the export CPU fallbacks pass an already-flat-fielded buffer.
+        ``gain_slices``: the ``slice_half`` cuts that took *img* out of the decoded frame,
+        such as one half-frame; the flat-field gain takes the same cuts.
         """
         # Flat-field is a source pre-correction, before geometry and crop. Folding its token
         # into source_hash invalidates the engine cache when it changes. Stitch buffers arrive
@@ -701,6 +704,7 @@ class ImageProcessor:
             source_hash,
             img.shape,
             skip_flatfield,
+            gain_slices,
             metadata_lens_corrections(settings),
             flatfield_token(settings.flatfield),
             sensor_token(settings.process),
@@ -713,7 +717,9 @@ class ImageProcessor:
         else:
             source = img
             if not skip_flatfield and not settings.stitch.stitch_enabled and not metadata_lens_corrections(settings):
-                img = apply_flatfield(img, settings.flatfield)
+                from negpy.services.assets.half_frame import slice_chain
+
+                img = apply_flatfield(img, settings.flatfield, (lambda g: slice_chain(g, gain_slices)) if gain_slices else None)
             # Sensor unmix is a source pre-correction like flat-field. skip_flatfield buffers
             # come from _load_source_f32, which already applied it.
             if not skip_flatfield and preview_takes_unmix(settings):
