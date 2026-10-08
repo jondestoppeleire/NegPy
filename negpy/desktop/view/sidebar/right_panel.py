@@ -684,7 +684,7 @@ class RightPanel(QWidget):
     def _update_analysis(self) -> None:
         metrics = self.controller.session.state.last_metrics
         # Mid-gesture frames carry no metrics; the settle frame refreshes all of this.
-        if metrics.get("interactive"):
+        if self.controller.session.state.canvas_value("interactive"):
             return
 
         # The only histogram refresh: a peek paint emits image_updated without
