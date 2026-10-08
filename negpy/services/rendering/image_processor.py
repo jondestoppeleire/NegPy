@@ -1,3 +1,4 @@
+import hashlib
 import os
 import ctypes
 import threading
@@ -197,6 +198,13 @@ def _resolve_armed_autocrop(
     if rect is None:
         return settings, None
     return dc_replace(settings, geometry=dc_replace(geom, crop_rect=rect, crop_detect_key=key)), (rect, key)
+
+
+def _camera_token(cam_xyz: Optional[list], camera_wb: Optional[list]) -> str:
+    """The camera matrix and as-shot WB a slide's transfer reads; an Input ICC swaps them."""
+    if cam_xyz is None and camera_wb is None:
+        return ""
+    return "|cam" + hashlib.md5(repr((np.asarray(cam_xyz).tolist() if cam_xyz is not None else None, camera_wb)).encode()).hexdigest()[:12]
 
 
 def _use_half_size_decode(raw: Any) -> bool:
@@ -779,7 +787,7 @@ class ImageProcessor:
                 img = self._hair_inpaint(img, hair_masks, repair_hash + hair_token, dust_label)
             img = self._clone_bake(img, settings)
 
-        source_hash = base_hash + hair_token + f"|res{w_cols}x{h_orig}"
+        source_hash = base_hash + hair_token + f"|res{w_cols}x{h_orig}" + _camera_token(cam_xyz, camera_wb)
 
         scale_factor = max(h_orig, w_cols) / float(APP_CONFIG.preview_render_size)
 

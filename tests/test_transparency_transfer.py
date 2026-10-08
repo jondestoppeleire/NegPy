@@ -1248,3 +1248,36 @@ def test_normalization_shader_reads_the_transfer_decision_it_is_given():
 
     assert "transfer_flag" in src
     assert "params.mode == 2u" not in src
+
+
+def test_a_new_camera_matrix_re_renders_a_slide():
+    """An Input ICC swaps the camera matrix under an unchanged source hash and config."""
+    from negpy.services.rendering.image_processor import ImageProcessor
+
+    rng = np.random.default_rng(8)
+    img = np.ascontiguousarray(rng.uniform(0.05, 0.5, (32, 32, 3)).astype(np.float32))
+    cfg = _e6_config()
+    m = np.asarray(CAM_XYZ, dtype=np.float64).reshape(-1, 3).copy()
+    m[0, 1] += 0.3 * m[0, 0]
+    other = m.tolist()
+    for gpu in (False, True):
+        proc = ImageProcessor()
+        if gpu and proc.engine_gpu is None:
+            continue
+
+        def render(cam):
+            res, _ = proc.run_pipeline(img, cfg, "slide", render_size_ref=32.0, prefer_gpu=gpu, readback_metrics=False, cam_xyz=cam)
+            return np.asarray(res.readback() if hasattr(res, "readback") else res)[:, :, :3].copy()
+
+        render(CAM_XYZ)
+        swapped = render(other)
+        fresh_first, _ = ImageProcessor().run_pipeline(
+            img, cfg, "slide", render_size_ref=32.0, prefer_gpu=gpu, readback_metrics=False, cam_xyz=CAM_XYZ
+        )
+        fresh_first = np.asarray(fresh_first.readback() if hasattr(fresh_first, "readback") else fresh_first)[:, :, :3]
+        fresh, _ = ImageProcessor().run_pipeline(
+            img, cfg, "slide", render_size_ref=32.0, prefer_gpu=gpu, readback_metrics=False, cam_xyz=other
+        )
+        fresh = np.asarray(fresh.readback() if hasattr(fresh, "readback") else fresh)[:, :, :3]
+        assert float(np.abs(fresh - fresh_first).max()) > 0.01  # the matrix moves the render
+        np.testing.assert_allclose(swapped, fresh, atol=1e-4)
