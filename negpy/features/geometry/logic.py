@@ -1921,6 +1921,8 @@ def apply_margin_to_roi(
     Expands/Contracts ROI.
     """
     y1, y2, x1, x2 = roi
+    # An inset larger than half the crop would turn the ROI inside out.
+    margin_px = min(margin_px, (y2 - y1 - 1) / 2, (x2 - x1 - 1) / 2)
     ny1, ny2, nx1, nx2 = y1 + margin_px, y2 - margin_px, x1 + margin_px, x2 - margin_px
     return int(max(0, ny1)), int(min(h, ny2)), int(max(0, nx1)), int(min(w, nx2))
 
