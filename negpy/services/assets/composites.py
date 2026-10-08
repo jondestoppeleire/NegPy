@@ -10,7 +10,7 @@ content hash (``stitch_hash`` / ``hdr_hash``), which is derived from the parts, 
 re-forming the same composite finds its edit again.
 """
 
-from typing import Any, Dict, Optional
+from typing import Any, Callable, Dict, Optional
 
 from negpy.features.hdr.models import ANCHOR_EV_UNSET
 
@@ -113,3 +113,19 @@ def part_paths(entries: Any) -> set:
         out.update(p for p in entry.get("paths") or () if p)
         out.update(p for t in entry.get("triplets") or () for p in t if p)
     return out
+
+
+def rehome_paths(repo: Any, move: Callable[[str], str]) -> None:
+    """Pass every primary and part path of every composite through *move*."""
+    saved = saved_composites(repo)
+    moved = {}
+    for primary, entry in saved.items():
+        entry = dict(entry)
+        entry["paths"] = [move(p) for p in entry.get("paths") or ()]
+        if entry.get("triplets"):
+            entry["triplets"] = [[move(p) if p else p for p in t] for t in entry["triplets"]]
+        if entry.get("anchor"):
+            entry["anchor"] = move(entry["anchor"])
+        moved[move(primary)] = entry
+    if moved != saved:
+        repo.save_global_setting(COMPOSITES_KEY, moved)

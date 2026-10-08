@@ -437,6 +437,16 @@ class StorageRepository(IRepository):
             out.append((int(idx), config))
         return out
 
+    def rehome_path_prefix(self, old_prefix: str, new_prefix: str) -> None:
+        """Repoint every path-keyed row under the folder *old_prefix* to *new_prefix*."""
+        under = old_prefix + os.sep
+        with self._connect(self.edits_db_path) as conn:
+            for table in ("file_settings", "file_marks", "image_embeddings"):
+                conn.execute(
+                    f"UPDATE {table} SET file_path = ? || substr(file_path, ?) WHERE file_path = ? OR substr(file_path, 1, ?) = ?",
+                    (new_prefix, len(old_prefix) + 1, old_prefix, len(under), under),
+                )
+
     def get_max_history_index(self, file_hash: str) -> int:
         with self._connect(self.edits_db_path) as conn:
             cursor = conn.execute("SELECT MAX(step_index) FROM edit_history WHERE file_hash = ?", (file_hash,))

@@ -1706,6 +1706,10 @@ class AppController(QObject):
             new_path = rolls.rename_folder_roll_disk(self.session.repo, roll_id, new_name)
             if new_path is None:
                 return False
+            if old_path:
+                from negpy.services.assets.rehome import rehome_path_prefix
+
+                rehome_path_prefix(self.session.repo, old_path, new_path)
             if old_path and roll_id == self.state.active_roll_id:
                 self.session.rehome_folder_paths(old_path, new_path)
         rolls.rename_roll(self.session.repo, roll_id, new_name)

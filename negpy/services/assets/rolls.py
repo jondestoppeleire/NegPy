@@ -429,6 +429,18 @@ def rename_folder_roll_disk(repo: Any, roll_id: str, new_name: str) -> Optional[
     return new_path
 
 
+def rehome_paths(repo: Any, move: Callable[[str], str]) -> None:
+    """Pass every folder and member path of every roll through *move*."""
+    store = _read(repo)
+    for entry in store.values():
+        if entry.get("folder_path"):
+            entry["folder_path"] = move(entry["folder_path"])
+        for key in ("member_paths", "extra_paths"):
+            if key in entry:
+                entry[key] = [move(p) for p in entry[key]]
+    _write(repo, store)
+
+
 def delete_roll(repo: Any, roll_id: str) -> None:
     """Forget a roll. A deleted folder roll is not recognized again by a Library refresh."""
     store = _read(repo)
