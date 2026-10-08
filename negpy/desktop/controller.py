@@ -739,6 +739,7 @@ class AppController(QObject):
         self._pending_cursor_nx: Optional[float] = None
         self._pending_cursor_ny: Optional[float] = None
         self._prefetch_gen = 0
+        self._decoded_source_token: Optional[str] = None
         #: The texture the canvas is displaying, kept alive across back-to-back reloads.
         self._spared_texture: Optional[GPUTexture] = None
         self._preview_load_t0 = 0.0
@@ -2806,6 +2807,7 @@ class AppController(QObject):
         self.state.preview_lens = cam_matrix[2] if cam_matrix and len(cam_matrix) > 2 else None
         self.state.preview_lens_path = file_path
         self.state.preview_lens_token = decoded_lens_token
+        self._decoded_source_token = source_token(self.state.config)
         self.state.preview_proxy = _interactive_proxy(raw)
         self.state.preview_ir = ir_preview
         self.state.preview_ir_proxy = _interactive_ir_proxy(ir_preview, self.state.preview_proxy)
@@ -6325,6 +6327,16 @@ class AppController(QObject):
         self._render_debounce.stop()
         lens_token = lens_decode_token(metadata_lens_corrections(self.state.config), self.state.config.flatfield)
         if not ephemeral and self.state.current_file_path and lens_token != self.state.preview_lens_token:
+            self.load_file(self.state.current_file_path, preserve_zoom=True)
+            return
+        # Undo, history and work prints restore a config without apply_config's decode check.
+        if (
+            not ephemeral
+            and self.state.current_file_path
+            and self._foreground_preview_generation is None
+            and self._decoded_source_token is not None
+            and source_token(self.state.config) != self._decoded_source_token
+        ):
             self.load_file(self.state.current_file_path, preserve_zoom=True)
             return
 

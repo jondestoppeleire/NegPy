@@ -57,3 +57,25 @@ def test_load_file_drops_the_left_frames_geometry_grid():
 
     assert "uv_grid" not in ctrl.state.last_metrics
     assert "active_roi" not in ctrl.state.last_metrics
+
+
+def test_undoing_a_decode_level_field_re_decodes_the_source():
+    """Undo restores Linear RAW without apply_config's check; the render must not run on the old decode."""
+    from dataclasses import replace
+
+    from negpy.desktop.session import AppState
+    from negpy.services.rendering.lens import lens_decode_token, metadata_lens_corrections
+    from negpy.services.rendering.source_identity import source_token
+
+    ctrl = MagicMock()
+    ctrl.state = AppState()
+    ctrl.state.current_file_path = "/p/a.dng"
+    decoded = WorkspaceConfig()
+    ctrl._decoded_source_token = source_token(decoded)
+    ctrl._foreground_preview_generation = None
+    ctrl.state.config = replace(decoded, process=replace(decoded.process, linear_raw=not decoded.process.linear_raw))
+    ctrl.state.preview_lens_token = lens_decode_token(metadata_lens_corrections(ctrl.state.config), ctrl.state.config.flatfield)
+
+    AppController.request_render(ctrl)
+
+    ctrl.load_file.assert_called_once_with("/p/a.dng", preserve_zoom=True)
