@@ -1332,6 +1332,9 @@ class DesktopSessionManager(QObject):
                         self.state.current_file_hash, self.state.config, file_path=self.state.current_file_path or ""
                     )
                     self.settings_saved.emit()
+                # Re-entry resumes at the top stored step, so the live config must be that step.
+                if 0 < self.state.undo_index == self.state.max_history_index:
+                    self.repo.save_history_step(self.state.current_file_hash, self.state.undo_index, self.state.config)
                 self.active_file_changing.emit()
             self._config_dirty = False
 
