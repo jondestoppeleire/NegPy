@@ -140,6 +140,8 @@ class DarkroomEngine:
                 settings.geometry.fine_rotation,
                 settings.geometry.flip_horizontal,
                 settings.geometry.flip_vertical,
+                settings.geometry.converge_v,
+                settings.geometry.converge_h,
             )
             if context.crop_preview_full
             else settings.geometry
@@ -192,7 +194,7 @@ class DarkroomEngine:
         mask_bounds = context.metrics.get("final_bounds")
         if settings.exposure.contrast_mask != 0.0 and mask_bounds is not None:
             mask_roi = context.active_roi
-            mask_key = (calculate_config_hash(base_key), mask_roi, current_img.shape[:2], settings.exposure.mask_spacer)
+            mask_key = (source_hash, calculate_config_hash(base_key), mask_roi, current_img.shape[:2], settings.exposure.mask_spacer)
             if self._mask_plane is None or self._mask_plane[0] != mask_key:
                 plane, centre = contrast_mask_plane(
                     img,
