@@ -6,6 +6,9 @@ import numpy as np
 
 from negpy.domain.types import ImageBuffer
 from negpy.features.flatfield.models import FlatFieldConfig
+from negpy.kernel.system.logging import get_logger
+
+logger = get_logger(__name__)
 
 # Clamp so a near-black reference pixel can't blow up the image.
 _GAIN_MIN = 0.25
@@ -14,6 +17,16 @@ _GAIN_MAX = 4.0
 # Falloff is low-frequency, so compute the gain on a small copy, upscaled at apply time,
 # and the blur kernel stays tiny.
 _GAIN_WORK_SIZE = 256
+
+# A reference pixel below _LIT_FRACTION of the bright level (_LIT_PERCENTILE of luminance)
+# is carrier, not falloff. A percentile, not the median, so a carrier that fills most of the
+# frame still reads dark. Under _MIN_LIT_FRACTION lit pixels the whole frame is used.
+_LIT_PERCENTILE = 95.0
+_LIT_FRACTION = 0.2
+_MIN_LIT_FRACTION = 0.02
+# Below this blurred lit weight a pixel is too far from the lit area for the normalized blur
+# to hold, and takes the value of the nearest pixel that is not.
+_MIN_LIT_WEIGHT = 0.05
 
 # Resolved gains keyed by profile id: (gain map, content token). A cached ``None`` marks a
 # known-missing profile, so a broken reference does not re-hit the store every render.
@@ -51,19 +64,47 @@ def _resolve(profile_id: str) -> Optional[GainEntry]:
 
 
 def compute_gain(reference: ImageBuffer) -> np.ndarray:
-    """Per-channel gain = mean(blur) / blur, on a downsampled copy."""
+    """Per-channel gain = mean(blur) / blur over the lit area, on a downsampled copy."""
     ref = reference.astype(np.float32)
     h, w = ref.shape[:2]
     scale = min(1.0, _GAIN_WORK_SIZE / max(h, w))
     if scale < 1.0:
         ref = cv2.resize(ref, (max(1, round(w * scale)), max(1, round(h * scale))), interpolation=cv2.INTER_AREA)
     sigma = max(ref.shape[:2]) / 16.0
-    blur = cv2.GaussianBlur(ref, (0, 0), sigmaX=sigma, sigmaY=sigma)
     eps = 1e-4
-    blur = np.clip(blur, eps, None)
-    means = blur.reshape(-1, blur.shape[2]).mean(axis=0)
+    lit = _lit_mask(ref)
+    # Normalized convolution: a dark carrier edge in the reference would otherwise bleed into
+    # the blur and overcorrect the frame next to it.
+    num = cv2.GaussianBlur(ref * lit[..., None], (0, 0), sigmaX=sigma, sigmaY=sigma)
+    den = cv2.GaussianBlur(lit, (0, 0), sigmaX=sigma, sigmaY=sigma)
+    blur = np.clip(num / np.clip(den, eps, None)[..., None], eps, None)
+    blur = _fill_from_nearest(blur, den >= _MIN_LIT_WEIGHT)
+    means = (blur * lit[..., None]).sum(axis=(0, 1)) / lit.sum()
     gain = means[None, None, :] / blur
     return np.clip(gain, _GAIN_MIN, _GAIN_MAX).astype(np.float32)
+
+
+def _lit_mask(ref: np.ndarray) -> np.ndarray:
+    """1 where the reference sees the light source, 0 on carrier or mask edges in frame."""
+    lum = ref.mean(axis=2)
+    lit = (lum > _LIT_FRACTION * np.percentile(lum, _LIT_PERCENTILE)).astype(np.uint8)
+    # Drop the soft transition the downsample leaves at the carrier edge. Outside the image
+    # counts as dark, so a partly lit carrier lip on the outermost row or column goes too.
+    lit = cv2.erode(lit, np.ones((3, 3), np.uint8), borderType=cv2.BORDER_CONSTANT, borderValue=0)
+    if lit.sum() < _MIN_LIT_FRACTION * lit.size:
+        logger.warning("Flat-field: reference is almost all dark; computing the gain over the whole frame")
+        return np.ones(lum.shape, np.float32)
+    return lit.astype(np.float32)
+
+
+def _fill_from_nearest(values: np.ndarray, valid: np.ndarray) -> np.ndarray:
+    """Replace each invalid pixel with the value of the nearest valid one."""
+    if valid.all() or not valid.any():
+        return values
+    _, labels = cv2.distanceTransformWithLabels((~valid).astype(np.uint8), cv2.DIST_L2, 5, labelType=cv2.DIST_LABEL_PIXEL)
+    source = np.zeros(labels.max() + 1, np.int64)
+    source[labels[valid]] = np.flatnonzero(valid)
+    return values.reshape(-1, values.shape[2])[source[labels]].reshape(values.shape)
 
 
 def gain_token(gain: np.ndarray) -> str:
