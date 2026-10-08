@@ -75,7 +75,7 @@ from negpy.features.process.path import RenderPath, render_path
 from negpy.infrastructure.gpu.device import GPUDevice
 from negpy.infrastructure.gpu.resources import GPUBuffer, GPUTexture
 from negpy.infrastructure.gpu.shader_loader import ShaderLoader
-from negpy.kernel.image.logic import rgba_to_rgb_into
+from negpy.kernel.image.logic import rgba_to_rgb_into, working_oetf_decode
 from negpy.kernel.system.config import APP_CONFIG
 from negpy.kernel.system.logging import get_logger
 from negpy.kernel.system.paths import get_resource_path
@@ -2093,7 +2093,8 @@ class GPUEngine:
 
         pw, ph, cw, ch, ox, oy, _ = self._calculate_layout_dims(settings, crop_w, crop_h, render_size_ref)
         color_hex = PrintService.effective_border_color(settings.finish, settings.toning).lstrip("#")
-        bg = tuple(int(color_hex[i : i + 2], 16) / 255.0 for i in (0, 2, 4))
+        # The layout pass writes scene-linear values that output_encode encodes after it.
+        bg = tuple(float(v) for v in working_oetf_decode(np.array([int(color_hex[i : i + 2], 16) / 255.0 for i in (0, 2, 4)], np.float32)))
         scale = float(cw) / max(1.0, float(crop_w))
         y_data = (
             struct.pack("ffffii", bg[0], bg[1], bg[2], 1.0, ox, oy) + struct.pack("iiii", cw, ch, crop_w, crop_h) + struct.pack("f", scale)
@@ -2725,7 +2726,7 @@ class GPUEngine:
             result = scaled_content
         else:
             result = np.zeros((paper_h, paper_w, 3), dtype=np.float32)
-            color_hex = settings.finish.border_color.lstrip("#")
+            color_hex = PrintService.effective_border_color(settings.finish, settings.toning).lstrip("#")
             result[:] = tuple(int(color_hex[i : i + 2], 16) / 255.0 for i in (0, 2, 4))
             result[off_y : off_y + content_h, off_x : off_x + content_w] = scaled_content
         metrics_ref["base_positive"] = result
