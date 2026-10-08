@@ -2603,6 +2603,9 @@ class AppController(QObject):
         self.state.last_metrics.pop("base_positive", None)
         self.state.last_metrics.pop("thumbnail_source", None)
         self.state.last_metrics.pop("render_identity", None)
+        # The left frame's geometry: a click before the new render maps nowhere, not into it.
+        self.state.last_metrics.pop("uv_grid", None)
+        self.state.last_metrics.pop("active_roi", None)
 
         if memo is not None:
             with self.state.metrics_lock:
