@@ -1357,3 +1357,16 @@ def test_a_pattern_without_the_sequence_refuses_the_scan_before_it_starts() -> N
 
     assert controller.started == []
     assert sidebar._scanning is False
+
+
+def test_frames_past_the_holders_slots_refuse_the_scan() -> None:
+    sidebar, controller = _sidebar(FULL_DEVICE)
+    capacity = FULL_DEVICE.capabilities.adapter_frame_capacity
+    if not capacity or FULL_DEVICE.capabilities.roll_discovery:
+        pytest.skip("needs a holder with a fixed slot count")
+    sidebar.output.folder_edit.setText("/tmp/negpy-scan-out")
+    sidebar.frame_spec_edit.setText(f"1-{capacity + 1}")
+
+    assert sidebar.scan_btn.isEnabled() is False
+    sidebar._on_scan()
+    assert controller.started == []

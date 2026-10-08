@@ -1223,6 +1223,11 @@ class SaneBackend:
                     dev.frame = params.frame
                 except Exception as e:
                     raise RuntimeError(f"Could not set frame={params.frame}: {e}") from e
+                # coolscan3 clamps a frame past the loaded strip to its last one and reports only
+                # an inexact set, so read it back rather than rescan that frame under this number.
+                actual = getattr(dev, "frame", params.frame)
+                if int(actual) != int(params.frame):
+                    raise RuntimeError(f"Frame {params.frame} is past the end of the loaded film (the scanner stopped at frame {actual})")
 
             _apply_frame_offset(dev, offset_mm)
 

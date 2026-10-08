@@ -960,13 +960,25 @@ class ScanSidebar(QWidget):
         self._update_settings_from_ui()
 
     def _frame_spec(self) -> tuple[int, ...] | None:
-        """The typed frame selection, or None where the text cannot be read."""
+        """The typed frame selection, or None where the text cannot be read or names a
+        frame past the holder's last slot."""
         from negpy.infrastructure.scanners.settings import parse_frame_spec
 
         try:
-            return parse_frame_spec(self.frame_spec_edit.text())
+            spec = parse_frame_spec(self.frame_spec_edit.text())
         except ValueError:
             return None
+        capacity = self._slot_capacity()
+        if capacity is not None and any(f > capacity for f in spec):
+            return None
+        return spec
+
+    def _slot_capacity(self) -> int | None:
+        """The holder's slot count, where frame numbers past it cannot be reached."""
+        device = self._current_device()
+        if device is None or device.capabilities.roll_discovery:
+            return None
+        return device.capabilities.adapter_frame_capacity
 
     def _sync_frame_spec(self) -> None:
         """Write the stored selection into the box, which the strip dialog also sets."""
@@ -1224,7 +1236,8 @@ class ScanSidebar(QWidget):
         caps = device.capabilities
         spec = self._frame_spec()
         if spec is None:
-            self.status_strip.set_summary("Frames: cannot read that")
+            capacity = self._slot_capacity()
+            self.status_strip.set_summary(f"Frames: the holder has {capacity} slots" if capacity else "Frames: cannot read that")
             self.scan_btn.setEnabled(False)
             return
         if not self._scanning:
