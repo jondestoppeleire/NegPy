@@ -1789,9 +1789,13 @@ class DesktopSessionManager(QObject):
             self.update_config(config, persist=True)
             self._relock_diverged_cards()
 
-    def rename_work_print(self, name: str, new_name: str) -> None:
+    def rename_work_print(self, name: str, new_name: str, replace_existing: bool = False) -> None:
         if not (self.state.current_file_hash and new_name) or new_name == name:
             return
+        if new_name in self.work_prints():
+            if not replace_existing:
+                return
+            self.repo.delete_work_print(self.state.current_file_hash, new_name)
         self.repo.rename_work_print(self.state.current_file_hash, name, new_name)
         self.work_prints_changed.emit()
 

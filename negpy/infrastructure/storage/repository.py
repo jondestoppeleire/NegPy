@@ -392,7 +392,7 @@ class StorageRepository(IRepository):
     def rename_work_print(self, file_hash: str, name: str, new_name: str) -> None:
         with self._connect(self.edits_db_path) as conn:
             conn.execute(
-                "UPDATE OR REPLACE work_prints SET name = ? WHERE file_hash = ? AND name = ?",
+                "UPDATE work_prints SET name = ? WHERE file_hash = ? AND name = ?",
                 (new_name, file_hash, name),
             )
 
