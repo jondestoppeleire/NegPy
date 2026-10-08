@@ -141,7 +141,11 @@ def test_create_uv_grid_matches_f64_reference():
         )
         assert got.dtype == np.float32
         assert got.flags["C_CONTIGUOUS"]
-        assert np.array_equal(got, reference(rh, rw, rot, fine, fh, fv, roi))
+        if fine:
+            # Fine rotation is solved exactly, not warped in 1/32 px steps with zeroed corners.
+            np.testing.assert_allclose(got[6:-6, 6:-6], reference(rh, rw, rot, fine, fh, fv, roi)[6:-6, 6:-6], atol=1e-3)
+        else:
+            assert np.array_equal(got, reference(rh, rw, rot, fine, fh, fv, roi))
 
 
 @pytest.mark.parametrize("k1", _K1_RANGE)
