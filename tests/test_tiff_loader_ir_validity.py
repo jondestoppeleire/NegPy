@@ -138,3 +138,17 @@ def test_invalid_validity_mask_dtype_or_domain_ignores_ir_fail_closed(
     assert metadata["ir"] is None
     assert metadata["ir_valid_mask"] is None
     assert "ignoring IR sidecar" in caplog.text
+
+
+@pytest.mark.parametrize("extrasamples,expect_ir", [(2, False), (0, True)])
+def test_a_two_sample_gray_tiff_loads_as_gray(tmp_path, extrasamples, expect_ir) -> None:
+    gray = np.full((6, 8), 20000, dtype=np.uint16)
+    extra = np.full((6, 8), 40000, dtype=np.uint16)
+    path = tmp_path / "gray2.tif"
+    tifffile.imwrite(path, np.stack([gray, extra], axis=-1), photometric="minisblack", extrasamples=[extrasamples])
+
+    wrapper, metadata = TiffLoader().load(str(path), linear_raw=True)
+
+    assert wrapper.data.shape == (6, 8, 3)
+    np.testing.assert_allclose(wrapper.data, np.float32(20000 / 65535), rtol=1e-6)
+    assert (metadata["ir"] is not None) is expect_ir

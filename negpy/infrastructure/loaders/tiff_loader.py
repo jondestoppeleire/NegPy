@@ -144,6 +144,9 @@ class TiffLoader(IImageLoader):
 
         if img.ndim == 2:
             img = np.stack([img] * 3, axis=-1)
+        elif img.ndim == 3 and img.shape[2] == 2:
+            # Gray plus one extra sample, read like the fourth sample of an RGB scan.
+            img, ir = _extract_ir_from_extrasamples(file_path, img[:, :, [0, 0, 0, 1]])
         elif img.ndim == 3 and img.shape[2] == 4:
             img, ir = _extract_ir_from_extrasamples(file_path, img)
         elif img.ndim == 3 and img.shape[2] > 4:
