@@ -119,3 +119,24 @@ def test_exit_cancels_long_batches_before_joining_their_threads():
     assert order.index("cancel frame_merge_worker") < order.index("join export_thread")
     assert order.index("cancel embedding_worker") < order.index("join thumb_thread")
     assert order.index("cancel norm_worker") < order.index("join norm_thread")
+
+
+def test_deleting_a_mask_keeps_the_last_mask_hidden():
+    from dataclasses import replace
+
+    from negpy.desktop.session import AppState
+    from negpy.features.local.models import LocalAdjustmentsConfig, LocalMask
+
+    ctrl = MagicMock()
+    ctrl.state = AppState()
+    ctrl.state.current_file_hash = "h"
+    tri = ((0.1, 0.1), (0.9, 0.1), (0.5, 0.9))
+    cfg = WorkspaceConfig()
+    ctrl.state.config = replace(cfg, local=LocalAdjustmentsConfig(masks=(LocalMask(vertices=tri),) * 3))
+    ctrl.state.local_hidden_masks = {2}
+    ctrl.session.update_config.side_effect = lambda c, **k: setattr(ctrl.state, "config", c)
+
+    with patch("negpy.desktop.view.confirm.confirm_delete_mask", return_value=True):
+        AppController.delete_local_mask(ctrl, 0)
+
+    assert ctrl.state.local_hidden_masks == {1}

@@ -4508,13 +4508,15 @@ class AppController(QObject):
 
         if not confirm_delete_mask(None):
             return
+        # Read before the config shrinks: the getter drops indices past the new mask count.
+        hidden = self.state.local_hidden_masks
         new_masks = local.masks[:index] + local.masks[index + 1 :]
         new_local = replace(local, masks=new_masks)
         self.session.update_config(replace(self.state.config, local=new_local), persist=True)
 
         sel = self.state.local_selected_mask
         self.state.local_selected_mask = -1 if sel == index else (sel - 1 if sel > index else sel)
-        self.state.local_hidden_masks = {j - 1 if j > index else j for j in self.state.local_hidden_masks if j != index}
+        self.state.local_hidden_masks = {j - 1 if j > index else j for j in hidden if j != index}
         self.session.persist_hidden_masks()
 
         self.config_updated.emit()
