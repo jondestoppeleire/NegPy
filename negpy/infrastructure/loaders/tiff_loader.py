@@ -146,6 +146,33 @@ def _planarconfig(file_path: str) -> int:
         return 1
 
 
+# TIFF PhotometricInterpretation values the samples need decoding from.
+_MINISWHITE, _PALETTE, _SEPARATED = 0, 3, 5
+
+
+def _photometric(file_path: str) -> tuple[int, Optional[np.ndarray]]:
+    """(PhotometricInterpretation, colormap or None) of the first page; RGB when unreadable."""
+    try:
+        with tifffile.TiffFile(file_path) as tif:
+            page = tif.pages[0]
+            return int(page.photometric), page.colormap
+    except Exception:
+        return 2, None
+
+
+def decode_photometric(img: np.ndarray, photometric: int, colormap: Optional[np.ndarray]) -> np.ndarray:
+    """Samples as gray or RGB intensities: a palette expanded, MinIsWhite and CMYK inverted."""
+    top = np.iinfo(img.dtype).max if np.issubdtype(img.dtype, np.integer) else 1.0
+    if photometric == _PALETTE and colormap is not None and img.ndim == 2:
+        return np.ascontiguousarray(np.moveaxis(np.asarray(colormap)[:, img], 0, -1))
+    if photometric == _MINISWHITE:
+        return (top - img).astype(img.dtype)
+    if photometric == _SEPARATED and img.ndim == 3 and img.shape[2] >= 4:
+        cmy, k = img[:, :, :3].astype(np.float64), img[:, :, 3:4].astype(np.float64)
+        return ((top - cmy) * (top - k) / top).astype(img.dtype)
+    return img
+
+
 class TiffLoader(IImageLoader):
     """
     Loader for TIFF scans. Surfaces an IR channel via `metadata["ir"]` when present
@@ -154,6 +181,7 @@ class TiffLoader(IImageLoader):
 
     def load(self, file_path: str, linear_raw: bool = False, positive_source: bool = False) -> Tuple[ContextManager[Any], dict]:
         img = planar_to_chunky(iio.imread(file_path), _planarconfig(file_path))
+        img = decode_photometric(img, *_photometric(file_path))
         ir: Optional[np.ndarray] = None
         ir_valid_mask: Optional[np.ndarray] = None
 

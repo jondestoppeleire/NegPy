@@ -447,6 +447,9 @@ def bounded_tiff_page_preview(
         return None
     if page.dtype not in (np.uint8, np.uint16) or int(getattr(page, "planarconfig", 1)) != 1:
         return None
+    # Palette, MinIsWhite and CMYK samples are not intensities; the full decode handles them.
+    if int(getattr(page, "photometric", 2)) not in (1, 2):
+        return None
 
     height, width = shape[:2]
     samples = shape[2] if len(shape) == 3 else 1
