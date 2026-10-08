@@ -287,6 +287,7 @@ class ExportWorker(QObject):
         super().__init__()
         self._processor = ImageProcessor()
         self._cancel = threading.Event()
+        self._written: set[str] = set()  # paths this batch wrote
 
     @pyqtSlot()
     def cancel(self) -> None:
@@ -301,6 +302,7 @@ class ExportWorker(QObject):
         two full-res buffers are held. A failed file never stops the batch, and every
         exit emits `finished` or `cancelled`: that releases the batch lane."""
         self._cancel.clear()
+        self._written = set()
         total = len(tasks)
         finisher = ThreadPoolExecutor(max_workers=1)
         prefetcher = ThreadPoolExecutor(max_workers=1)
@@ -449,11 +451,12 @@ class ExportWorker(QObject):
         os.makedirs(out_dir, exist_ok=True)
         path = os.path.join(out_dir, f"{filename}.{ext}")
 
-        if not task.export_settings.overwrite:
-            counter = 2
-            while os.path.exists(path):
-                path = os.path.join(out_dir, f"{filename}_{counter}.{ext}")
-                counter += 1
+        # Overwrite replaces files from before the batch, never another frame of it.
+        counter = 2
+        while path in self._written or (not task.export_settings.overwrite and os.path.exists(path)):
+            path = os.path.join(out_dir, f"{filename}_{counter}.{ext}")
+            counter += 1
+        self._written.add(path)
 
         if _export_target_is_a_source(path, task):
             return f"Export skipped for {task.file_info['name']}: it would overwrite the source file. Change the filename pattern or destination."

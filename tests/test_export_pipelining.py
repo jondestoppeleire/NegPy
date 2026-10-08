@@ -457,3 +457,16 @@ def test_a_frame_never_opened_exports_with_its_source_exif(tmp_path, monkeypatch
     worker.run_batch([_task(tmp_path, "a.cr2", metadata_config=MetadataConfig())])
 
     assert seen == [exif]
+
+
+def test_overwrite_never_replaces_another_frame_of_the_same_batch(tmp_path) -> None:
+    """A RAW+JPEG pair names to one stem; Overwrite must not let the JPEG replace the RAW's export."""
+    worker, proc = _worker()
+    proc.encode_export.side_effect = [(b"FIRST", "jpg"), (b"SECOND", "jpg")]
+    preset = _preset(tmp_path, overwrite=True)
+    src = tmp_path / "src"
+    src.mkdir()
+
+    worker.run_batch([_task(src, "DSC_0001.NEF", preset), _task(src, "DSC_0001.JPG", preset)])
+
+    assert sorted(p.read_bytes() for p in tmp_path.glob("*.jpg")) == [b"FIRST", b"SECOND"]
