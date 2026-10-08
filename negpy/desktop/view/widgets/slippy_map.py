@@ -47,6 +47,10 @@ def _fetch_tile_job(signals: _TileSignals, z: int, x: int, y: int) -> None:
         signals.ready.emit(z, x, y, data)
 
 
+def _start_fetch(signals: _TileSignals, key: tuple[int, int, int]) -> None:
+    threading.Thread(target=_fetch_tile_job, args=(signals, *key), daemon=True).start()
+
+
 class SlippyMapWidget(QWidget):
     """Tiles are fetched off the GUI thread; a missing tile paints flat and nothing blocks."""
 
@@ -148,7 +152,7 @@ class SlippyMapWidget(QWidget):
         if key in self._tiles or key in self._requested or key in self._missing:
             return
         self._requested.add(key)
-        threading.Thread(target=_fetch_tile_job, args=(self._signals, *key), daemon=True).start()
+        _start_fetch(self._signals, key)
 
     def shutdown(self) -> None:
         """Drop pending tiles. A stopped view ignores what arrives, so nothing is still requested."""
