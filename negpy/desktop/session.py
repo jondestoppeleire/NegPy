@@ -1448,7 +1448,7 @@ class DesktopSessionManager(QObject):
             if idx == self.state.selected_file_idx or not (0 <= idx < len(self.state.uploaded_files)):
                 continue
             target_hash = self.state.uploaded_files[idx]["hash"]
-            target_config = self.repo.load_file_settings(target_hash) or self.config_for_asset(self.state.uploaded_files[idx])
+            target_config = self.config_for_asset(self.state.uploaded_files[idx])
             target_path = self.state.uploaded_files[idx]["path"]
             synced = apply_selected_fields(source_config, target_config, rows)
             if src_bounds is not None:
@@ -1461,6 +1461,7 @@ class DesktopSessionManager(QObject):
                 synced = replace(synced, process=replace(synced.process, **changes))
             self.push_external_history(target_hash, target_config, synced)
             self.repo.save_file_settings(target_hash, synced, file_path=target_path)
+            self._lock_diverged_cards(self.state.uploaded_files[idx], synced)
             changed_hashes.append(target_hash)
             count += 1
 
@@ -1496,13 +1497,15 @@ class DesktopSessionManager(QObject):
                 continue
             if idx == self.state.selected_file_idx:
                 self.update_config(apply_selected_fields(source, self.state.config, rows), persist=True, render=False)
+                self._relock_diverged_cards()
                 count += 1
                 continue
             target_hash = self.state.uploaded_files[idx]["hash"]
-            target_config = self.repo.load_file_settings(target_hash) or self.config_for_asset(self.state.uploaded_files[idx])
+            target_config = self.config_for_asset(self.state.uploaded_files[idx])
             synced = apply_selected_fields(source, target_config, rows)
             self.push_external_history(target_hash, target_config, synced)
             self.repo.save_file_settings(target_hash, synced, file_path=self.state.uploaded_files[idx]["path"])
+            self._lock_diverged_cards(self.state.uploaded_files[idx], synced)
             changed_hashes.append(target_hash)
             count += 1
 
@@ -1533,7 +1536,7 @@ class DesktopSessionManager(QObject):
                 self.update_config(defaults, persist=True, render=False)
             else:
                 target_hash = asset["hash"]
-                target_config = self.repo.load_file_settings(target_hash) or self.config_for_asset(asset)
+                target_config = self.config_for_asset(asset)
                 self.push_external_history(target_hash, target_config, defaults)
                 self.repo.save_file_settings(target_hash, defaults, file_path=asset["path"])
                 changed_hashes.append(target_hash)
@@ -1568,7 +1571,7 @@ class DesktopSessionManager(QObject):
             if target_hash in seen_hashes:
                 continue
             seen_hashes.add(target_hash)
-            target_config = self.repo.load_file_settings(target_hash) or self.config_for_asset(asset)
+            target_config = self.config_for_asset(asset)
             new_geo, new_rect = rotate_geometry_and_analysis(target_config.geometry, target_config.process.analysis_rect, direction)
             new_config = replace(target_config, geometry=new_geo)
             if target_config.process.analysis_rect is not None:
@@ -1601,7 +1604,7 @@ class DesktopSessionManager(QObject):
             if target_hash in seen_hashes:
                 continue
             seen_hashes.add(target_hash)
-            target_config = self.repo.load_file_settings(target_hash) or self.config_for_asset(asset)
+            target_config = self.config_for_asset(asset)
             new_geo, new_rect = flip_geometry_and_analysis(target_config.geometry, target_config.process.analysis_rect, horizontal)
             new_config = replace(target_config, geometry=new_geo)
             if target_config.process.analysis_rect is not None:
@@ -1717,15 +1720,17 @@ class DesktopSessionManager(QObject):
         idx = self.state.selected_file_idx
         if not self.state.current_file_hash or not (0 <= idx < len(self.state.uploaded_files)):
             return
-        asset = self.state.uploaded_files[idx]
+        self._lock_diverged_cards(self.state.uploaded_files[idx], self.state.config)
+
+    def _lock_diverged_cards(self, asset: dict, config: WorkspaceConfig) -> None:
         roll_id = self.state.active_roll_id or self._roll_id_for_orphan_asset(asset)
         if roll_id is None:
             return
         defaults = rolls.roll_defaults(self.repo, roll_id)
-        base = unforked_hash(self.state.current_file_hash)
+        base = unforked_hash(asset["hash"])
         locked = rolls.frame_override_cards(self.repo, roll_id, base)
         for card_key, (section, names) in rolls.ROLL_DEFAULT_FIELDS.items():
-            values = getattr(self.state.config, section)
+            values = getattr(config, section)
             if card_key not in locked and any(n in defaults and not rolls.same_value(getattr(values, n), defaults[n]) for n in names):
                 rolls.set_frame_override(self.repo, roll_id, base, card_key, True)
 
@@ -1860,7 +1865,7 @@ class DesktopSessionManager(QObject):
             if f_info["hash"] == self.state.current_file_hash:
                 self.update_config(new_p, persist=True)
                 continue
-            old_p = self.repo.load_file_settings(f_info["hash"]) or self.config_for_asset(f_info)
+            old_p = self.config_for_asset(f_info)
             self.push_external_history(f_info["hash"], old_p, new_p)
             self.repo.save_file_settings(f_info["hash"], new_p, file_path=f_info["path"])
             changed_hashes.append(f_info["hash"])

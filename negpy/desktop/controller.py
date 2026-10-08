@@ -6734,12 +6734,14 @@ class AppController(QObject):
         session value so both frames get identical dye-unmixing during export.
         """
         # The active file uses the live session config, which may hold unsaved changes the
-        # user expects in the export. Other files use their saved DB settings, or the session
-        # config when they have none.
+        # user expects in the export. Other files use their saved edit as the canvas resolves
+        # it, or the session config when they have none.
         if f.get("hash") == self.state.current_file_hash:
             params = self.state.config
+        elif self.session.repo.load_file_settings(f["hash"]) is not None:
+            params = self.session.config_for_asset(f)
         else:
-            params = self.session.repo.load_file_settings(f["hash"]) or self.state.config
+            params = self.state.config
         params = self._with_sibling_crosstalk(params, f)
         return resolve_asset_hdr(resolve_asset_stitch(resolve_asset_rgbscan(params, f), f), f)
 
