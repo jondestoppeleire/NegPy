@@ -7415,30 +7415,28 @@ class AppController(QObject):
         paths = [str(f.asset.get("path", "")) for f in frames]
         return os.path.basename(os.path.dirname(paths[0])) if paths and paths[0] else ""
 
-    def _write_edit_sidecars(self, files: list[dict]) -> tuple[int, int]:
+    def _write_edit_sidecars(self, files: list[dict]) -> tuple[int, int, int]:
         """Write a .negpy edit sidecar next to each source (each frame's own saved edits).
-        Returns (written, failed) — a caller that reports only the written count turns a
-        read-only source folder into a silent success."""
+        Returns (written, failed, skipped) — a caller that reports only the written count
+        turns a read-only source folder into a silent success. A composite or a roll fork
+        is skipped: the sidecar beside its path belongs to the shared frame."""
         repo = self.session.repo
         written = 0
         failed = 0
+        skipped = 0
         for f in files:
+            if f.get("hdr_paths") or f.get("stitch_paths") or "#roll:" in f["hash"]:
+                skipped += 1
+                continue
             half = int(f.get("half") or 0)
-            params = load_or_promote(
-                repo,
-                f["hash"],
-                f["path"],
-                half=half,
-                composite=bool(f.get("hdr_paths") or f.get("stitch_paths")),
-                forked="#roll:" in f["hash"],
-            ) or self.session.config_for_asset(f)
+            params = load_or_promote(repo, f["hash"], f["path"], half=half) or self.session.config_for_asset(f)
             try:
                 write_sidecar(f["path"], params, half=half)
                 written += 1
             except Exception as exc:
                 failed += 1
                 logger.warning("Sidecar write failed for %s: %s", f.get("path"), exc)
-        return written, failed
+        return written, failed, skipped
 
     def export_edit_sidecars(self) -> None:
         """Explicit batch sidecar export for all visible files (ignores the on-export toggle)."""
@@ -7449,8 +7447,8 @@ class AppController(QObject):
         ]
         if not visible_files:
             return
-        written, failed = self._write_edit_sidecars(visible_files)
-        suffix = f" — {failed} failed" if failed else ""
+        written, failed, skipped = self._write_edit_sidecars(visible_files)
+        suffix = (f" — {failed} failed" if failed else "") + (f", {skipped} composite or forked skipped" if skipped else "")
         self.set_status(f"Wrote {count_of(written, 'edit sidecar')}{suffix}", 6000 if failed else 4000)
 
     def _run_export_tasks(self, tasks: List[ExportTask]) -> None:

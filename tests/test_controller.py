@@ -981,23 +981,30 @@ class TestAppController(unittest.TestCase):
             patch("negpy.desktop.controller.load_or_promote", return_value=None),
             patch("negpy.desktop.controller.write_sidecar") as mock_write,
         ):
-            written, failed = self.controller._write_edit_sidecars([frame])
+            written, failed, skipped = self.controller._write_edit_sidecars([frame])
 
-        self.assertEqual((written, failed), (1, 0))
+        self.assertEqual((written, failed, skipped), (1, 0, 0))
         self.mock_session_manager.config_for_asset.assert_called_once_with(frame)
         params = mock_write.call_args.args[1]
         self.assertIs(params, hydrated)
         self.assertIsNone(params.geometry.crop_rect)
 
-    def test_write_edit_sidecars_never_rehomes_a_forked_frame(self):
-        frame = {"name": "b.dng", "path": "/tmp/b.dng", "hash": "hash2#roll:r1"}
+    def test_write_edit_sidecars_skips_forks_and_composites(self):
+        """Their path is the shared frame's, so a sidecar there would replace that frame's edit."""
+        frames = [
+            {"name": "b.dng", "path": "/tmp/b.dng", "hash": "hash2#roll:r1"},
+            {"name": "a.tif", "path": "/tmp/a.tif", "hash": "h#stitch", "stitch_paths": ["/tmp/a.tif", "/tmp/c.tif"]},
+            {"name": "a.tif", "path": "/tmp/a.tif", "hash": "h#hdr", "hdr_paths": ["/tmp/a.tif", "/tmp/d.tif"]},
+        ]
         with (
             patch("negpy.desktop.controller.load_or_promote", return_value=None) as mock_load,
-            patch("negpy.desktop.controller.write_sidecar"),
+            patch("negpy.desktop.controller.write_sidecar") as mock_write,
         ):
-            self.controller._write_edit_sidecars([frame])
+            result = self.controller._write_edit_sidecars(frames)
 
-        self.assertTrue(mock_load.call_args.kwargs["forked"])
+        self.assertEqual(result, (0, 0, 3))
+        mock_load.assert_not_called()
+        mock_write.assert_not_called()
 
     def test_discovery_promotes_sidecars_before_adding_files(self):
         state = self.mock_session_manager.state
