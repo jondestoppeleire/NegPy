@@ -832,7 +832,7 @@ The scanning optics: one lens correction and one light correction for every fram
 
 #### Lens Correction
 
-*   **Embedded** (the file's own lens profile, enabled when the file has one):
+*   **Embedded** (the file's own lens profile for DNG, Sony ARW and Panasonic RW2, enabled when the file has one; RW2 carries distortion only):
     *   **Distortion**: straightens curved lines in place of the manual correction, scaling the image to fill the frame. Set it before cropping or retouching.
     *   **CA**: reduces color fringes. Works with or without **Distortion** and manual correction.
 *   **Distortion Correction** (-0.100 to 0.100, in steps of 0.001): positive corrects barrel, negative pincushion. Use the film rebate as a straight edge. Applied before Tilt and Swing. Grayed out while the embedded **Distortion** is on.
