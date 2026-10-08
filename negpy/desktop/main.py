@@ -98,13 +98,22 @@ def _install_exception_hook() -> None:
     report that hides the Python traceback. This is what surfaces user-side bugs we can't reproduce
     (e.g. the Big Scanlight calibration crash): the traceback lands in negpy.log for them to attach."""
 
+    from PyQt6.QtCore import QObject, pyqtSignal
+
+    class _Notice(QObject):
+        # Built on the GUI thread, so an emit from a worker thread queues the dialog there.
+        show = pyqtSignal(str)
+
+    notice = _Notice()
+    notice.show.connect(_show_error_notice)
+
     def _hook(exc_type, exc_value, exc_tb) -> None:
         if issubclass(exc_type, KeyboardInterrupt):
             sys.__excepthook__(exc_type, exc_value, exc_tb)
             return
         logger.critical("Unhandled exception", exc_info=(exc_type, exc_value, exc_tb))
         try:
-            from PyQt6.QtWidgets import QApplication, QMessageBox
+            from PyQt6.QtWidgets import QApplication
 
             # Startup work runs before QApplication exists, and constructing a widget
             # without one makes Qt call qFatal() — an abort at the C level, with no Python
@@ -114,17 +123,23 @@ def _install_exception_hook() -> None:
                 sys.__excepthook__(exc_type, exc_value, exc_tb)
                 return
 
-            QMessageBox.critical(
-                None,
-                "NegPy Hit an Error",
-                f"Something went wrong and was logged:\n\n{exc_type.__name__}: {exc_value}\n\n"
-                f"The app kept running. If it keeps happening, please attach the log file "
-                f"({os.path.join(BASE_USER_DIR, 'negpy.log')}) to a bug report on GitHub.",
-            )
+            notice.show.emit(f"{exc_type.__name__}: {exc_value}")
         except Exception:
             logger.warning("could not show the error dialog", exc_info=True)
 
     sys.excepthook = _hook
+
+
+def _show_error_notice(error: str) -> None:
+    from PyQt6.QtWidgets import QMessageBox
+
+    QMessageBox.critical(
+        None,
+        "NegPy Hit an Error",
+        f"Something went wrong and was logged:\n\n{error}\n\n"
+        f"The app kept running. If it keeps happening, please attach the log file "
+        f"({os.path.join(BASE_USER_DIR, 'negpy.log')}) to a bug report on GitHub.",
+    )
 
 
 class UserDirectoryError(Exception):
