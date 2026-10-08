@@ -1,3 +1,4 @@
+import pytest
 from dataclasses import replace
 
 from PyQt6.QtCore import QEvent, QPointF, QRectF, Qt
@@ -204,3 +205,21 @@ def test_hidden_masks_leave_no_handle_to_grab(qapp) -> None:
 
     assert overlay._local_drag_vertex is None
     assert overlay.try_delete_local_vertex(QPointF(80, 20)) is False
+
+
+def _uv(u0: float, u1: float, v0: float, v1: float, h: int = 50, w: int = 100):
+    import numpy as np
+
+    u, v = np.meshgrid(np.linspace(u0, u1, w, dtype=np.float32), np.linspace(v0, v1, h, dtype=np.float32))
+    return np.stack([u, v], axis=-1)
+
+
+def test_the_brush_ring_scales_with_the_whole_frame_not_the_crop(qapp) -> None:
+    """A heal's size is a fraction of the source frame, so a 50% crop shows it twice as big."""
+    overlay = _overlay_with_mask(ToolMode.NONE)
+    overlay.state.original_res = (200, 400)
+    overlay.state.last_metrics["uv_grid"] = _uv(0.0, 1.0, 0.0, 1.0)
+    whole = overlay._brush_screen_radius(10.0)
+    overlay.state.last_metrics["uv_grid"] = _uv(0.25, 0.75, 0.25, 0.75)
+    cropped = overlay._brush_screen_radius(10.0)
+    assert cropped == pytest.approx(2.0 * whole, rel=0.03)

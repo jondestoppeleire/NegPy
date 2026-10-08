@@ -1285,9 +1285,28 @@ class CanvasOverlay(QWidget):
         painter.drawEllipse(self._mouse_pos, radius, radius)
 
     def _brush_screen_radius(self, size: float) -> float:
+        """A heal's footprint is a fraction of the whole source frame, not of the crop."""
+        scale = self._screen_per_raw_px()
+        h_raw, w_raw = self.state.original_res
+        if scale is None:
+            rect = self._content_view_rect()
+            return (size / (2.0 * HEAL_SIZE_REF)) * max(rect.width(), rect.height())
+        return (size / (2.0 * HEAL_SIZE_REF)) * max(w_raw, h_raw) * scale
+
+    def _screen_per_raw_px(self) -> Optional[float]:
+        """Screen pixels per source pixel, read off the uv grid of the shown render."""
+        with self.state.metrics_lock:
+            uv = self.state.last_metrics.get("uv_grid")
+        h_raw, w_raw = self.state.original_res
         rect = self._content_view_rect()
-        max_screen_dim = max(rect.width(), rect.height())
-        return (size / (2.0 * HEAL_SIZE_REF)) * max_screen_dim
+        if uv is None or uv.ndim != 3 or uv.shape[1] < 2 or not (h_raw and w_raw) or rect.isEmpty():
+            return None
+        row = uv.shape[0] // 2
+        du, dv = (uv[row, 1] - uv[row, 0])[:2]
+        raw_per_grid = float(np.hypot(du * w_raw, dv * h_raw))
+        if raw_per_grid <= 0.0:
+            return None
+        return rect.width() / uv.shape[1] / raw_per_grid
 
     def _preview_curve_path(self, pts: List[QPointF]) -> QPainterPath:
         """Smoothed path through the placed points plus the live cursor."""
@@ -2363,7 +2382,12 @@ class CanvasOverlay(QWidget):
             # the selected mask drops its fill and the fills it overlaps, so the change under
             # them stays visible.
             if working is None and i not in self._local_muted_masks:
-                sigma_screen = mask.feather * min(self._view_rect.width(), self._view_rect.height())
+                # The engine feathers by the whole frame's short side, not the padded view's.
+                scale = self._screen_per_raw_px()
+                content = self._content_view_rect()
+                sigma_screen = mask.feather * (
+                    min(self.state.original_res) * scale if scale is not None else min(content.width(), content.height())
+                )
                 pad = 3.0 * sigma_screen + 2.0
                 # A gradient has no boundary, and an inverted mask applies outside its own.
                 # Rasterise both on the full frame, not on a padded bounding box.
