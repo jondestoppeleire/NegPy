@@ -1733,3 +1733,9 @@ def test_a_small_crop_with_a_large_crop_offset_renders():
     out = np.asarray(DarkroomEngine().process(img, cfg, "small-crop"))
 
     assert out.size > 0 and np.isfinite(out).all()
+
+
+def test_off_frame_mask_vertices_keep_their_place():
+    from negpy.features.geometry.logic import map_coords_to_geometry
+
+    assert map_coords_to_geometry(-0.2, 1.3, (100, 200)) == pytest.approx((-0.2, 1.3), abs=1e-6)

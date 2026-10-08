@@ -2319,10 +2319,9 @@ def map_coords_to_geometry(
         py -= y1
         h, w = y2 - y1, x2 - x1
 
-    nx_new = np.clip(px / max(w, 1), 0.0, 1.0)
-    ny_new = np.clip(py / max(h, 1), 0.0, 1.0)
-
-    return float(nx_new), float(ny_new)
+    # Not clamped: a vertex off the frame (a Card Edge drawn from outside, a large Oval)
+    # must keep its place, as the overlay draws it.
+    return float(px / max(w, 1)), float(py / max(h, 1))
 
 
 def solve_keystone_from_edges(
