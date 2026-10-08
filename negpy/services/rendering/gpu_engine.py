@@ -449,10 +449,11 @@ class GPUEngine:
         self._tex_gen[key] = self._render_gen
         return self._tex_cache[key]
 
-    def evict_stale_textures(self) -> None:
-        """Drop pool textures untouched by the previous render. Bounds batch-export
-        VRAM: a same-dimensions roll keeps its chain, a dimension change frees the
-        old one a render later."""
+    def evict_stale_textures(self, destroy: bool = True) -> None:
+        """Drop pool textures untouched by the previous render. Bounds VRAM: a
+        same-dimensions roll keeps its chain, a dimension change frees the old one a
+        render later. A preview passes destroy=False, since the canvas may still sample
+        an evicted texture; it is then freed when its last reference goes."""
         self._render_gen += 1
         stale = [k for k, gen in self._tex_gen.items() if gen < self._render_gen - 1]
         if not stale:
@@ -460,8 +461,14 @@ class GPUEngine:
         for key in stale:
             tex = self._tex_cache.pop(key, None)
             self._tex_gen.pop(key, None)
-            if tex is not None:
+            if tex is not None and destroy:
                 tex.destroy()
+        # A new texture under the same key starts empty, so its upload must not be skipped.
+        labels = {key[3] for key in stale}
+        if labels & {"local_ev", "local_key"}:
+            self._local_ev_key = None
+        if "contrast_mask" in labels:
+            self._mask_tex_key = None
         # Bind groups keyed by id() never match a destroyed view again; drop, don't leak.
         self._bind_group_cache.clear()
 

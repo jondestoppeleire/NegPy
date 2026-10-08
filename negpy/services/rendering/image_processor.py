@@ -836,6 +836,7 @@ class ImageProcessor:
                         render_size_ref=render_size_ref,
                     )
                 else:
+                    self.engine_gpu.evict_stale_textures(destroy=False)
                     processed, gpu_metrics = self.engine_gpu.process_to_texture(
                         img,
                         settings,
