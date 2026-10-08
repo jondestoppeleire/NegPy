@@ -492,7 +492,7 @@ def print_curve(
         shoulder=shoulder_eff if shoulder is None else shoulder,
         shoulder_width=exposure.shoulder_width if shoulder_width is None else shoulder_width,
         paper=profile,
-        midtone_gamma=effective_midtone_gamma(None, exposure.midtone_gamma) if midtone_gamma is None else midtone_gamma,
+        midtone_gamma=effective_midtone_gamma(profile, exposure.midtone_gamma) if midtone_gamma is None else midtone_gamma,
         bpc=not exposure.paper_black,
         shadow_density=exposure.shadow_density,
         highlight_density=exposure.highlight_density if highlight_density is None else highlight_density,
