@@ -2188,6 +2188,8 @@ def autocrop_detection_key(geometry: GeometryConfig) -> str:
             geometry.autocrop_ratio,
             geometry.autocrop_mode,
             round(geometry.autocrop_rebate_trim, 4),
+            # Only when set, so rects frozen before distortion was keyed stay valid.
+            *((round(geometry.distortion_k1, 4),) if geometry.distortion_k1 else ()),
         )
     )
 
@@ -2203,7 +2205,7 @@ def resolve_autocrop_rect(
     The only border detection a render reaches; the caller freezes the result, so every
     later render of the edit crops identically at any resolution. Runs on a copy normalized
     to AUTOCROP_DETECT_RES, replaying the GeometryProcessor transform order
-    (rot90 -> flips -> fine rotation).
+    (rot90 -> flips -> fine rotation -> distortion -> keystone).
 
     The rect excludes Crop Offset, which get_manual_rect_coords adds back on every render;
     only the 2 px baseline margin is baked in. None when the buffer is too small.
@@ -2223,6 +2225,8 @@ def resolve_autocrop_rect(
     tmp = np.ascontiguousarray(tmp.astype(np.float32, copy=False))
     if geometry.fine_rotation != 0.0:
         tmp = apply_fine_rotation(tmp, geometry.fine_rotation)
+    if geometry.distortion_k1 != 0.0:
+        tmp = apply_radial_distortion(tmp, geometry.distortion_k1)
     # Detection must see the frame the render produces, or the rect is found on a
     # straight rebate and applied to a keystoned one.
     tmp = apply_keystone(tmp, geometry.converge_v, geometry.converge_h)
