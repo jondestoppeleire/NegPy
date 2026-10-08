@@ -2164,12 +2164,13 @@ class GPUEngine:
             off_y = PrintService.weighted_offset_y(paper_h, content_h, border_px, border_bottom_px)
         else:
             if settings.export.paper_aspect_ratio == AspectRatio.ORIGINAL:
+                # Same formulas as PrintService.apply_layout, or the mat gains a 1 px line.
                 if cw >= ch:
-                    content_w = max(1, paper_long_px - 2 * border_px)
-                    content_h = max(1, int(ch * (content_w / cw)))
+                    content_w = max(10, paper_long_px - 2 * border_px)
+                    content_h = max(1, int(content_w / (cw / ch)))
                 else:
-                    content_h = max(1, paper_long_px - border_y_px)
-                    content_w = max(1, int(cw * (content_h / ch)))
+                    content_h = max(10, paper_long_px - border_y_px)
+                    content_w = max(1, int(content_h * (cw / ch)))
                 paper_w, paper_h = content_w + 2 * border_px, content_h + border_y_px
                 off_x, off_y = border_px, border_px
             else:
@@ -2179,9 +2180,8 @@ class GPUEngine:
                     cw,
                     ch,
                 )
-                inner_w, inner_h = paper_w - 2 * border_px, paper_h - border_y_px
-                scale = min(inner_w / cw, inner_h / ch)
-                content_w, content_h = int(cw * scale), int(ch * scale)
+                inner_w, inner_h = max(10, paper_w - 2 * border_px), max(10, paper_h - border_y_px)
+                content_w, content_h = PrintService.fit_content(cw, ch, inner_w, inner_h)
 
                 off_x = (paper_w - content_w) // 2
                 off_y = PrintService.weighted_offset_y(paper_h, content_h, border_px, border_bottom_px)
