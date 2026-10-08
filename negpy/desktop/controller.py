@@ -740,6 +740,7 @@ class AppController(QObject):
         self._pending_cursor_ny: Optional[float] = None
         self._prefetch_gen = 0
         self._decoded_source_token: Optional[str] = None
+        self._previewed_meter_cards: set[str] = set()  # cards a slider tick moved a meter input on
         #: The texture the canvas is displaying, kept alive across back-to-back reloads.
         self._spared_texture: Optional[GPUTexture] = None
         self._preview_load_t0 = 0.0
@@ -5021,13 +5022,16 @@ class AppController(QObject):
         return {name: getattr(getattr(config, section), name) for name in fields}
 
     @staticmethod
-    def _with_card_values(config, card_key: str, values: dict, remeter: bool = True):
+    def _with_card_values(config, card_key: str, values: dict, remeter: bool = True, force_remeter: bool = False):
         """*config* with *card_key*'s section carrying *values*. Fields that move the
         crop also feed the meter, so a real change to one drops the cached per-frame
-        bounds with it; re-freezing a card on its own values must not."""
+        bounds with it; re-freezing a card on its own values must not. ``force_remeter``
+        is a commit after preview ticks, which already wrote the value it compares with."""
         section, _fields = rolls.ROLL_DEFAULT_FIELDS[card_key]
         current = getattr(config, section)
-        remeter = remeter and any(name in BOUNDS_INPUT_FIELDS and value != getattr(current, name) for name, value in values.items())
+        remeter = remeter and (
+            force_remeter or any(name in BOUNDS_INPUT_FIELDS and value != getattr(current, name) for name, value in values.items())
+        )
         config = replace(config, **{section: replace(current, **values)})
         if remeter:
             config = replace(config, process=replace(config.process, **invalidate_local_bounds(config.process)))
@@ -5106,7 +5110,14 @@ class AppController(QObject):
         any other live preview -- the lock only follows the settled value, not every
         intermediate tick.
         """
-        new_config = self._with_card_values(self.state.config, card_key, changes, remeter=persist)
+        section = getattr(self.state.config, rolls.ROLL_DEFAULT_FIELDS[card_key][0])
+        moves_meter = any(name in BOUNDS_INPUT_FIELDS and value != getattr(section, name) for name, value in changes.items())
+        previewed = card_key in self._previewed_meter_cards
+        if not persist and moves_meter:
+            self._previewed_meter_cards.add(card_key)
+        elif persist:
+            self._previewed_meter_cards.discard(card_key)
+        new_config = self._with_card_values(self.state.config, card_key, changes, remeter=persist, force_remeter=persist and previewed)
         self.apply_config(new_config, persist=persist, readback_metrics=readback_metrics)
         if persist:
             self._lock_roll_card(card_key)

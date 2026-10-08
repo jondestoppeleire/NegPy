@@ -79,3 +79,24 @@ def test_undoing_a_decode_level_field_re_decodes_the_source():
     AppController.request_render(ctrl)
 
     ctrl.load_file.assert_called_once_with("/p/a.dng", preserve_zoom=True)
+
+
+def test_a_crop_offset_drag_drops_the_cached_bounds_on_release():
+    """The drag ticks already wrote the value, so the release must not compare against them."""
+    from dataclasses import replace
+
+    from negpy.desktop.session import AppState
+
+    ctrl = MagicMock()
+    ctrl.state = AppState()
+    cfg = WorkspaceConfig()
+    ctrl.state.config = replace(cfg, process=replace(cfg.process, local_floors=(0.1, 0.1, 0.1), local_ceils=(0.9, 0.9, 0.9)))
+    ctrl._previewed_meter_cards = set()
+    ctrl._with_card_values = AppController._with_card_values
+    ctrl.apply_config.side_effect = lambda c, **k: setattr(ctrl.state, "config", c)
+
+    AppController.set_roll_default(ctrl, "autocrop", persist=False, readback_metrics=False, autocrop_offset=12)
+    AppController.set_roll_default(ctrl, "autocrop", autocrop_offset=12)
+
+    assert ctrl.state.config.geometry.autocrop_offset == 12
+    assert ctrl.state.config.process.local_floors == (0.0, 0.0, 0.0)
