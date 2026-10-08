@@ -61,9 +61,12 @@ _LENS_FIELDS = (
 )
 _SENSOR_FIELDS = (
     "sensor_profile",
+    "sensor_matrix",
     "sensor_unmix",
     "crosstalk_profile",
     "crosstalk_strength",
+    "crosstalk_matrix",
+    "crosstalk_process",
     "hue_trim",
 )
 # ProcessConfig is split across five cards. Each tuple is both the card's reset scope and
