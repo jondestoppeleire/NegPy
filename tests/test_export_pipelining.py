@@ -417,3 +417,18 @@ def test_concurrent_prefetch_and_prepare_agree(tmp_path) -> None:
     assert np.array_equal(ref, got)
     assert proc._prepare_slot is not None
     assert np.array_equal(ref, proc._prepare_slot[1][0])
+
+
+def test_a_frame_never_opened_exports_with_its_source_exif(tmp_path, monkeypatch) -> None:
+    from negpy.desktop.workers import export as export_mod
+    from negpy.features.metadata.models import MetadataConfig
+
+    exif = {"0th": {271: b"Nikon"}}
+    monkeypatch.setattr(export_mod, "read_exif_from_file", lambda path: exif)
+    seen: list = []
+    monkeypatch.setattr(export_mod, "embed_metadata", lambda bits, cfg, source_exif, **k: (seen.append(source_exif), bits)[1])
+    worker, _ = _worker()
+
+    worker.run_batch([_task(tmp_path, "a.cr2", metadata_config=MetadataConfig())])
+
+    assert seen == [exif]

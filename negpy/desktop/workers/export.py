@@ -1,5 +1,5 @@
 from concurrent.futures import Future, ThreadPoolExecutor
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import List, Optional, Any, Union
 import gc
 import math
@@ -23,6 +23,7 @@ from negpy.features.metadata.resolution import Resolution
 from negpy.features.metadata.writer import embed_metadata, export_embed_plan, preserve_source_metadata
 from negpy.features.metadata.fsdate import sync_export_filesystem_dates
 from negpy.features.metadata.models import MetadataConfig
+from negpy.infrastructure.loaders.helpers import read_exif_from_file
 from negpy.infrastructure.display.color_spaces import WORKING_COLOR_SPACE, ColorSpaceRegistry
 from negpy.services.rendering.image_processor import ImageProcessor
 from negpy.features.hdr.models import hdr_frame_paths
@@ -317,6 +318,9 @@ class ExportWorker(QObject):
                 full_name = task.file_info["name"]
                 name = os.path.splitext(full_name)[0]
                 self.progress.emit(i + 1, total, name)
+                # The session caches EXIF only for frames opened this session.
+                if task.source_exif is None and task.metadata_config is not None:
+                    task = replace(task, source_exif=read_exif_from_file(task.file_info["path"]))
 
                 nxt = tasks[i + 1] if i + 1 < len(tasks) else None
                 prefetch_next = nxt is not None and nxt.diptych is None
