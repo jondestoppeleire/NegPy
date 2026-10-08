@@ -6320,8 +6320,22 @@ class TestSplashPreviewRaceGuard(unittest.TestCase):
         panel._requested_file_path = requested_path
         panel._file_hash_for_path.return_value = hash_for_path
         panel._split_active_half.return_value = ("RAW", (100, 100))
+        panel._is_stale_preview.return_value = False
         panel.state = AppState()
         return panel
+
+    def test_a_decode_from_an_earlier_load_is_dropped(self):
+        """Both halves of a scan share a path; only the generation tells their decodes apart."""
+        panel = self._panel()
+        panel._prefetch_gen = 5
+        panel._is_stale_preview = lambda g: AppController._is_stale_preview(panel, g)
+
+        AppController._on_splash_preview(panel, "a.dng", "RAW", (100, 100), 4)
+        AppController._on_preview_loaded(panel, "a.dng", "RAW", (100, 100), "sRGB", None, "", None, None, 4)
+
+        self.assertNotIn("base_positive", panel.state.last_metrics)
+        self.assertIsNone(panel.state.preview_raw)
+        panel.request_render.assert_not_called()
 
     def test_splash_skipped_once_the_real_render_for_this_file_already_landed(self):
         panel = self._panel(hash_for_path="h1")

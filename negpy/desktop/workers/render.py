@@ -1133,9 +1133,9 @@ class PreviewLoadWorker(QObject):
     Keeps the UI thread free during slow I/O and demosaicing.
     """
 
-    # (file_path, raw, dims, source_cs, ir_preview, detected_mode, (cam_xyz, camera_wb), detect_preview)
-    finished = pyqtSignal(str, object, object, str, object, str, object, object)
-    splash = pyqtSignal(str, object, object)  # (file_path, buffer, dims) — first paint
+    # (file_path, raw, dims, source_cs, ir_preview, detected_mode, (cam_xyz, camera_wb), detect_preview, generation)
+    finished = pyqtSignal(str, object, object, str, object, str, object, object, int)
+    splash = pyqtSignal(str, object, object, int)  # (file_path, buffer, dims, generation) — first paint
     error = pyqtSignal(str)
     # (file_path, applied long-edge cap px): an HQ load exceeded the GPU's VRAM budget
     # and was downsampled instead of crashing. Emitted alongside `finished`.
@@ -1248,6 +1248,7 @@ class PreviewLoadWorker(QObject):
                         lens_decode_token(task.lens_corrections, task.lens_flatfield),
                     ),
                     metadata.get("detect_preview"),
+                    task.generation,
                 )
                 return
             if hdr_active(task.hdr):
@@ -1292,6 +1293,7 @@ class PreviewLoadWorker(QObject):
                         lens_decode_token(task.lens_corrections, task.lens_flatfield),
                     ),
                     metadata.get("detect_preview"),
+                    task.generation,
                 )
                 return
             if is_rgb_triplet(task.rgbscan):
@@ -1334,6 +1336,7 @@ class PreviewLoadWorker(QObject):
                         lens_decode_token(task.lens_corrections, task.lens_flatfield),
                     ),
                     metadata.get("detect_preview"),
+                    task.generation,
                 )
                 return
             if task.use_splash and not task.full_resolution:
@@ -1358,7 +1361,7 @@ class PreviewLoadWorker(QObject):
                     return
                 if sp is not None:
                     sbuf, sdims = sp
-                    self.splash.emit(task.file_path, sbuf, sdims)
+                    self.splash.emit(task.file_path, sbuf, sdims, task.generation)
             else:
                 raw, dims, metadata = self._preview_service.load_linear_preview(
                     task.file_path,
@@ -1403,6 +1406,7 @@ class PreviewLoadWorker(QObject):
                     lens_decode_token(task.lens_corrections, task.lens_flatfield),
                 ),
                 metadata.get("detect_preview"),
+                task.generation,
             )
         except InterruptedError:
             return

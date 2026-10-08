@@ -2703,6 +2703,11 @@ class AppController(QObject):
             )
         )
 
+    def _is_stale_preview(self, generation: Optional[int]) -> bool:
+        """A decode requested before the latest load_file. Both halves of a scan share a
+        path, so the path alone cannot tell one half's decode from the other's."""
+        return generation is not None and generation != self._prefetch_gen
+
     def _split_active_half(self, raw: Any, dims: Any) -> tuple[Any, Any]:
         """No-op: the half-frame slice now happens in PreviewManager before the
         preview downsample, so both splash and linear buffers arrive already
@@ -2711,8 +2716,8 @@ class AppController(QObject):
         """
         return raw, dims
 
-    def _on_splash_preview(self, file_path: str, raw: Any, dims: Any) -> None:
-        if self._requested_file_path != file_path:
+    def _on_splash_preview(self, file_path: str, raw: Any, dims: Any, generation: Optional[int] = None) -> None:
+        if self._requested_file_path != file_path or self._is_stale_preview(generation):
             return
         # A backlogged splash-decode worker can land after the real render for this same
         # file already has. Splash only ever bridges the gap before the real render
@@ -2772,11 +2777,12 @@ class AppController(QObject):
         detected_mode: str,
         cam_matrix: Any = None,
         detect_preview: Any = None,
+        generation: Optional[int] = None,
     ) -> None:
         for f in self.state.uploaded_files:
             if f["path"] == file_path and f.pop("decode_failed", None) is not None:
                 self.session.asset_model.refresh()
-        if self._requested_file_path != file_path:
+        if self._requested_file_path != file_path or self._is_stale_preview(generation):
             return
         self._foreground_preview_generation = None
         decoded_lens_token = cam_matrix[3] if cam_matrix and len(cam_matrix) > 3 else ""
