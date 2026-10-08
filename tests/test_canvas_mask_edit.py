@@ -180,3 +180,27 @@ def test_a_shape_click_without_travel_draws_nothing() -> None:
 
     assert emitted == []
     assert overlay._shape_draw_p1 is None
+
+
+def test_hidden_masks_leave_no_handle_to_grab(qapp) -> None:
+    """Off the Dodge & Burn tab the masks are not drawn, so a press there pans, never edits."""
+    overlay = _overlay_with_mask(ToolMode.NONE)
+    overlay.state.local_masks_shown = False
+    from PyQt6.QtGui import QImage, QPainter
+
+    image = QImage(100, 100, QImage.Format.Format_ARGB32)
+    painter = QPainter(image)
+    overlay._draw_ui(painter)  # A paint drops the handles of masks it does not draw.
+    painter.end()
+
+    ev = QMouseEvent(
+        QEvent.Type.MouseButtonPress,
+        QPointF(20, 20),
+        Qt.MouseButton.LeftButton,
+        Qt.MouseButton.LeftButton,
+        Qt.KeyboardModifier.NoModifier,
+    )
+    overlay.mousePressEvent(ev)
+
+    assert overlay._local_drag_vertex is None
+    assert overlay.try_delete_local_vertex(QPointF(80, 20)) is False

@@ -1067,6 +1067,10 @@ class CanvasOverlay(QWidget):
 
         if self.state.config.local.masks and (self.state.local_masks_shown or self._tool_mode in _SHAPE_FOR_TOOL):
             self._draw_local_masks(painter)
+        else:
+            # Hit-testing reads these, so a hidden mask keeps no handle to grab.
+            self._local_mask_screen_polys = []
+            self._local_mask_screen_ctrl = []
         if self._tool_mode == ToolMode.LOCAL_DRAW:
             self._draw_lasso_in_progress(painter)
         if self._tool_mode in (ToolMode.LOCAL_OVAL, ToolMode.LOCAL_GRADIENT):
