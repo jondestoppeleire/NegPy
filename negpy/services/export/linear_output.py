@@ -767,18 +767,21 @@ def _decode_stitch_part(
     flatfield: Optional[FlatFieldConfig],
     process: Optional[ProcessConfig],
     unmix: bool = True,
-) -> np.ndarray:
+) -> tuple[np.ndarray, Optional[_CameraWB], _SourceMeta]:
     """Decode one stitch part with flatfield and, when ``unmix``, sensor correction applied.
+    Returns (buffer, as-shot WB, source metadata).
 
     Triplet merge is performed when *rgbscan* is a valid triplet config.
     Sensor correction is skipped for triplets (no cross-channel leakage
-    with narrowband exposures).
+    with narrowband exposures). A part decodes as it would on its own, whatever its format.
     """
     is_triplet = rgbscan is not None and is_rgb_triplet(rgbscan)
     demosaic = process.demosaic_export if process is not None else DemosaicMode.AUTO
 
+    wb: Optional[_CameraWB] = None
+    meta = _SourceMeta()
     if is_triplet:
-        primary_f32, _, _, _ = _decode_camera_raw_buffer(file_path, demosaic)
+        primary_f32, wb, meta, _ = _decode_camera_raw_buffer(file_path, demosaic)
         cache: dict[str, np.ndarray] = {file_path: primary_f32}
 
         def _decode(path: str) -> np.ndarray:
@@ -791,13 +794,13 @@ def _decode_stitch_part(
         f32 = merge_rgb_triplet(_decode, file_path, rgbscan.green_path, rgbscan.blue_path, align=rgbscan.align)
         f32 = np.clip(f32, 0.0, 1.0)  # see _decode_camera_raw_triplet: the warp can ring past 1.0
     else:
-        f32, _, _, _ = _decode_camera_raw_buffer(file_path, demosaic)
+        f32, _, wb, meta = _decode_linear(file_path, process=process)
 
     if flatfield is not None:
         f32 = _apply_flatfield_correction(f32, flatfield)
     if unmix and not is_triplet and process is not None and process.sensor_matrix is not None:
         f32 = apply_sensor_correction(f32, process.sensor_matrix, process.sensor_unmix)
-    return f32
+    return f32, wb, meta
 
 
 def _decode_stitch(
@@ -810,15 +813,6 @@ def _decode_stitch(
     all_paths = [file_path, *stitch.stitch_paths]
     has_triplets = stitch_has_triplets(stitch)
 
-    primary_meta = _read_source_meta_tiff(file_path)
-    _, wb, decode_meta, _ = _decode_camera_raw_buffer(file_path, process.demosaic_export if process is not None else DemosaicMode.AUTO)
-    merged_meta = _SourceMeta(
-        make=primary_meta.make or decode_meta.make,
-        model=primary_meta.model or decode_meta.model,
-        datetime=primary_meta.datetime or decode_meta.datetime,
-        demosaic=decode_meta.demosaic,
-    )
-
     parts: list[np.ndarray] = []
     for i, path in enumerate(all_paths):
         part_rgbscan: Optional[RgbScanConfig] = None
@@ -827,7 +821,18 @@ def _decode_stitch(
             if green and blue:
                 part_rgbscan = RgbScanConfig(enabled=True, green_path=green, blue_path=blue, align=stitch.stitch_align)
         # Unmixed once, assembled: the unmix reads the film base from the frame.
-        parts.append(_decode_stitch_part(path, part_rgbscan, flatfield, process, unmix=has_triplets))
+        f32, part_wb, part_meta = _decode_stitch_part(path, part_rgbscan, flatfield, process, unmix=has_triplets)
+        parts.append(f32)
+        if i == 0:
+            wb, decode_meta = part_wb, part_meta
+
+    primary_meta = _read_source_meta_tiff(file_path)
+    merged_meta = _SourceMeta(
+        make=primary_meta.make or decode_meta.make,
+        model=primary_meta.model or decode_meta.model,
+        datetime=primary_meta.datetime or decode_meta.datetime,
+        demosaic=decode_meta.demosaic,
+    )
 
     irs: list[None] = [None] * len(parts)
     f32, _ = stitch_composite(parts, irs, stitch)
@@ -849,7 +854,10 @@ def _normalize_wb_rgb(wb: tuple[float, float, float, float]) -> tuple[float, flo
 
 
 def _build_xmp(source_path: str, wb: _CameraWB, title: str = "", wb_applied: bool = False) -> bytes:
-    raw_name = os.path.basename(source_path)
+    from xml.sax.saxutils import escape
+
+    raw_name = escape(os.path.basename(source_path))
+    title = escape(title)
     title_block = ""
     if title:
         title_block = f"  <dc:title>\n   <rdf:Alt>\n    <rdf:li xml:lang='x-default'>{title}</rdf:li>\n   </rdf:Alt>\n  </dc:title>\n"
@@ -1001,9 +1009,17 @@ def _write_bytes(dest, data: bytes) -> None:
     """Write to a path or an already-open file-like *dest*."""
     if hasattr(dest, "write"):
         dest.write(data)
-    else:
-        with open(dest, "wb") as fh:
+        return
+    # Through a part file, so a failed write never destroys the file it would replace.
+    part = f"{dest}.part"
+    try:
+        with open(part, "wb") as fh:
             fh.write(data)
+        os.replace(part, dest)
+    except BaseException:
+        if os.path.exists(part):
+            os.unlink(part)
+        raise
 
 
 def _linear_resolution(source_path: Optional[str]) -> "Resolution":
@@ -1127,9 +1143,17 @@ def _write_ir_jxl(ir: np.ndarray, dest, effort: int = 7) -> None:
     data = bytes(bits)
     if hasattr(dest, "write"):
         dest.write(data)
-    else:
-        with open(dest, "wb") as fh:
+        return
+    # Through a part file, so a failed write never destroys the file it would replace.
+    part = f"{dest}.part"
+    try:
+        with open(part, "wb") as fh:
             fh.write(data)
+        os.replace(part, dest)
+    except BaseException:
+        if os.path.exists(part):
+            os.unlink(part)
+        raise
 
 
 def _attach_jxl_provenance(
@@ -1235,9 +1259,17 @@ def _write_jxl(
     )
     if hasattr(dest, "write"):
         dest.write(data)
-    else:
-        with open(dest, "wb") as fh:
+        return
+    # Through a part file, so a failed write never destroys the file it would replace.
+    part = f"{dest}.part"
+    try:
+        with open(part, "wb") as fh:
             fh.write(data)
+        os.replace(part, dest)
+    except BaseException:
+        if os.path.exists(part):
+            os.unlink(part)
+        raise
 
 
 def export_linear_output(
