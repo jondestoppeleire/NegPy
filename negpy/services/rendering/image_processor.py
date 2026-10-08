@@ -2120,7 +2120,9 @@ class ImageProcessor:
             return pil_img, self._get_target_icc_bytes(color_space, output_icc_path)
         except Exception as e:
             logger.error(f"CMS transformation failed: {e}")
-            return pil_img, None
+            # The pixels never left the working space, so tag them with it (a CMYK or Gray
+            # profile cannot take RGB pixels). Untagged, the export reads as sRGB.
+            return pil_img, self._get_target_icc_bytes(working_color_space, input_icc_path)
 
     @staticmethod
     def soft_proof_preview(
