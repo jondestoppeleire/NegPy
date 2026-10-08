@@ -135,13 +135,12 @@ def _build_analysis_source(
     tiling_mode: bool,
     max_size: int,
 ) -> Tuple[np.ndarray, float]:
-    """The shared meter grid's own buffer: sliced, oriented and downsampled once for
-    every meter reading it.
+    """The shared meter grid's own buffer: oriented, downsampled, warped and sliced once
+    for every meter reading it.
 
-    Downsampled before fine rotation and keystone, not after: both are full-frame
-    resamples whose cost scales with pixel count, and only a meter reads the result,
-    so warping the full-res crop just to shrink it away spends the expensive part on
-    pixels the analysis never sees.
+    The whole frame is warped before the ROI is cut, as the CPU engine and the print
+    stage do: a crop rotated about its own centre is a different region. Downsampled
+    first, since only a meter reads the result.
     """
     analysis_source = img
     if geometry.rotation != 0:
@@ -150,22 +149,26 @@ def _build_analysis_source(
         analysis_source = np.fliplr(analysis_source)
     if geometry.flip_vertical:
         analysis_source = np.flipud(analysis_source)
+    full_h, full_w = analysis_source.shape[:2]
+    analysis_source = _downsample_for_analysis(np.ascontiguousarray(analysis_source), max_size)
+    if geometry.fine_rotation != 0.0:
+        analysis_source = apply_fine_rotation(analysis_source, geometry.fine_rotation)
+    if geometry.distortion_k1 != 0.0:
+        analysis_source = apply_radial_distortion(analysis_source, geometry.distortion_k1)
+    analysis_source = apply_keystone(analysis_source, geometry.converge_v, geometry.converge_h)
     # A freehand analysis_rect overrides the crop ROI and centered buffer, like the
     # CPU path. Tiled export uses explicit overrides, so it stays on the ROI.
-    base_roi = roi if not tiling_mode else None
+    base_roi = None
+    if roi is not None and not tiling_mode:
+        sy, sx = analysis_source.shape[0] / full_h, analysis_source.shape[1] / full_w
+        y1, y2, x1, x2 = roi
+        base_roi = (round(y1 * sy), round(y2 * sy), round(x1 * sx), round(x2 * sx))
     analysis_roi, an_buffer = resolve_analysis_region(
         analysis_source.shape, base_roi, analysis_buffer, analysis_rect if not tiling_mode else None
     )
     if analysis_roi is not None:
         ay1, ay2, ax1, ax2 = analysis_roi
         analysis_source = np.ascontiguousarray(analysis_source[ay1:ay2, ax1:ax2])
-    analysis_source = _downsample_for_analysis(analysis_source, max_size)
-    if geometry.fine_rotation != 0.0:
-        analysis_source = apply_fine_rotation(analysis_source, geometry.fine_rotation)
-    # The meters must read the frame the print stage gets. The CPU engine normalizes
-    # the keystoned buffer, so this replay has to carry it too or the two engines
-    # measure different bounds.
-    analysis_source = apply_keystone(analysis_source, geometry.converge_v, geometry.converge_h)
     return analysis_source, an_buffer
 
 
@@ -191,12 +194,8 @@ def _analysis_cache_key(settings: WorkspaceConfig, analysis_source_hash: str) ->
     White/black point offsets and trims apply downstream as uniforms and must
     not invalidate it.
 
-    Of geometry, only what selects the analyzed region: rotation and flips change
-    the buffer's own shape, crop_rect/autocrop_offset the ROI within it. Fine
-    rotation, keystone and distortion reshuffle pixels within that same region
-    (_build_analysis_source applies them to the meter's own buffer) without
-    changing what region it is, so dragging one of those sliders must not blow
-    this cache the way a creative slider does not.
+    Every geometry field that moves which pixels land in the metered region: the
+    orientation, the warps and the crop.
     """
     e = settings.exposure
     p = settings.process
@@ -224,6 +223,12 @@ def _analysis_cache_key(settings: WorkspaceConfig, analysis_source_hash: str) ->
         g.flip_vertical,
         g.crop_rect,
         g.autocrop_offset,
+        g.fine_rotation,
+        g.converge_v,
+        g.converge_h,
+        g.distortion_k1,
+        g.crop_to_valid,
+        g.crop_from_auto,
         e.cast_removal_strength > 0.0,
         e.auto_exposure,
         e.auto_normalize_contrast,
@@ -735,12 +740,14 @@ class GPUEngine:
             prefilter_key = (
                 (
                     analysis_source_hash,
-                    # roi already reflects rotation/crop_rect/autocrop_offset; flips are the
-                    # one region-selecting field it doesn't carry. Fine rotation, keystone and
-                    # distortion reshuffle pixels within the region without changing it, so
-                    # they must not blow this cache the way a creative slider does not.
+                    # roi already reflects rotation/crop_rect/autocrop_offset; flips and the
+                    # warps move pixels without changing it.
                     settings.geometry.flip_horizontal,
                     settings.geometry.flip_vertical,
+                    settings.geometry.fine_rotation,
+                    settings.geometry.converge_v,
+                    settings.geometry.converge_h,
+                    settings.geometry.distortion_k1,
                     roi,
                     p.analysis_buffer,
                     p.analysis_rect,
@@ -885,7 +892,15 @@ class GPUEngine:
                     mask_key = ("tiled",)
                     mask_rect = (frame[0] - global_offset[0], frame[1] - global_offset[1], frame[2], frame[3])
             else:
-                mask_key = (analysis_key, bounds, roi, (h_rot, w_rot), settings.exposure.mask_spacer)
+                geo = settings.geometry
+                mask_key = (
+                    analysis_key,
+                    bounds,
+                    roi,
+                    (h_rot, w_rot),
+                    settings.exposure.mask_spacer,
+                    (geo.rotation, geo.fine_rotation, geo.flip_horizontal, geo.flip_vertical, geo.converge_v, geo.converge_h, k1_eff),
+                )
                 if self._mask_plane is None or self._mask_plane[0] != mask_key:
                     self._mask_plane = (
                         mask_key,
