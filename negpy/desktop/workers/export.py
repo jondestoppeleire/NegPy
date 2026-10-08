@@ -298,7 +298,8 @@ class ExportWorker(QObject):
         """Processes an ordered list of export tasks, pipelined: the prefetcher
         prepares the next source and the finisher encodes+writes the previous
         render while the current one renders. One finish in flight, so at most
-        two full-res buffers are held."""
+        two full-res buffers are held. A failed file never stops the batch, and every
+        exit emits `finished` or `cancelled`: that releases the batch lane."""
         self._cancel.clear()
         total = len(tasks)
         finisher = ThreadPoolExecutor(max_workers=1)
@@ -306,7 +307,10 @@ class ExportWorker(QObject):
         pending: Optional[Future] = None
 
         def _drain(fut: Future) -> None:
-            err = fut.result()
+            try:
+                err = fut.result()
+            except Exception as e:
+                err = str(e)
             if err:
                 self.error.emit(err)
 
@@ -318,65 +322,68 @@ class ExportWorker(QObject):
                 full_name = task.file_info["name"]
                 name = os.path.splitext(full_name)[0]
                 self.progress.emit(i + 1, total, name)
-                # The session caches EXIF only for frames opened this session.
-                if task.source_exif is None and task.metadata_config is not None:
-                    task = replace(task, source_exif=read_exif_from_file(task.file_info["path"]))
+                try:
+                    # The session caches EXIF only for frames opened this session.
+                    if task.source_exif is None and task.metadata_config is not None:
+                        task = replace(task, source_exif=read_exif_from_file(task.file_info["path"]))
 
-                nxt = tasks[i + 1] if i + 1 < len(tasks) else None
-                prefetch_next = nxt is not None and nxt.diptych is None
-                # Not on the first task: its own prepare would queue behind this on the gate.
-                if prefetch_next and i > 0:
-                    self._submit_prefetch(prefetcher, nxt)
+                    nxt = tasks[i + 1] if i + 1 < len(tasks) else None
+                    prefetch_next = nxt is not None and nxt.diptych is None
+                    # Not on the first task: its own prepare would queue behind this on the gate.
+                    if prefetch_next and i > 0:
+                        self._submit_prefetch(prefetcher, nxt)
 
-                # TIFF/PNG take the metadata at the first encode; the post-hoc
-                # rewrite re-compresses the full-res file.
-                embed_plan = None
-                if task.metadata_config is not None and task.export_settings.export_fmt in (ExportFormat.TIFF, ExportFormat.PNG):
-                    embed_plan = export_embed_plan(
-                        task.metadata_config,
-                        task.source_exif,
-                        task.file_info["path"],
-                        resolution=_export_resolution(task),
-                    )
-
-                if task.export_settings.overwrite:
-                    out_dir0, filename0, ext0 = resolve_export_naming(task)
-                    if _export_target_is_a_source(os.path.join(out_dir0, f"{filename0}.{ext0}"), task):
-                        self.error.emit(
-                            f"Export skipped for {task.file_info['name']}: it would overwrite the source file. "
-                            "Change the filename pattern or destination."
+                    # TIFF/PNG take the metadata at the first encode; the post-hoc
+                    # rewrite re-compresses the full-res file.
+                    embed_plan = None
+                    if task.metadata_config is not None and task.export_settings.export_fmt in (ExportFormat.TIFF, ExportFormat.PNG):
+                        embed_plan = export_embed_plan(
+                            task.metadata_config,
+                            task.source_exif,
+                            task.file_info["path"],
+                            resolution=_export_resolution(task),
                         )
+
+                    if task.export_settings.overwrite:
+                        out_dir0, filename0, ext0 = resolve_export_naming(task)
+                        if _export_target_is_a_source(os.path.join(out_dir0, f"{filename0}.{ext0}"), task):
+                            self.error.emit(
+                                f"Export skipped for {task.file_info['name']}: it would overwrite the source file. "
+                                "Change the filename pattern or destination."
+                            )
+                            continue
+
+                    buffer, status = self._processor.render_export(
+                        task.file_info["path"],
+                        task.params,
+                        task.export_settings,
+                        task.file_info["hash"],
+                        prefer_gpu=task.gpu_enabled,
+                        bounds_override=task.bounds_override,
+                        half=int(task.file_info.get("half") or 0),
+                        split_x=float(task.file_info.get("split_x") or 0.5),
+                        crop_rect=tuple(task.file_info["crop_rect"]) if task.file_info.get("crop_rect") else None,
+                        gutter_thickness=float(task.file_info.get("gutter_thickness") or 0.0),
+                        split_axis=str(task.file_info.get("split_axis") or "x"),
+                        diptych=task.diptych,
+                    )
+                    if prefetch_next and i == 0:
+                        self._submit_prefetch(prefetcher, nxt)
+
+                    if buffer is not None and _looks_border_crushed(buffer, task):
+                        border_crushed += 1
+
+                    if buffer is None:
+                        # render_export returns (None, error) on failure. Surface it rather
+                        # than skipping the file silently.
+                        self.error.emit(status)
                         continue
 
-                buffer, status = self._processor.render_export(
-                    task.file_info["path"],
-                    task.params,
-                    task.export_settings,
-                    task.file_info["hash"],
-                    prefer_gpu=task.gpu_enabled,
-                    bounds_override=task.bounds_override,
-                    half=int(task.file_info.get("half") or 0),
-                    split_x=float(task.file_info.get("split_x") or 0.5),
-                    crop_rect=tuple(task.file_info["crop_rect"]) if task.file_info.get("crop_rect") else None,
-                    gutter_thickness=float(task.file_info.get("gutter_thickness") or 0.0),
-                    split_axis=str(task.file_info.get("split_axis") or "x"),
-                    diptych=task.diptych,
-                )
-                if prefetch_next and i == 0:
-                    self._submit_prefetch(prefetcher, nxt)
-
-                if buffer is not None and _looks_border_crushed(buffer, task):
-                    border_crushed += 1
-
-                if buffer is None:
-                    # render_export returns (None, error) on failure. Surface it rather
-                    # than skipping the file silently.
-                    self.error.emit(status)
-                    continue
-
-                if pending is not None:
-                    _drain(pending)
-                pending = finisher.submit(self._finish_task, task, buffer, status, embed_plan)
+                    if pending is not None:
+                        _drain(pending)
+                    pending = finisher.submit(self._finish_task, task, buffer, status, embed_plan)
+                except Exception as e:
+                    self.error.emit(f"Export failed for {full_name}: {e}")
 
             if pending is not None:
                 _drain(pending)
@@ -392,6 +399,7 @@ class ExportWorker(QObject):
                 self.finished.emit()
         except Exception as e:
             self.error.emit(str(e))
+            self.finished.emit()
         finally:
             prefetcher.shutdown(wait=True)
             finisher.shutdown(wait=True)
@@ -488,6 +496,7 @@ class ExportWorker(QObject):
             self.finished.emit()
         except Exception as e:
             self.error.emit(str(e))
+            self.finished.emit()
         finally:
             gc.collect()
 
