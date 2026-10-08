@@ -144,6 +144,15 @@ def identify_color_space_from_icc(icc_bytes: Optional[bytes]) -> Optional[str]:
         logger.warning(f"Could not parse embedded ICC profile: {e}")
         return None
 
+    # The bundled v4 profiles (icc/) carry only these short tags as their description.
+    short = {
+        "a98c": ColorSpace.ADOBE_RGB.value,
+        "romm": ColorSpace.PROPHOTO.value,
+        "2020": ColorSpace.REC2020.value,
+        "sp3": ColorSpace.P3_D65.value,
+    }
+    if desc.strip() in short:
+        return short[desc.strip()]
     # Order matters: more specific matches first.
     if "prophoto" in desc:
         return ColorSpace.PROPHOTO.value
