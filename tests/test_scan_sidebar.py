@@ -1346,3 +1346,14 @@ def test_an_active_exposure_lock_shows_above_scan() -> None:
 
     assert "Exposure locked" not in _summary(sidebar)
     assert sidebar.exposure_lock_status.property("hint") == "muted"
+
+
+def test_a_pattern_without_the_sequence_refuses_the_scan_before_it_starts() -> None:
+    sidebar, controller = _sidebar(SE_DEVICE, settings={"backend": "plustek"})
+    sidebar.output.folder_edit.setText("/tmp/negpy-scan-out")
+    sidebar.pattern_edit.setText("fixed_name")
+
+    sidebar._on_scan()
+
+    assert controller.started == []
+    assert sidebar._scanning is False

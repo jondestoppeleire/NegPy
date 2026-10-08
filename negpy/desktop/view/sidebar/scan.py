@@ -1302,6 +1302,14 @@ class ScanSidebar(QWidget):
         auto_exposure = self._caps_auto_exposure and self.ae_btn.isChecked()
         pattern = self.pattern_edit.text().strip() or '{{ date }}_{{ "%03d" % seq }}'
         fmt = str(self.fmt_btn.currentData())
+        # Before the scan, or a finished scan is discarded when its file cannot be named.
+        try:
+            from negpy.services.scanning.templating import require_sequence_varying_scan_filename
+
+            require_sequence_varying_scan_filename(pattern, "20000101")
+        except ValueError:
+            self.status_strip.set_message("Filename pattern must include the sequence number ({{ seq }}).")
+            return
 
         if self._frame_spec() is None:
             return
