@@ -32,13 +32,16 @@ def saved_composites(repo: Any) -> Dict[str, dict]:
     store = _read(repo)
     if store:
         return store
+    found = False
     for key in _LEGACY_KEYS:
         legacy = repo.get_global_setting(key, default=None)
         if isinstance(legacy, dict):
+            found = True
             kind = "stitch" if key == "session_stitches" else "hdr"
             store.update({path: {**entry, "kind": kind} for path, entry in legacy.items() if isinstance(entry, dict)})
-    if store:
-        repo.save_global_setting(COMPOSITES_KEY, store)
+    if found:
+        # Cleared with the promotion: an emptied store must not promote them again.
+        repo.save_global_settings({COMPOSITES_KEY: store, **{key: None for key in _LEGACY_KEYS}})
     return store
 
 
