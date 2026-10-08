@@ -1942,6 +1942,15 @@ class NormalizationWorker(QObject):
                         params,
                         task.workspace_color_space,
                     )
+                    # The flat field the render applies, behind the same gate run_pipeline uses.
+                    if not params.stitch.stitch_enabled and not metadata_lens_corrections(params):
+                        from negpy.features.flatfield.logic import apply_flatfield
+                        from negpy.services.assets.half_frame import slice_chain
+
+                        cuts = gain_slices_for_asset(f_info)
+                        raw = await asyncio.to_thread(
+                            apply_flatfield, raw, params.flatfield, (lambda g: slice_chain(g, cuts)) if cuts else None
+                        )
                     # Bounds must be measured on the same channel mix the preview normalizes.
                     sensor_matrix = effective_sensor_matrix(params.process)
                     if sensor_matrix is not None and preview_takes_unmix(params):
