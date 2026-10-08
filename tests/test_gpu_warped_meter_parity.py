@@ -86,3 +86,23 @@ def test_the_contrast_mask_follows_a_fine_rotation_drag():
         cached.destroy_all()
         fresh.destroy_all()
     np.testing.assert_allclose(after_drag, expected, atol=1e-4)
+
+
+def test_contrast_mask_with_point_trims_matches_the_cpu():
+    from negpy.services.rendering.image_processor import ImageProcessor
+
+    img = _scene()
+    cfg = WorkspaceConfig()
+    cfg = replace(
+        cfg,
+        geometry=replace(cfg.geometry, autocrop_offset=0),
+        exposure=replace(cfg.exposure, contrast_mask=0.8),
+        process=replace(cfg.process, white_point_offset=0.1, black_point_offset=-0.1),
+    )
+    processor = ImageProcessor()
+    out = []
+    for gpu in (False, True):
+        result, _ = processor.run_pipeline(img, cfg, f"cm-{gpu}", render_size_ref=256.0, prefer_gpu=gpu, readback_metrics=False)
+        arr = np.asarray(result.readback() if hasattr(result, "readback") else result)[:, :, :3]
+        out.append(arr.astype(np.float64))
+    assert float(np.mean(np.abs(out[0] - out[1]))) < 0.005
