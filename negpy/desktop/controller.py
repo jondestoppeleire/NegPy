@@ -2547,11 +2547,16 @@ class AppController(QObject):
         self._requested_file_path = file_path
         # A strip belongs to one frame, and the memo fast path below repaints without
         # going through request_render, so drop it here too. Zone pins froze their sample
-        # from this frame and go the same way. The compare split holds the frame the user
-        # is leaving, so it goes too.
+        # from this frame and go the same way. The compare split, the flat peek and marked
+        # Keystone Lines hold the frame the user is leaving, so they go too.
         self._clear_test_strip()
         self._drop_zone_pins()
         self.exit_compare()
+        self._keystone_lines = {}
+        self.keystone_lines_cleared.emit()
+        if self.state.flat_peek:
+            self.state.flat_peek = False
+            self.flat_peek_changed.emit(False)
         if not keep_preview:
             self.state.clone_source = None
             self.state.clone_offset = None
