@@ -140,7 +140,7 @@ Actions with no default key are not listed; every one of them can still be bound
 | `Alt + H` / `Alt + Shift + H` | Increase / decrease **Shadow hue** (default step 0.01) |
 | `Alt + G` / `Alt + Shift + G` | Increase / decrease **Shadow strength** (default step 0.01) |
 | `Alt + L` / `Alt + Shift + L` | Increase / decrease **Highlight hue** (default step 0.01) |
-| `Alt + Semicolon` / `Alt + Shift + Semicolon` | Increase / decrease **Highlight strength** (default step 0.01) |
+| `Alt + ;` / `Alt + Shift + ;` | Increase / decrease **Highlight strength** (default step 0.01) |
 
 ## Finishing
 | Key | Action |
