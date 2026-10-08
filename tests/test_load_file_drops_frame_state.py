@@ -1,6 +1,6 @@
 """State tied to the frame being left does not carry over to the next one."""
 
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 from negpy.desktop.controller import AppController
 from negpy.domain.models import WorkspaceConfig
@@ -100,3 +100,22 @@ def test_a_crop_offset_drag_drops_the_cached_bounds_on_release():
 
     assert ctrl.state.config.geometry.autocrop_offset == 12
     assert ctrl.state.config.process.local_floors == (0.0, 0.0, 0.0)
+
+
+def test_exit_cancels_long_batches_before_joining_their_threads():
+    """quit() takes effect between slots; a batch runs inside one, so it must be told to stop."""
+    ctrl = MagicMock()
+    ctrl._cleaned_up = False
+    order: list[str] = []
+    for name in ("export_worker", "stitch_worker", "hdr_worker", "frame_merge_worker", "embedding_worker", "norm_worker"):
+        getattr(ctrl, name).cancel.side_effect = lambda n=name: order.append(f"cancel {n}")
+    for name in ("export_thread", "thumb_thread", "norm_thread"):
+        getattr(ctrl, name).wait.side_effect = lambda *a, n=name: order.append(f"join {n}")
+
+    with patch("negpy.desktop.controller.GPUDevice"):
+        AppController.cleanup(ctrl)
+
+    assert order.index("cancel export_worker") < order.index("join export_thread")
+    assert order.index("cancel frame_merge_worker") < order.index("join export_thread")
+    assert order.index("cancel embedding_worker") < order.index("join thumb_thread")
+    assert order.index("cancel norm_worker") < order.index("join norm_thread")

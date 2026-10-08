@@ -8033,11 +8033,15 @@ class AppController(QObject):
         if self.render_thread.isRunning():
             self.render_thread.quit()
             self.render_thread.wait()
+        # A long batch runs inside its slot, so quit() alone would wait for all of it.
         if self.export_thread.isRunning():
+            for worker in (self.export_worker, self.stitch_worker, self.hdr_worker, self.frame_merge_worker):
+                worker.cancel()
             self.export_thread.quit()
             self.export_thread.wait()
         if self.thumb_thread.isRunning():
             self.thumb_worker.cancel_pending()
+            self.embedding_worker.cancel()
             self.thumb_thread.quit()
             self.thumb_thread.wait()
         # Save the active frame's thumbnail as a switch would; its thread is stopped, so it runs here.
@@ -8050,6 +8054,7 @@ class AppController(QObject):
         self.batch_autocrop_worker.cancel(self._autocrop_batch_token)
         self.thumbnail_render_worker.cancel(self._thumbnail_render_generation)
         if self.norm_thread.isRunning():
+            self.norm_worker.cancel()
             self.norm_thread.quit()
             self.norm_thread.wait()
         if self.discovery_thread.isRunning():
