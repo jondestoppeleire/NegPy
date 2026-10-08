@@ -20,3 +20,21 @@ def test_load_file_drops_marked_keystone_lines_and_the_flat_peek():
     ctrl.keystone_lines_cleared.emit.assert_called_once()
     assert ctrl.state.flat_peek is False
     ctrl.flat_peek_changed.emit.assert_called_once_with(False)
+
+
+def test_the_diptych_view_refuses_canvas_tools_and_edits():
+    """Both halves are on screen, each with its own edit, so a canvas point names neither."""
+    from negpy.desktop.session import AppState, ToolMode
+
+    ctrl = MagicMock()
+    ctrl.state = AppState()
+    ctrl.active_diptych.return_value = ({"hash": "h"}, (WorkspaceConfig(), WorkspaceConfig()))
+    ctrl._diptych_blocks_canvas = lambda: AppController._diptych_blocks_canvas(ctrl)
+
+    AppController.set_active_tool(ctrl, ToolMode.CLONE)
+    AppController.handle_canvas_clicked(ctrl, 0.5, 0.5)
+    AppController.handle_local_mask_created(ctrl, "polygon", [(0.1, 0.1), (0.9, 0.1), (0.5, 0.9)])
+
+    assert ctrl.state.active_tool == ToolMode.NONE
+    ctrl.session.update_config.assert_not_called()
+    ctrl._handle_wb_pick.assert_not_called()

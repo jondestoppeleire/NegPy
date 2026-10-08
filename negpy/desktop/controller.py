@@ -2564,6 +2564,8 @@ class AppController(QObject):
         if self.state.flat_peek:
             self.state.flat_peek = False
             self.flat_peek_changed.emit(False)
+        if self.state.active_tool != ToolMode.NONE and self.active_diptych() is not None:
+            self.set_active_tool(ToolMode.NONE)
         if not keep_preview:
             self.state.clone_source = None
             self.state.clone_offset = None
@@ -2930,7 +2932,17 @@ class AppController(QObject):
         if self.state.current_file_path:
             self.load_file(self.state.current_file_path, preserve_zoom=True)
 
+    def _diptych_blocks_canvas(self) -> bool:
+        """The diptych view shows both halves of a whole-frame scan, each with its own edit,
+        so a canvas point names neither. Edits there are refused."""
+        if self.active_diptych() is None:
+            return False
+        self.set_status("Canvas tools edit one half: turn on Half Frame Mode to edit it", 4000, "warning")
+        return True
+
     def handle_canvas_clicked(self, nx: float, ny: float) -> None:
+        if self._diptych_blocks_canvas():
+            return
         if self.state.active_tool == ToolMode.WB_PICK:
             self._handle_wb_pick(nx, ny)
         elif self.state.active_tool == ToolMode.DUST_PICK:
@@ -2945,6 +2957,9 @@ class AppController(QObject):
             self._handle_zone_pin(nx, ny)
 
     def set_active_tool(self, mode: ToolMode) -> None:
+        if mode != ToolMode.NONE and self._diptych_blocks_canvas():
+            self.tool_sync_requested.emit()
+            return
         # UNCROPPED_PREVIEW_TOOLS show the full uncropped frame, so
         # entering or leaving that set must re-render to swap the preview.
         preview_mode_changed = (self.state.active_tool in UNCROPPED_PREVIEW_TOOLS) != (mode in UNCROPPED_PREVIEW_TOOLS)
@@ -4373,6 +4388,8 @@ class AppController(QObject):
         self.request_render()
 
     def handle_local_mask_created(self, shape: str, viewport_vertices: list) -> None:
+        if self._diptych_blocks_canvas():
+            return
         from negpy.features.local.logic import min_points
         from negpy.features.local.models import LocalMask, MaskShape
 
@@ -4396,6 +4413,8 @@ class AppController(QObject):
 
     def handle_local_mask_edited(self, index: int, viewport_vertices: list) -> None:
         """Replace a mask's vertices after an on-canvas drag/add edit (persist on release)."""
+        if self._diptych_blocks_canvas():
+            return
         from negpy.features.local.logic import min_points
 
         with self.state.metrics_lock:
