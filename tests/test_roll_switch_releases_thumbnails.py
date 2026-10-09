@@ -14,9 +14,11 @@ def test_opening_another_roll_releases_the_previous_rolls_frame_caches() -> None
         controller.state.thumbnails[asset_thumbnail_key(f)] = object()
         controller.state.stale_thumbnails.add(asset_thumbnail_key(f))
         controller.state.embeddings[f["hash"]] = object()
+        controller.state.source_exif[f["hash"]] = {}
 
     AppController._forget_unloaded_frames(controller)
 
     assert set(controller.state.thumbnails) == {asset_thumbnail_key(kept)}
     assert controller.state.stale_thumbnails == {asset_thumbnail_key(kept)}
     assert set(controller.state.embeddings) == {"a"}
+    assert set(controller.state.source_exif) == {"a"}

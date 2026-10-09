@@ -2288,7 +2288,7 @@ class AppController(QObject):
         _ = keep
 
     def _forget_unloaded_frames(self) -> None:
-        """Drops the in-memory thumbnails, stale flags and embeddings of frames no longer loaded."""
+        """Drops the in-memory thumbnails, stale flags, embeddings and EXIF of frames no longer loaded."""
         loaded = self.state.uploaded_files
         keys = {asset_thumbnail_key(f) for f in loaded}
         hashes = {f["hash"] for f in loaded}
@@ -2297,6 +2297,8 @@ class AppController(QObject):
         self.state.stale_thumbnails &= keys
         for h in set(self.state.embeddings) - hashes:
             del self.state.embeddings[h]
+        for h in set(self.state.source_exif) - hashes:
+            del self.state.source_exif[h]
 
     def _on_discovery_finished(self, valid_assets: List[Dict]) -> None:
         """

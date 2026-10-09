@@ -41,11 +41,15 @@ def read_exif_from_file(file_path: str) -> Optional[dict]:
 
 
 def _read_exif_uncached(file_path: str) -> Optional[dict]:
+    import mmap
+
     import piexif
 
-    # Try piexif first (works for JPEG, TIFF)
+    # Try piexif first (works for JPEG, TIFF). Given a path it reads a whole TIFF into
+    # memory; a map pages in only the IFDs it walks.
     try:
-        return piexif.load(file_path)
+        with open(file_path, "rb") as fh, mmap.mmap(fh.fileno(), 0, access=mmap.ACCESS_READ) as mapped:
+            return piexif.load(mapped)
     except Exception:
         pass
 
