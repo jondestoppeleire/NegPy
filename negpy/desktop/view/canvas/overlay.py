@@ -705,6 +705,8 @@ class CanvasOverlay(QWidget):
         """Repaint the split after the stashed baseline frame changed (or went away)."""
         self._compare_qimage_cache = None
         self._split_dragging = False
+        if not self._compare_split_active() and self.cursor().shape() == Qt.CursorShape.SplitHCursor:
+            self.unsetCursor()
         self.update()
 
     def drop_gpu_texture(self) -> None:
