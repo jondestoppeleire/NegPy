@@ -38,8 +38,17 @@ _FORK_SEP = "#roll:"
 
 
 def _read(repo: Any) -> Dict[str, dict]:
+    """A private copy of the store, for a writer to change."""
     saved = repo.get_global_setting(ROLLS_KEY, default=None)
     return dict(saved) if isinstance(saved, dict) else {}
+
+
+def _view(repo: Any) -> Dict[str, dict]:
+    """The store shared between readers, parsed once per write: never mutate it."""
+    saved = repo.read_global_setting(ROLLS_KEY, default=None)
+    if not isinstance(saved, dict):
+        saved = repo.get_global_setting(ROLLS_KEY, default=None)  # a repository stand-in
+    return saved if isinstance(saved, dict) else {}
 
 
 def _write(repo: Any, store: Dict[str, dict]) -> None:
@@ -48,11 +57,11 @@ def _write(repo: Any, store: Dict[str, dict]) -> None:
 
 def saved_rolls(repo: Any) -> Dict[str, dict]:
     """Every remembered roll, keyed by id."""
-    return _read(repo)
+    return dict(_view(repo))
 
 
 def roll_for_id(repo: Any, roll_id: str) -> Optional[dict]:
-    return _read(repo).get(roll_id)
+    return _view(repo).get(roll_id)
 
 
 def _folder_key(path: str) -> str:
@@ -63,7 +72,7 @@ def _folder_key(path: str) -> str:
 def folder_roll_id_for_path(repo: Any, path: str) -> Optional[str]:
     """The id of the roll recognizing *path*, or None if not yet recognized."""
     key = _folder_key(path)
-    for roll_id, entry in _read(repo).items():
+    for roll_id, entry in _view(repo).items():
         if entry.get("kind") == "folder" and _folder_key(entry.get("folder_path") or "") == key:
             return roll_id
     return None
@@ -234,7 +243,7 @@ def delete_folder_rolls(repo: Any, folder: str) -> None:
     key = _folder_key(folder)
     ids = [
         roll_id
-        for roll_id, entry in _read(repo).items()
+        for roll_id, entry in _view(repo).items()
         if entry.get("kind") == "folder" and _under(_folder_key(entry.get("folder_path") or ""), key)
     ]
     for roll_id in ids:
@@ -298,7 +307,7 @@ def unforked_hash(file_hash: str) -> str:
 
 def forked_edit_hashes(repo: Any, from_hash: str) -> List[str]:
     """Every roll's own edit hash for *from_hash*, where a roll forked it."""
-    return [roll_edit_hash(from_hash, rid) for rid, entry in _read(repo).items() if from_hash in entry.get("forked_hashes", [])]
+    return [roll_edit_hash(from_hash, rid) for rid, entry in _view(repo).items() if from_hash in entry.get("forked_hashes", [])]
 
 
 def is_forked(repo: Any, roll_id: str, from_hash: str) -> bool:
@@ -307,7 +316,7 @@ def is_forked(repo: Any, roll_id: str, from_hash: str) -> bool:
     Keyed on the asset's exact pre-fork hash, not its path: a half-frame scan's two
     halves have different hashes, so forking one never silently drags the other along.
     """
-    entry = _read(repo).get(roll_id)
+    entry = _view(repo).get(roll_id)
     return bool(entry) and from_hash in entry.get("forked_hashes", [])
 
 
@@ -347,7 +356,7 @@ def rolls_containing_path(repo: Any, path: str) -> List[str]:
     forking a path is meaningful (it is shared with at least one other roll)."""
     norm = os.path.normcase(os.path.abspath(path))
     out = []
-    for roll_id, entry in _read(repo).items():
+    for roll_id, entry in _view(repo).items():
         if entry.get("kind") == "folder":
             folder = entry.get("folder_path", "")
             folder_norm = os.path.normcase(os.path.abspath(folder)) if folder else ""
@@ -462,7 +471,7 @@ def delete_roll(repo: Any, roll_id: str) -> None:
 
 def all_rolls_sorted(repo: Any) -> List[tuple]:
     """(roll_id, entry) pairs for every roll, folder and virtual alike, name-sorted."""
-    return sorted(_read(repo).items(), key=lambda pair: pair[1].get("name", "").casefold())
+    return sorted(_view(repo).items(), key=lambda pair: pair[1].get("name", "").casefold())
 
 
 def virtual_rolls(repo: Any) -> List[tuple]:
@@ -869,7 +878,7 @@ def baseline_label(repo: Any, process: Any) -> str:
         entry = roll_for_id(repo, ref)
         return f"Roll “{entry['name']}”" if entry else "a deleted roll"
     if kind == "scene":
-        for entry in _read(repo).values():
+        for entry in _view(repo).values():
             scene = entry.get("scenes", {}).get(ref)
             if scene:
                 return f"Scene “{scene['name']}”"

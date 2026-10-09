@@ -21,6 +21,7 @@ class StorageRepository(IRepository):
         # global_settings, so write-through keeps it exact; values parse per read, so a
         # caller that mutates its result cannot reach the cache.
         self._global_json: Optional[dict[str, str]] = None
+        self._global_parsed: dict[str, tuple[str, Any]] = {}
         # History panel refreshes re-read every step; WorkspaceConfig is frozen, so a parse keyed
         # by its JSON text is safe to share and needs no invalidation.
         self._history_parse: dict[str, WorkspaceConfig] = {}
@@ -491,12 +492,26 @@ class StorageRepository(IRepository):
         if self._global_json is not None:
             self._global_json.update(rows)
 
-    def get_global_setting(self, key: str, default: Any = None) -> Any:
+    def _global_raw(self, key: str) -> Optional[str]:
         if self._global_json is None:
             with self._connect(self.settings_db_path) as conn:
                 self._global_json = dict(conn.execute("SELECT key, value_json FROM global_settings").fetchall())
-        raw = self._global_json.get(key)
+        return self._global_json.get(key)
+
+    def get_global_setting(self, key: str, default: Any = None) -> Any:
+        raw = self._global_raw(key)
         return default if raw is None else json.loads(raw)
+
+    def read_global_setting(self, key: str, default: Any = None) -> Any:
+        """get_global_setting parsed once per stored value and shared between calls: never mutate it."""
+        raw = self._global_raw(key)
+        if raw is None:
+            return default
+        hit = self._global_parsed.get(key)
+        if hit is None or hit[0] is not raw:
+            hit = (raw, json.loads(raw))
+            self._global_parsed[key] = hit
+        return hit[1]
 
     def save_export_presets(self, presets: List[ExportPreset]) -> None:
         self.save_global_setting("export_presets", [p.to_dict() for p in presets])
