@@ -43,6 +43,17 @@ def test_paper_prints_the_no_film_tone(palette):
     assert tuple(sheet[3, 3]) == palette_for(look).no_film
 
 
+@pytest.mark.parametrize("palette", ["bw", "color", "slide"])
+def test_white_paper_prints_white_with_a_dark_label(palette):
+    look = SheetLook(palette, 0, EdgeStyle(), white_paper=True)
+    pal = palette_for(look)
+    assert pal.no_film == (255, 255, 255)
+    assert pal.label == (0, 0, 0)
+    assert pal.rebate == palette_for(SheetLook(palette, 0, EdgeStyle())).rebate
+    _plan, sheet = _render(look=look)
+    assert tuple(sheet[3, 3]) == (255, 255, 255)
+
+
 def test_rebate_prints_just_above_the_paper_black():
     plan, sheet = _render()
     strip = plan.pages[0].strips[0]

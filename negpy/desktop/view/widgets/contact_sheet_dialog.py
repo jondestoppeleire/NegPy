@@ -446,6 +446,11 @@ class ContactSheetDialog(QDialog):
         self.label_btn.toggled.connect(self._on_label_toggled)
         toggles.addWidget(self.label_btn, 1)
         col.addLayout(toggles)
+        self.white_btn = labeled_toggle(
+            "fa5s.print", " White Paper", settings.white_paper, "Print on white paper with dark labels, to save ink on a home printer"
+        )
+        self.white_btn.toggled.connect(lambda _checked: self._schedule_render())
+        col.addWidget(self.white_btn)
 
         self.pick_btn = tool_toggle(
             "fa5s.times-circle",
@@ -753,6 +758,7 @@ class ContactSheetDialog(QDialog):
             self._label_on(),
             self.edge_btn.isChecked(),
             self.order_btn.currentIndex() == _BY_SCENE,
+            self.white_btn.isChecked(),
         )
 
     def kept_frames(self) -> tuple[SheetFrame, ...]:
@@ -775,4 +781,4 @@ class ContactSheetDialog(QDialog):
 
     def look(self) -> SheetLook:
         edge = replace(self._look.edge, printed=self.edge_btn.isChecked())
-        return replace(self._look, edge=edge, label=self._label_text if self._label_on() else "")
+        return replace(self._look, edge=edge, label=self._label_text if self._label_on() else "", white_paper=self.white_btn.isChecked())
