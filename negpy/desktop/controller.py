@@ -5752,6 +5752,18 @@ class AppController(QObject):
             parts_msg.append(f"{count_of(kept, 'file')} could not go to the Trash")
         self.set_status(", ".join(parts_msg), 8000, kind="warning" if failed or kept or already else "info")
 
+    def _drop_dissolved_composite(self, idx: int) -> None:
+        """Takes the active composite off the Film Strip. Its parts are rediscovered and the
+        first one selected, so until then no frame is active."""
+        asset = self.state.uploaded_files.pop(idx)
+        key = asset_thumbnail_key(asset)
+        self.session.state.thumbnails.pop(key, None)
+        self.session.state.rendered_thumbnails.discard(key)
+        self.state.selected_file_idx = -1
+        self.state.selected_indices = [i - (i > idx) for i in self.state.selected_indices if i != idx]
+        self.session.asset_model.refresh()
+        forget_composite(self.session.repo, asset["path"])
+
     def request_unstitch(self) -> None:
         """Dissolve the active stitched composite back into its part frames.
 
@@ -5770,12 +5782,7 @@ class AppController(QObject):
         triplets = {path: [green, blue, align] for path, (green, blue) in zip(paths, asset.get("stitch_triplets") or ()) if green and blue}
         for green, blue, _ in triplets.values():
             paths.extend((green, blue))
-        self.state.uploaded_files.pop(idx)
-        key = asset_thumbnail_key(asset)
-        self.session.state.thumbnails.pop(key, None)
-        self.session.state.rendered_thumbnails.discard(key)
-        self.session.asset_model.refresh()
-        forget_composite(self.session.repo, asset["path"])
+        self._drop_dissolved_composite(idx)
         self._pending_scanned_file = paths[0]
         self.request_asset_discovery(paths, restore_triplets=triplets or None)
 
@@ -5953,12 +5960,7 @@ class AppController(QObject):
         if not frames:
             return
         paths = [asset["path"], *frames]
-        self.state.uploaded_files.pop(idx)
-        key = asset_thumbnail_key(asset)
-        self.session.state.thumbnails.pop(key, None)
-        self.session.state.rendered_thumbnails.discard(key)
-        self.session.asset_model.refresh()
-        forget_composite(self.session.repo, asset["path"])
+        self._drop_dissolved_composite(idx)
         self._pending_scanned_file = paths[0]
         self.request_asset_discovery(paths)
 
