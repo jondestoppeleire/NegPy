@@ -13,7 +13,6 @@ from negpy.desktop.view.confirm import confirm_delete_named
 from negpy.desktop.view.sidebar.base import BaseSidebar
 from negpy.desktop.view.styles.templates import ICON_BUTTON_WIDTH, field_label, hint_label
 from negpy.desktop.view.widgets.file_dialogs import last_open_folder, pick_start_dir
-from negpy.features.flatfield.logic import EVENNESS_RANGE
 
 _NONE_LABEL = "— None —"
 _FILE_FILTER = "Reference images (*.dng *.tif *.tiff *.cr2 *.cr3 *.nef *.arw *.raf *.rw2 *.jpg *.jpeg *.png);;All files (*)"
@@ -47,7 +46,7 @@ class FlatFieldSidebar(BaseSidebar):
             "",
             False,
             "Check Flat Field: show how well the selected profile corrects its own reference, "
-            f"from any frame. Gray is even, black to white is ±{EVENNESS_RANGE:.0%}",
+            "from any frame. A good profile shows an even gray; a band or patch shows where it is off.",
         )
         self.check_btn.setFixedWidth(ICON_BUTTON_WIDTH)
         row.addWidget(self.check_btn)

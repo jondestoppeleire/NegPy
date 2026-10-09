@@ -6917,13 +6917,13 @@ class AppController(QObject):
             clipped = ", reference clipped" if check.clipped else ""
             message = (
                 f"Check Flat Field '{name}': {check.low:+.1%} to {check.high:+.1%}, color ±{check.color:.1%}{clipped}. "
-                f"Gray is even; black to white is ±{EVENNESS_RANGE:.0%}"
+                f"Gray is even; full white or black is {EVENNESS_RANGE:.0%} off"
             )
         else:
             view, _ = evenness_view(1.0 / stored.gain, span=GAIN_VIEW_RANGE)
             message = (
                 f"Flat Field '{name}' was saved before the check: showing the light it corrects, "
-                f"black to white ±{GAIN_VIEW_RANGE:.0%}. Save the profile again to check it"
+                "darker where there is less light. Save the profile again to check it"
             )
         h, w = view.shape[:2]
         scale = APP_CONFIG.preview_render_size / max(h, w)
