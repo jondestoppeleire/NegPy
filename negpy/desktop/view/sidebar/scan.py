@@ -1212,13 +1212,13 @@ class ScanSidebar(QWidget):
         self.cards_changed.emit()
 
     def _dpi(self) -> int:
-        """The resolution the next scan runs at: the picked stop, else the typed value,
+        """The resolution the next scan runs at: the value in the box, typed or picked,
         else the finest the device offers."""
         device = self._current_device()
         supported = device.capabilities.supported_dpi if device else ()
         fallback = max(supported) if supported else 3600
         try:
-            return int(self.dpi_combo.currentData() or self.dpi_combo.currentText())
+            return int(self.dpi_combo.currentText() or self.dpi_combo.currentData())
         except (ValueError, TypeError):
             return fallback
 

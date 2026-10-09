@@ -1106,6 +1106,13 @@ def test_an_empty_dpi_box_falls_back_to_the_finest_the_device_offers() -> None:
     assert sidebar._dpi() == 2400
 
 
+def test_a_typed_dpi_counts_without_enter() -> None:
+    sidebar, _ = _sidebar(MINIMAL_DEVICE)  # supported_dpi=(1200, 2400)
+    sidebar.dpi_combo.setCurrentIndex(sidebar.dpi_combo.findData(2400))
+    sidebar.dpi_combo.lineEdit().setText("1800")
+    assert sidebar._dpi() == 1800
+
+
 def test_a_pass_the_device_cannot_run_is_not_shown_at_all() -> None:
     # Disabled-with-a-reason is for a pass the film blocks; one the transport lacks goes away.
     sidebar, _ = _sidebar(MINIMAL_DEVICE)
