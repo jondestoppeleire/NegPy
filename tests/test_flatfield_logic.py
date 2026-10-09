@@ -269,3 +269,10 @@ def test_a_gain_view_shows_the_light_it_corrects():
     gain = ff.compute_gain(_smooth_falloff())
     view, _ = ff.evenness_view(1.0 / gain, span=ff.GAIN_VIEW_RANGE)
     assert view[64, 96].mean() > view[2, 2].mean()  # brighter center, darker corner
+
+
+def test_a_profile_check_copy_is_finer_than_the_gain():
+    reference = _smooth_falloff(683, 1024)
+    assert max(ff.check_copy(reference).shape[:2]) == 512
+    assert max(ff.compute_gain(reference).shape[:2]) == 256
+    assert ff.check_reference(reference, ff.compute_gain(reference)).spread < ff.UNEVEN_LIMIT

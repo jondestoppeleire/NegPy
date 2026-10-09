@@ -20,6 +20,9 @@ _GAIN_WORK_SIZE = 256
 # Blur sigma as a fraction of the long side: small enough to follow the light source's own
 # pattern, which repeats from shot to shot. A wider blur leaves it in the corrected frame.
 _BLUR_DIVISOR = 64.0
+# A profile stores the reference at this size for Check Flat Field: twice the gain's, so dust
+# and the carrier edge stay sharp on the canvas.
+_CHECK_COPY_SIZE = 512
 
 # A reference pixel below _LIT_FRACTION of the bright level (_LIT_PERCENTILE of luminance)
 # is carrier, not falloff. A percentile, not the median, so a carrier that fills most of the
@@ -96,14 +99,19 @@ def compute_gain(reference: ImageBuffer) -> np.ndarray:
     return np.clip(gain, _GAIN_MIN, _GAIN_MAX).astype(np.float32)
 
 
-def work_copy(reference: ImageBuffer) -> np.ndarray:
-    """The reference at the gain's working size, float32; a profile stores this copy for its check."""
+def work_copy(reference: ImageBuffer, long_edge: int = _GAIN_WORK_SIZE) -> np.ndarray:
+    """The reference at the gain's working size (or ``long_edge``), float32."""
     ref = reference.astype(np.float32)
     h, w = ref.shape[:2]
-    scale = min(1.0, _GAIN_WORK_SIZE / max(h, w))
+    scale = min(1.0, long_edge / max(h, w))
     if scale < 1.0:
         ref = cv2.resize(ref, (max(1, round(w * scale)), max(1, round(h * scale))), interpolation=cv2.INTER_AREA)
     return ref
+
+
+def check_copy(reference: ImageBuffer) -> np.ndarray:
+    """The reference copy a profile stores for Check Flat Field."""
+    return work_copy(reference, _CHECK_COPY_SIZE)
 
 
 def _lit_mask(ref: np.ndarray) -> np.ndarray:
@@ -156,11 +164,11 @@ def evenness_view(image: ImageBuffer, span: float = EVENNESS_RANGE) -> Tuple[np.
 
 
 def check_reference(reference: ImageBuffer, gain: np.ndarray) -> Evenness:
-    """Self-correct a reference's work copy with its gain and measure what is left.
+    """Self-correct a reference's check copy with its gain and measure what is left.
 
     Clipping reads the full reference: the downsample averages isolated clipped pixels away.
     """
-    small = work_copy(reference)
+    small = check_copy(reference)
     result = evenness(self_corrected(small, gain))
     return result._replace(clipped=_is_clipped(reference.astype(np.float32)))
 

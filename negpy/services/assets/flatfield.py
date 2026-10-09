@@ -4,7 +4,7 @@ from typing import Dict, List, NamedTuple, Optional, Tuple
 
 import numpy as np
 
-from negpy.features.flatfield.logic import Evenness, check_reference, compute_gain, gain_token, work_copy
+from negpy.features.flatfield.logic import Evenness, check_copy, check_reference, compute_gain, gain_token
 from negpy.kernel.system.config import APP_CONFIG
 from negpy.kernel.system.logging import get_logger
 
@@ -22,14 +22,14 @@ class FlatFieldProfile(NamedTuple):
 
 class StoredCheck(NamedTuple):
     gain: np.ndarray
-    reference: Optional[np.ndarray]  # the reference's work copy; None on a profile baked before checks
+    reference: Optional[np.ndarray]  # the reference's check copy; None on a profile baked before checks
     check: Optional[Evenness]
 
 
 class Baked(NamedTuple):
     gain: np.ndarray
     check: Evenness
-    reference: np.ndarray  # work copy, stored so the profile can be checked without its source
+    reference: np.ndarray  # check copy, stored so the profile can be checked without its source
 
 
 class FlatFieldProfiles:
@@ -38,7 +38,7 @@ class FlatFieldProfiles:
 
     One file per profile in ``APP_CONFIG.flatfield_dir``, named ``<uuid>.npz`` and
     holding the baked per-channel gain map plus rig metadata: the distortion ``k1``,
-    a display name and the provenance path, and the reference's small work copy with
+    a display name and the provenance path, and a small copy of the reference with
     its self-check, so Check Flat Field needs no source. The reference image is decoded
     once, at save time; nothing outside this directory is needed to apply or check the
     correction afterward, so moving or deleting the original reference is harmless.
@@ -55,7 +55,7 @@ class FlatFieldProfiles:
 
     @staticmethod
     def _bake_gain(reference_path: str) -> Optional[Baked]:
-        """Decode a reference like a negative (no WB, linear); its gain map, self-check and work copy."""
+        """Decode a reference like a negative (no WB, linear); its gain map, self-check and check copy."""
         if not reference_path or not os.path.exists(reference_path):
             return None
         try:
@@ -63,7 +63,7 @@ class FlatFieldProfiles:
 
             reference, _, _ = PreviewManager().load_linear_preview(reference_path, use_camera_wb=False, full_resolution=False)
             gain = compute_gain(reference)
-            return Baked(gain, check_reference(reference, gain), work_copy(reference))
+            return Baked(gain, check_reference(reference, gain), check_copy(reference))
         except Exception:
             logger.exception("Flat-field: failed to decode reference %s", reference_path)
             return None
