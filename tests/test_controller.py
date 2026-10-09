@@ -5500,7 +5500,7 @@ class TestCompareFlatPeekInteraction(unittest.TestCase):
             self.controller.set_active_tool(ToolMode.NONE)
         self.assertTrue(self.controller.state.negative_peek)
 
-    def test_a_rotation_drag_and_release_keep_the_negative_peek(self):
+    def test_a_rotation_drag_keeps_the_negative_peek_until_release(self):
         from negpy.desktop.session import ToolMode
 
         self._track_config()
@@ -5511,7 +5511,7 @@ class TestCompareFlatPeekInteraction(unittest.TestCase):
             self.controller.request_render()
             self.assertTrue(self.controller.state.negative_peek)
             self.controller.handle_crop_rotation_changed(1.5, True)
-        self.assertTrue(self.controller.state.negative_peek)
+        self.assertFalse(self.controller.state.negative_peek)
 
     def test_a_geometry_edit_keeps_the_negative_peek(self):
         from dataclasses import replace
@@ -5550,31 +5550,6 @@ class TestCompareFlatPeekInteraction(unittest.TestCase):
             self.controller.request_render()
         self.assertTrue(self.controller.state.negative_peek)
 
-    def test_a_rotation_under_the_peek_is_not_ended_by_the_next_view_render(self):
-        from dataclasses import replace
-
-        self.controller.toggle_negative_peek(force=True)
-        before = self.controller.state.config
-        geometry = replace(before.geometry, rotation=1)
-        self.controller.state.config = replace(before, geometry=geometry)
-        self.controller.rerender_active_view(before)
-        with patch.object(self.controller, "_dispatch_pending_render"):
-            self.controller.request_render()
-        self.assertTrue(self.controller.state.negative_peek)
-
-    def test_a_rotation_does_not_swallow_an_edit_still_pending(self):
-        from dataclasses import replace
-
-        self.controller.toggle_negative_peek(force=True)
-        exposure = replace(self.controller.state.config.exposure, density=self.controller.state.config.exposure.density + 0.1)
-        self.controller.state.config = replace(self.controller.state.config, exposure=exposure)
-        before = self.controller.state.config
-        self.controller.state.config = replace(before, geometry=replace(before.geometry, rotation=1))
-        self.controller.rerender_active_view(before)
-        with patch.object(self.controller, "_dispatch_pending_render"):
-            self.controller.request_render()
-        self.assertFalse(self.controller.state.negative_peek)
-
     def test_an_export_or_metadata_edit_keeps_the_negative_peek(self):
         from dataclasses import replace
 
@@ -5605,17 +5580,15 @@ class TestCompareFlatPeekInteraction(unittest.TestCase):
             self.controller.request_render()
         self.assertTrue(self.controller.state.negative_peek)
 
-    def test_rerender_active_view_keeps_the_negative_peek(self):
+    def test_rerender_active_view_ends_the_negative_peek(self):
         import numpy as np
 
         self.controller.state.preview_raw = np.zeros((8, 8, 3), dtype=np.float32)
-        self.controller.state.negative_peek = True
+        self.controller.toggle_negative_peek(force=True)
         with patch.object(self.controller, "request_render") as rr:
             self.controller.rerender_active_view()
-        # A geometry op must not drop the peek, and the peek is not a render.
-        rr.assert_not_called()
-        self.assertTrue(self.controller.state.negative_peek)
-        self.assertIn("base_positive", self.controller.state.peek_frame)
+        rr.assert_called_once_with()
+        self.assertFalse(self.controller.state.negative_peek)
 
 
 class TestClearThumbnailCache(unittest.TestCase):

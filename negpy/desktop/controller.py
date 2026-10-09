@@ -3558,7 +3558,7 @@ class AppController(QObject):
         self._render_debounce.stop()
         self.session.update_config(replace(self.state.config, geometry=new_geo), persist=persist, render=persist)
         if persist:
-            self._reset_all_peeks()
+            self.reset_all_peeks()
             self.request_render()
 
     def handle_crop_rotation_changed(self, angle: float, persist: bool) -> None:
@@ -3574,6 +3574,7 @@ class AppController(QObject):
         self.session.update_config(replace(self.state.config, geometry=new_geo), persist=persist)
         self.rotation_guide_requested.emit()
         if persist:
+            self.reset_all_peeks()
             self.request_render()
         else:
             self._render_debounce.start()
@@ -3591,7 +3592,7 @@ class AppController(QObject):
         self.session.update_config(replace(self.state.config, geometry=new_geo), persist=True)
         self.rotation_guide_requested.emit()
         self.set_active_tool(ToolMode.NONE)
-        self._reset_all_peeks()
+        self.reset_all_peeks()
         self.request_render()
 
     def auto_skew_frame(self) -> None:
@@ -3684,10 +3685,10 @@ class AppController(QObject):
         self._keystone_lines = {}
         self.keystone_lines_cleared.emit()
         self.rotation_guide_requested.emit()
-        self._reset_all_peeks()
+        self.reset_all_peeks()
         self.request_render()
 
-    def _reset_all_peeks(self) -> None:
+    def reset_all_peeks(self) -> None:
         if self.state.flat_peek:
             self.state.flat_peek = False
             self.flat_peek_changed.emit(False)
@@ -6489,7 +6490,7 @@ class AppController(QObject):
             self.state.flat_peek = False
             self.flat_peek_changed.emit(False)
         if config_override is None and (self.state.negative_peek or self.state.embedded_peek) and not self._peek_shows(self.state.config):
-            self._reset_all_peeks()
+            self.reset_all_peeks()
 
         # The strip's patches were printed from the config as it stood, so once the edit
         # moves they prove something else. Drop them, which also cancels a strip still
@@ -6644,20 +6645,16 @@ class AppController(QObject):
             # The edit is already on screen; only the baseline half has to be rendered.
             self._request_compare_baseline()
 
-    def rerender_active_view(self, before: Optional[WorkspaceConfig] = None) -> None:
-        """Re-render the canvas keeping whatever comparison overlay is active.
+    def rerender_active_view(self) -> None:
+        """Re-render the canvas after a rotate or flip, keeping the flat peek and the compare split.
 
-        Geometry ops (rotate/flip) change the config but shouldn't kick the user
-        out of flat-peek; a plain request_render() would exit it. The compare split
-        survives a plain render, and its baseline half re-captures on the key change.
+        A plain request_render() would exit the flat peek. The compare split survives a plain
+        render, and its baseline half re-captures on the key change. A scan peek ends here, as
+        on every committed rotation.
         """
-        if before is not None:
-            self._carry_peek(before)
-        if self.state.negative_peek:
-            self._paint_negative_peek()
-        elif self.state.embedded_peek:
-            self._paint_embedded_peek()
-        elif self.state.flatfield_peek:
+        if self.state.negative_peek or self.state.embedded_peek:
+            self.reset_all_peeks()
+        if self.state.flatfield_peek:
             self._paint_flatfield_peek()
         elif self.state.flat_peek:
             self.request_render(readback_metrics=False, config_override=flat_master_config(self.state.config))

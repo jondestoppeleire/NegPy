@@ -38,7 +38,7 @@ Drag a panel by its top edge (the strip above Session, or the margin around the 
 
 ### Peek Negative
 
-The toolbar's film button (or `N`) shows the scan as loaded: not inverted, not metered, no edits; crop, rotation and flip still apply. Use it to check density, mask color and scanner clipping. It is scaled to its brightest tone, so read density from the density histogram, not the brightness. It stays up while you drag a crop handle, through rotation and flip, and through Export and Metadata settings. Releasing a crop handle closes it, and so do a straighten, a keystone, any other edit and a frame change.
+The toolbar's film button (or `N`) shows the scan as loaded: not inverted, not metered, no edits; crop, rotation and flip still apply. Use it to check density, mask color and scanner clipping. It is scaled to its brightest tone, so read density from the density histogram, not the brightness. It stays up while you drag a crop or rotation handle or the Fine Rotation slider, and through Export and Metadata settings. Releasing the handle or slider closes it, and so do a rotate, flip, straighten or keystone, any other edit and a frame change.
 
 ### Peek Embedded Preview
 
