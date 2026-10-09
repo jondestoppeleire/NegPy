@@ -715,7 +715,7 @@ class ActionToolbar(QWidget):
         if include_active:
             # Rotating must not drop an active before/after or flat-peek, so re-render in
             # place within whichever view is on.
-            self.controller.rerender_active_view()
+            self.controller.rerender_active_view(config)
 
     def flip(self, axis: str) -> None:
         from dataclasses import replace
@@ -741,7 +741,7 @@ class ActionToolbar(QWidget):
             self.controller.flip_thumbnails(touched, horizontal, before)
         if include_active:
             # Flipping shouldn't drop an active before/after or flat-peek (see rotate()).
-            self.controller.rerender_active_view()
+            self.controller.rerender_active_view(config)
 
     def _show_tour(self) -> None:
         from negpy.desktop.view.main_window import MainWindow
