@@ -1175,7 +1175,7 @@ class AppController(QObject):
                     self.asset_store.save_thumbnail(key, pil_img, fingerprint=THUMB_QUICK)
                 if not self._set_thumbnail(key, pil_img):
                     broken.add(key)
-        self.session.asset_model.refresh()
+        self.session.asset_model.refresh_thumbnails(new_thumbs.keys())
         return broken
 
     def _on_thumbnail_activity(self, key: str) -> None:
@@ -1318,7 +1318,7 @@ class AppController(QObject):
             if pil_img and self._set_thumbnail(key, pil_img):
                 self.state.rendered_thumbnails.add(key)
                 self.state.stale_thumbnails.discard(key)
-        self.session.asset_model.refresh()
+        self.session.asset_model.refresh_thumbnails(new_thumbs.keys())
         self._resume_background_thumbnails()
 
     def _pause_background_thumbnails(self) -> None:

@@ -3,7 +3,7 @@ import re
 import threading
 from dataclasses import dataclass, field, replace
 from enum import Enum, auto
-from typing import Any, Dict, List, Optional, Set, Tuple
+from typing import Any, Collection, Dict, List, Optional, Set, Tuple
 
 import numpy as np
 from PyQt6.QtCore import QAbstractListModel, QModelIndex, QObject, Qt, pyqtSignal
@@ -639,6 +639,14 @@ class AssetListModel(QAbstractListModel):
 
     def refresh(self) -> None:
         self._apply_reindex()
+
+    def refresh_thumbnails(self, keys: Collection[str]) -> None:
+        """Repaints the rows showing *keys*. A thumbnail never moves a row, so no reindex."""
+        files = self._state.uploaded_files
+        for row, i in enumerate(self._sorted_indices):
+            if i < len(files) and asset_thumbnail_key(files[i]) in keys:
+                index = self.index(row, 0)
+                self.dataChanged.emit(index, index)
 
 
 def _source_effective_bounds(process) -> Optional[tuple]:
