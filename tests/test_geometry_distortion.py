@@ -207,3 +207,39 @@ def test_mapping_many_points_solves_the_distortion_scale_once():
     for i in range(50):
         logic.map_point_radial(10.0 + i, 20.0, 0.07, 641, 479)
     assert logic.compute_distortion_scale.cache_info().misses == 1
+
+
+@pytest.mark.parametrize(
+    "warp",
+    [
+        lambda img: logic_mod().apply_fine_rotation(img, 0.7),
+        lambda img: logic_mod().apply_radial_distortion(img, -0.08),
+        lambda img: logic_mod().apply_keystone(img, 6.0, -4.0),
+    ],
+)
+def test_a_tiled_warp_matches_the_whole_frame_warp(warp, monkeypatch):
+    logic = logic_mod()
+    import cv2
+
+    # Smooth, so OpenCV's 1/32 px sample quantization cannot dominate the comparison.
+    noise = np.random.default_rng(2).uniform(0, 1, (210, 330, 3)).astype(np.float32)
+    img = cv2.GaussianBlur(noise, (0, 0), 4.0)
+    whole = warp(img)
+    monkeypatch.setattr(logic, "_CV_WARP_MAX", 100)
+    monkeypatch.setattr(logic, "_WARP_TILE", 64)
+    tiled = warp(img)
+    np.testing.assert_allclose(tiled, whole, atol=2e-3)
+
+
+def test_a_frame_past_the_opencv_size_limit_still_warps():
+    logic = logic_mod()
+    img = np.full((24, 33000, 3), 0.5, dtype=np.float32)
+    assert logic.apply_fine_rotation(img, 0.01).shape == img.shape
+    assert logic.apply_radial_distortion(img, 0.05).shape == img.shape
+    assert logic.apply_keystone(img, 1.0, 1.0).shape == img.shape
+
+
+def logic_mod():
+    from negpy.features.geometry import logic
+
+    return logic
