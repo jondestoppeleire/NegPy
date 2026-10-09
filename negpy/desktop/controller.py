@@ -7327,7 +7327,7 @@ class AppController(QObject):
         hashes = [f["hash"] for f in files if f["hash"] != self.state.current_file_hash]
         if not hashes:
             return True
-        saved = self.session.repo.load_file_settings_many(hashes)
+        saved = self.session.repo.saved_hashes(hashes)
         unopened = sum(1 for h in hashes if h not in saved)
         if not unopened:
             return True
