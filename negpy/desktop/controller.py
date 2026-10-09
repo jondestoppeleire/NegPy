@@ -2612,6 +2612,9 @@ class AppController(QObject):
         self.state.preview_embedded = None
         self.state.has_ir = False
         self.state.original_res = (0, 0)
+        if self.state.flat_peek:
+            self.state.flat_peek = False
+            self.flat_peek_changed.emit(False)
         if self.state.negative_peek:
             self.state.negative_peek = False
             self.negative_peek_changed.emit(False)
@@ -6279,7 +6282,11 @@ class AppController(QObject):
             self.load_file(self.state.current_file_path, preserve_zoom=True)
             return
 
-        # Renders leave peek state alone; edits drop it through _reset_all_peeks.
+        # A plain render paints the edit over the flat peek, so it ends the peek. The other
+        # peeks repaint over a render; edits drop them through _reset_all_peeks.
+        if config_override is None and self.state.flat_peek:
+            self.state.flat_peek = False
+            self.flat_peek_changed.emit(False)
 
         # The strip's patches were printed from the config as it stood, so once the edit
         # moves they prove something else. Drop them, which also cancels a strip still
