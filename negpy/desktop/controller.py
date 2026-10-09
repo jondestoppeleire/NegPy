@@ -725,6 +725,7 @@ class AppController(QObject):
         self._render_debounce.setSingleShot(True)
         self._render_debounce.setInterval(50)
         self._render_debounce.timeout.connect(self.request_render)
+        self._dispatched_render_state: Optional[tuple] = None  # _render_state() of the last plain render
 
         self._crop_bounds_dirty = False
         self._keystone_lines: Dict[str, Tuple[Tuple[float, float], Tuple[float, float]]] = {}
@@ -1024,8 +1025,18 @@ class AppController(QObject):
         self.session.session_emptied.connect(self._strip_memo.clear)
         self.session.file_selected.connect(self._on_file_selected_load)
         self.session.state_changed.connect(self.config_updated.emit)
-        self.session.state_changed.connect(self._render_debounce.start)
-        self.session.files_changed.connect(self._render_debounce.start)
+        self.session.state_changed.connect(self._render_if_state_moved)
+
+    def _render_state(self) -> tuple:
+        return (self.state.config, self.state.preview_raw, self.state.gpu_enabled, self.state.hq_preview)
+
+    def _render_if_state_moved(self) -> None:
+        """Renders after a session change unless it left every render input as last dispatched:
+        a selection, a copy or a view preference changes no pixel."""
+        last = self._dispatched_render_state
+        if last is not None and all(a is b for a, b in zip(self._render_state(), last)):
+            return
+        self._render_debounce.start()
 
     def generate_missing_thumbnails(self) -> None:
         missing = [f for f in self.state.uploaded_files if asset_thumbnail_key(f) not in self.state.thumbnails]
@@ -6471,6 +6482,8 @@ class AppController(QObject):
         )
 
         self._cancel_neighbor_prefetch()
+        if config_override is None and not ephemeral:
+            self._dispatched_render_state = self._render_state()
 
         if self._is_rendering:
             self._pending_render_task = task
