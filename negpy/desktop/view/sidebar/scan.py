@@ -1301,6 +1301,11 @@ class ScanSidebar(QWidget):
             self.output.browse()
             if not self.output.folder():
                 return
+        folder = self.output.folder()
+        if not (os.path.isabs(folder) and os.path.isdir(folder)):
+            # The writer's makedirs would resolve it against the working directory.
+            self.status_strip.set_message(f"Output folder does not exist: {folder}")
+            return
         output_folder = self.output.target_folder()
         if output_folder is None:
             self.status_strip.set_message('Roll name must be a single safe name (not "." or "..", and no path separators).')
