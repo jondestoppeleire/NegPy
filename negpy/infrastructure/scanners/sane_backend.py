@@ -596,17 +596,20 @@ def _detect_eject(opt) -> bool:
 
 
 def _detect_adapter_frame_capacity(opt) -> int | None:
-    """Return the adapter's advertised transport bound, not an exposure count."""
+    """Return the adapter's advertised transport bound, not an exposure count.
+
+    None for one frame: coolscan3 reports 1..1 for a mount adapter, which holds no strip.
+    """
     if "frame" not in opt:
         return None
     constraint = opt["frame"].constraint
     if isinstance(constraint, tuple) and len(constraint) >= 2:
         capacity = int(constraint[1])
-        return capacity if capacity > 0 else None
-    if isinstance(constraint, list) and constraint:
+    elif isinstance(constraint, list) and constraint:
         capacity = max(int(value) for value in constraint)
-        return capacity if capacity > 0 else None
-    return None
+    else:
+        return None
+    return capacity if capacity > 1 else None
 
 
 def _detect_adapter_frame_control(opt) -> bool:
