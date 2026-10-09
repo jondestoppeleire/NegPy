@@ -1146,15 +1146,19 @@ class ScanSidebar(QWidget):
             film_format=self._film_format(),
             film_type=self._film_type(),
         )
-        self.set_scanning(True)
-        self.controller.start_meter(
-            MeterRequest(
-                device_id=device.id,
-                params=params,
-                frame_offset_modifier_mm=self._settings.frame_offset_modifier_mm,
-                frame_offsets=self._settings.frame_offsets,
+        try:
+            self.controller.start_meter(
+                MeterRequest(
+                    device_id=device.id,
+                    params=params,
+                    frame_offset_modifier_mm=self._settings.frame_offset_modifier_mm,
+                    frame_offsets=self._settings.frame_offsets,
+                )
             )
-        )
+        except RuntimeError as e:
+            self.status_strip.set_message(f"Scanner busy: {e}")
+            return
+        self.set_scanning(True)
 
     @pyqtSlot(object, int)
     def _on_exposure_metered(self, exposures: dict, frame: int) -> None:

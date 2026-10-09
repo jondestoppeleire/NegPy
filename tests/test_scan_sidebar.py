@@ -1167,6 +1167,19 @@ def _meter_frame(sidebar: ScanSidebar, monkeypatch, frame: int = 2) -> None:
     sidebar.exposure_meter_btn.click()
 
 
+def test_meter_frame_while_the_scanner_is_busy_leaves_the_panel_idle(monkeypatch) -> None:
+    sidebar, controller = _sidebar(LOCKING_DEVICE)
+
+    def busy(_req) -> None:
+        raise RuntimeError("A scanner request is already active")
+
+    controller.start_meter = busy
+    _meter_frame(sidebar, monkeypatch)
+
+    assert sidebar._scanning is False
+    assert "busy" in sidebar.status_strip.message()
+
+
 def test_the_exposure_lock_row_shows_only_where_the_backend_offers_it() -> None:
     locking, _ = _sidebar(LOCKING_DEVICE)
     plain, _ = _sidebar(NKSCAN_DEVICE)
