@@ -225,30 +225,29 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
     let d_max_eff = max(d_max_base, d_min_eff + vec3<f32>(0.1));
 
     // Dodge/burn print exposure (stops, positive = burn; same domain as cmy_offsets) in .r,
-    // local grade as a slope multiplier (local_grade_factor_map) in .g, its ISO-R deltas in
-    // .b. The dummy texture is zero-filled, so the gate is what keeps gfac off 0.
+    // the local grade's ISO-R deltas in .b, turned into a slope multiplier here as
+    // local_grade_factor_map does, so a Grade change re-uploads nothing.
     var ev = 0.0;
     var gfac = 1.0;
     if (params.ev_scale.w != 0.0) {
         let local_maps = textureLoad(ev_tex, coords, 0);
         ev = local_maps.r;
-        gfac = local_maps.g;
+        var dr = local_maps.b;
         let n_key = i32(params.key_meta.x);
         if (n_key > 0) {
             // The unburned tone: no mask can move the pixels it selects. Mirrors the CPU
             // kernel; the grade sums in ISO-R space, then clamps once to the ladder.
             let lum = dot(color.rgb, vec3<f32>(0.2126, 0.7152, 0.0722));
             let alphas = textureLoad(key_tex, coords, 0);
-            var dr = local_maps.b;
             for (var k = 0; k < n_key; k++) {
                 let e = params.keyed[k];
                 let a = alphas[k] * tone_key_weight(lum, e.z, e.w);
                 ev = ev + e.x * a;
                 dr = dr + e.y * a;
             }
-            let r0 = params.key_meta.y;
-            gfac = r0 / clamp(r0 + dr, params.key_meta.z, params.key_meta.w);
         }
+        let r0 = params.key_meta.y;
+        gfac = r0 / clamp(r0 + dr, params.key_meta.z, params.key_meta.w);
     }
     if (params.mask.x != 0.0) {
         ev = ev + contrast_mask_stops(coords);

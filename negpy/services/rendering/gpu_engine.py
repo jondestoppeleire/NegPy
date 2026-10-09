@@ -1099,7 +1099,7 @@ class GPUEngine:
             )
             if wants_ev_map:
                 # This stage re-runs for any exposure change, but the map only moves
-                # with the masks, the geometry and the grade.
+                # with the masks and the geometry; the shader applies the grade.
                 tiled_maps = local_maps is not None
                 raster_key = (
                     settings.local,
@@ -1114,8 +1114,7 @@ class GPUEngine:
                     w_rot,
                     h_rot,
                 )
-                ev_key = (raster_key, settings.exposure.grade)
-                if tiled_maps or self._local_ev_key != ev_key:
+                if tiled_maps or self._local_ev_key != raster_key:
                     if local_maps is None:
                         if self._local_maps_cache is not None and self._local_maps_cache[0] == raster_key:
                             local_maps = self._local_maps_cache[1]
@@ -1134,29 +1133,19 @@ class GPUEngine:
                                 converge_h=settings.geometry.converge_h,
                             )
                             self._local_maps_cache = (raster_key, local_maps)
-                    from negpy.features.exposure.logic import local_grade_factor_map
-
                     if local_maps is None:
                         local_maps = np.zeros((h_rot, w_rot, 2), dtype=np.float32)
                     ev_plane = local_maps[:, :, 0]
-                    # r = dodge/burn EV, g = local grade slope factor, b = its ISO-R deltas,
-                    # which tone-limited masks add their grade to. One texture, so the
-                    # local-grade map costs no bind slot.
-                    tex_local_ev.upload(
-                        np.dstack(
-                            [
-                                ev_plane,
-                                local_grade_factor_map(local_maps[:, :, 1], settings.exposure.grade),
-                                local_maps[:, :, 1],
-                            ]
-                        )
-                    )
+                    # r = dodge/burn EV, b = local grade ISO-R deltas, which tone-limited masks
+                    # add their grade to; g is unused. One texture, so the local-grade map
+                    # costs no bind slot.
+                    tex_local_ev.upload(np.dstack([ev_plane, np.zeros_like(ev_plane), local_maps[:, :, 1]]))
                     if local_maps.shape[2] > 2:
                         planes = np.zeros((*ev_plane.shape, MAX_KEYED_MASKS), dtype=np.float32)
                         planes[:, :, : local_maps.shape[2] - 2] = local_maps[:, :, 2:]
                         tex_local_key.upload(planes)
                     # A tiled export passes a per-tile slice, which is not reusable.
-                    self._local_ev_key = None if tiled_maps else ev_key
+                    self._local_ev_key = None if tiled_maps else raster_key
             if render_path(settings.process) is not RenderPath.PRINT:
                 # The transfer curve takes no dodge/burn map: local EV is a print-exposure
                 # input, and this path replaces the print.

@@ -891,7 +891,7 @@ def local_grade_factor_map(grade_deltas: np.ndarray, grade: float) -> np.ndarray
     _grade_trim_mult gives a per-layer trim, so a masked region prints at its own
     grade on the same ladder. Rotation happens about the channel pivot in the
     kernel, which is what keeps a grade-only mask from shifting its own midtone.
-    Single source for the CPU kernel and the GPU's uploaded map.
+    Single source for the CPU kernel; exposure.wgsl mirrors it.
     """
     from negpy.features.exposure.models import EXPOSURE_CONSTANTS
 
