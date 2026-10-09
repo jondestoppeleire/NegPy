@@ -184,6 +184,7 @@ class NormalizationProcessor:
         context.metrics["highlight_point"] = measure_highlight_point_from_log(prefiltered, anchor_bounds, None, 0.0)
 
         context.metrics["final_bounds"] = bounds
+        context.metrics["pre_trim_bounds"] = pre_trim_bounds
         context.metrics["normalized_log"] = res
         context.metrics["histogram_density"] = density_histogram(res, context.active_roi)
         return res

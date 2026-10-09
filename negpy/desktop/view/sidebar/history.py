@@ -114,8 +114,17 @@ class HistoryPanel(BaseSidebar):
             self.controller.export_work_print(name)
         elif chosen is rename_action:
             new_name, ok = QInputDialog.getText(self, "Rename work print", "Name:", text=name)
-            if ok and new_name.strip():
-                self.controller.session.rename_work_print(name, new_name.strip())
+            new_name = new_name.strip()
+            if not (ok and new_name) or new_name == name:
+                return
+            exists = new_name in self.controller.session.work_prints()
+            if (
+                exists
+                and QMessageBox.question(self, "Replace Work Print", f"“{new_name}” already exists. Replace it?")
+                != QMessageBox.StandardButton.Yes
+            ):
+                return
+            self.controller.session.rename_work_print(name, new_name, replace_existing=exists)
         elif chosen is delete_action:
             if confirm_delete_named(
                 self,

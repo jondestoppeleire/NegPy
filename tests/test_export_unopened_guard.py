@@ -11,7 +11,7 @@ from negpy.desktop.controller import AppController
 def _controller(saved_hashes: set, current: str = "") -> MagicMock:
     controller = MagicMock()
     controller.state.current_file_hash = current
-    controller.session.repo.load_file_settings_many.side_effect = lambda hashes: {h: object() for h in hashes if h in saved_hashes}
+    controller.session.repo.saved_hashes.side_effect = lambda hashes: {h for h in hashes if h in saved_hashes}
     return controller
 
 

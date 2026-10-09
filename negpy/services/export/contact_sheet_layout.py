@@ -292,6 +292,7 @@ class ContactSheetSettings:
     roll_label: bool = True
     edge_print: bool = True
     by_scene: bool = False
+    white_paper: bool = False
 
     @classmethod
     def from_dict(cls, data: Optional[Mapping[str, Any]]) -> "ContactSheetSettings":
@@ -317,6 +318,7 @@ class ContactSheetSettings:
             roll_label=flag("roll_label", default.roll_label),
             edge_print=flag("edge_print", default.edge_print),
             by_scene=flag("by_scene", default.by_scene),
+            white_paper=flag("white_paper", default.white_paper),
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -327,4 +329,5 @@ class ContactSheetSettings:
             "roll_label": self.roll_label,
             "edge_print": self.edge_print,
             "by_scene": self.by_scene,
+            "white_paper": self.white_paper,
         }

@@ -38,7 +38,7 @@ Drag a panel by its top edge (the strip above Session, or the margin around the 
 
 ### Peek Negative
 
-The toolbar's film button (or `N`) shows the scan as loaded: not inverted, not metered, no edits; crop, rotation and flip still apply. Use it to check density, mask color and scanner clipping. It is scaled to its brightest tone, so read density from the density histogram, not the brightness. Touching a control closes it; a crop drag closes it on release.
+The toolbar's film button (or `N`) shows the scan as loaded: not inverted, not metered, no edits; crop, rotation and flip still apply. Use it to check density, mask color and scanner clipping. It is scaled to its brightest tone, so read density from the density histogram, not the brightness. It stays up while you edit. A frame change closes it, and so does a crop, straighten or keystone when you commit it.
 
 ### Peek Embedded Preview
 
@@ -434,7 +434,7 @@ Color timing, like enlarger dichroic filters. The **Global / Shadows / Highlight
 *   **Shadows Density** (±0.9 ΔD) / **Highlights Density** (±0.5 ΔD): brighten or darken only the shadows or highlights, within paper black and white. They also work on slides.
 *   **Shadows Grade** / **Highlights Grade** (split grade, ±50 ISO-R): local contrast in the deep shadows or highlights.
 *   **Preflash** (0 to 1): an even flash over the sheet, as a fraction of the paper's threshold exposure. It pulls highlight detail off paper white and softens the print slightly; bare paper stays white. Hidden on slides.
-*   **Contrast Mask** (±0.5, hidden in Transparency): a blurred mask sandwiched with the negative; the value is its signed gamma. Positive compresses the range by (1 − gamma) so a harder grade fits, keeping fine detail; past about 0.4 edges get a halo. Negative expands the range by (1 + gamma) for a negative too flat for Grade; past about −0.4 highlights clip.
+*   **Contrast Mask** (±0.5, hidden in Transparency): a blurred mask sandwiched with the negative; the value is its signed gamma. Positive compresses the range by (1 − gamma) so a harder grade fits, keeping fine detail. Negative expands the range by (1 + gamma) for a negative too flat for Grade; past about −0.4, highlights clip. Past about ±0.2, strong edges get a halo.
 *   **Mask Spacer** (2 to 6%, default 4%): the gap between mask and negative, as percent of the frame. Thicker masks only broad masses; thinner reaches into detail and hazes shadows next to bright areas. Both mask controls gray out in R/G/B mode.
 
 **Paper Response**:
@@ -453,7 +453,7 @@ In R/G/B mode these become per-layer trims: **Grade** (±30 ISO-R), **Toe** / **
 <!-- panel:local -->
 ### 5.3 Dodge & Burn: local exposure
 
-Draw masks and lighten or darken only those areas. The **MASKS** header shows how many the frame has:
+Draw masks and lighten or darken only those areas. On a **Slide** the panel grays out, because the slide's transfer curve takes no masks; the frame keeps them. The **MASKS** header shows how many the frame has:
 
 *   **Draw** (Draw Mask, the cut card): click to place vertices; double-click, Enter or click near the start to close; Esc cancels. To edit, select the mask, then drag a vertex, click an edge "+" to add a point, or right-click a vertex to delete it.
 *   **Oval** (the hole in the card, or a dodging wand): drag out an oval. The center handle moves it; the other two set each axis, so you can stretch and tilt it.
@@ -538,7 +538,7 @@ Chemical toners (B&W Negative only) and a split tint (any mode). On a lith print
 **Chemical Toning**, sequential baths in the order shown, each 0.0 to 2.0:
 
 *   **Selenium**: deeper blacks, cool eggplant shadows. On lith: further down the scale, strong Dmax lift, green-black shadows to magenta.
-*   **Sepia**: warms highlights first; partial strength gives split-sepia.
+*   **Sepia**: warms highlights first, and more strength reaches further into the mids; the deepest shadows stay black at any strength.
 *   **Gold**: blue-black on untoned silver; over sepia, orange-red highlights. On lith: all densities evenly, toward blue-violet.
 *   **Iron Blue**: Prussian-blue shadows to navy blacks.
 *   **Copper**: pink to brick-red, with the classic Dmax loss.
@@ -726,6 +726,7 @@ Applying it sets the defaults for new files and rewrites every edited frame in t
 **Single-Shot Narrowband Calibration**: for single-shot camera scans under narrowband light, where each color leaks into the others through the sensor's filters.
 
 *   **Profile**: the sensor matrix. Custom `.toml` matrices go in `<Documents>/NegPy/sensor/`.
+*   **Method**: how the matrix is applied. *Two-Scale* (default) is *Linear* wherever the calibration can be trusted; where a color is mostly leak, as in neon or deep blue, it stops the speckle and keeps the grain at the film's own. *Linear* subtracts the leak exactly and prints those colors as speckled, fully saturated color. *Density* applies the matrix to densities: no speckle, but strong colors come out slightly less vivid. Two-Scale and Density read the film base color from the frame; a scan clipped there uses Linear.
 *   **Calibrate** (vials icon on the header): build a profile from three bare-light R/G/B exposures. Pick them as files, or press **Capture from Camera…** to shoot and measure them with a tethered camera and a Scanlight, with no film in the holder; it asks before the first exposure, and the button is grayed out until both are connected. A Single Capture Scanlight preset can save one during its own calibration.
 
 Needs **Linear RAW**; grayed out on Transparency and on a Trichrome triplet. **Re-run Roll Analysis** after changing it. CAMERA_SCANNING.md has a workflow for each way to build and assign a profile.
@@ -939,7 +940,7 @@ A gear library for Metadata (§11), Roll Settings and every gear picker. **My Ge
 
 *   **Print** (default): the look you see on screen.
 *   **Flat**: a neutral, low-contrast master for editing elsewhere. It skips the print look, effects, toning and vignette, and writes a 16-bit TIFF, or lossless JPEG XL when JXL is selected with sRGB, P3, Rec 2020 or Grayscale.
-    *   **Preview Flat**: show the flat master on the canvas.
+    *   **Preview Flat**: show the flat master on the canvas. Rotation and flip keep it up; any other edit or a frame change closes it.
     *   **Roll Analysis** (Roll tab): share one exposure baseline across all visible frames so flat masters match. Run it before a flat batch.
 *   **Linear**: write the decoded buffer as linear 16-bit, with rotation, flip and only the corrections turned on below. **TIFF** (default, untagged) or **JPEG XL** (lossless; always tagged with sRGB primaries, wrong for native primaries). **Effort** (1 to 9, default 7) trades JPEG XL speed for size.
     *   **Pakon RAW**: 4× expansion by default; F335 files (16-bit sensor) none.
@@ -1009,6 +1010,7 @@ A darkroom proof of the roll: every visible frame at true size, as cut film stri
 *   **Print**: **As Edited**, or **Straight Proof**: the whole roll at one exposure on grade 2 from its Roll Analysis baseline (per scene in **Scene** order), so thin and dense negatives print light and dark. It needs the roll scanned at one exposure; positives from other software cannot be proofed.
 *   **Edge Print**: the maker's markings on the film edge (stock name, frame numbers, DX barcode). Off prints plain film.
 *   **Roll Label**: the roll name, film, developer, camera and date above the strips, set in the edge print's capitals and ink.
+*   **White Paper**: white paper and a dark roll label instead of the darkroom black, to save ink on a home printer. The film strips print as before.
 *   **Pick Frames**: click a frame to leave it out or put it back; rejected frames start out.
 
 Sheets are JPEGs named `contact_sheet.jpg` (`contact_sheet_1of2.jpg` and on when the roll needs more sheets), with the **JPEG Quality** and **Progressive** settings above.

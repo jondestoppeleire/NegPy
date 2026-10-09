@@ -760,15 +760,17 @@ class TestThumbnailRefreshController:
 
         assert asset_thumbnail_key(self.files[0]) in self.controller.state.stale_thumbnails
 
-    def test_negative_peek_drops_the_render_identity(self) -> None:
+    def test_a_negative_peek_leaves_the_print_to_the_thumbnail(self) -> None:
         self._live_render(("active", self.controller.state.config))
+        print_buffer = self.controller.state.last_metrics["base_positive"]
         self.controller.state.preview_raw = np.full((4, 4, 3), 0.5, dtype=np.float32)
 
+        self.controller.state.negative_peek = True
         self.controller._paint_negative_peek()
         self.controller._update_thumbnail_from_state(persist=True)
 
-        assert "render_identity" not in self.controller.state.last_metrics
-        assert self.thumbnail_updates == []
+        assert self.thumbnail_updates[-1].buffer is print_buffer
+        assert self.thumbnail_updates[-1].fingerprint == self._current("active")
 
     def _file_it_here(self) -> None:
         # The test writes the JPEG itself; the worker writing the same file would race it.

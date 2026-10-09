@@ -1,7 +1,7 @@
 """Darkroom contact print, strips laid 1:1 on paper; draws the dialog preview (`draft`) and the export."""
 
 import math
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from functools import lru_cache
 from typing import Optional, Sequence
 
@@ -53,12 +53,20 @@ class Palette:
     label: RGB
 
 
+def grey(level: int) -> RGB:
+    return (level, level, level)
+
+
 def palette_for(look: SheetLook) -> Palette:
+    pal = _film_palette(look)
+    if look.white_paper:
+        # Pure white, so a home printer lays no ink on the paper.
+        return replace(pal, no_film=(255, 255, 255), rim=None, label=grey(look.black))
+    return pal
+
+
+def _film_palette(look: SheetLook) -> Palette:
     b = look.black
-
-    def grey(level: int) -> RGB:
-        return (level, level, level)
-
     if look.palette == "slide":
         # Reversal paper: bare light prints white, the slide's D-max black.
         white = (241, 240, 236)

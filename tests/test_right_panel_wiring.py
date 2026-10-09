@@ -9,16 +9,17 @@ Stubs on the unbound methods throughout: no test in this repo constructs a real
 RightPanel, since it pulls in a full chain of sidebars that need a real controller.
 """
 
+from typing import Optional
 from unittest.mock import MagicMock
 
+from negpy.desktop.session import AppState
 from negpy.desktop.view.sidebar.right_panel import RightPanel
 
 
-def _panel_stub(last_metrics: dict) -> MagicMock:
+def _panel_stub(last_metrics: dict, peek_frame: Optional[dict] = None) -> MagicMock:
     panel = MagicMock()
-    panel.controller.session.state.last_metrics = last_metrics
-    panel.controller.state.flat_peek = False
-    panel.controller.state.negative_peek = True
+    state = AppState(last_metrics=last_metrics, negative_peek=peek_frame is not None, peek_frame=peek_frame)
+    panel.controller.state = panel.controller.session.state = state
     panel._clip_fracs = (None, None)
     # Nothing is being soft-proofed in these stubs, so the printability row is absent.
     panel._gamut_fraction.return_value = None
@@ -27,7 +28,7 @@ def _panel_stub(last_metrics: dict) -> MagicMock:
 
 def test_update_analysis_refreshes_histograms() -> None:
     metrics = {"interactive": False, "histogram_density": [1.0]}
-    panel = _panel_stub(metrics)
+    panel = _panel_stub(metrics, peek_frame={"interactive": False})
 
     RightPanel._update_analysis(panel)
 
@@ -40,6 +41,16 @@ def test_update_analysis_skips_mid_gesture_frames() -> None:
     RightPanel._update_analysis(panel)
 
     panel._update_histograms.assert_not_called()
+
+
+def test_a_peek_refreshes_over_a_stale_interactive_print() -> None:
+    """Flat Peek renders with readback_metrics=False, so the print can still say interactive."""
+    metrics = {"interactive": True, "histogram_density": [1.0]}
+    panel = _panel_stub(metrics, peek_frame={"interactive": False})
+
+    RightPanel._update_analysis(panel)
+
+    panel._update_histograms.assert_called_once_with(metrics)
 
 
 def _group_panel_stub(*, scan_index: int = 5, active_group: int = 0, n_groups: int = 6) -> MagicMock:

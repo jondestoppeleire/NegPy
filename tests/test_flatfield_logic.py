@@ -64,6 +64,67 @@ def test_correction_flattens_uneven_illumination(gain_store):
     assert corrected.dtype == np.float32
 
 
+def test_carrier_edge_in_reference_does_not_overcorrect():
+    h, w = 128, 192
+    clean = _radial_falloff(h, w)
+    banded = clean.copy()
+    banded[-6:] = 0.01  # dark carrier band along the bottom edge
+
+    expected = clean * ff.compute_gain(clean)
+    corrected = banded * ff.compute_gain(banded)
+    ratio = corrected[:-10] / expected[:-10]
+    assert np.abs(ratio / np.median(ratio) - 1.0).max() < 0.05
+
+
+def test_half_lit_carrier_on_the_image_border_is_masked():
+    h, w = 128, 192
+    clean = _radial_falloff(h, w)
+    edged = clean.copy()
+    edged[0] *= 0.3  # carrier lip on the outermost row, partly lit
+
+    ratio = (edged * ff.compute_gain(edged))[2:] / (clean * ff.compute_gain(clean))[2:]
+    assert np.abs(ratio / np.median(ratio) - 1.0).max() < 0.01
+
+
+def test_carrier_filling_most_of_the_reference_is_masked():
+    h, w = 128, 192
+    reference = np.full((h, w, 3), 0.01, dtype=np.float32)
+    reference[20:108, 40:120] = _radial_falloff(88, 80)  # opening covers under half the frame
+
+    corrected = reference * ff.compute_gain(reference)
+    opening = corrected[24:104, 44:116]
+    assert opening.max() / opening.min() < 1.5
+
+
+def test_gain_far_from_the_opening_stays_bounded():
+    h, w = 128, 192
+    reference = np.full((h, w, 3), 0.01, dtype=np.float32)
+    reference[40:88, 60:132] = 1.0
+
+    gain = ff.compute_gain(reference)
+    assert gain.max() < 1.5
+
+
+def test_border_free_reference_matches_the_unmasked_gain():
+    import cv2
+
+    reference = _radial_falloff(128, 192)
+    sigma = 192 / 16.0
+    blur = cv2.GaussianBlur(reference, (0, 0), sigmaX=sigma, sigmaY=sigma)
+    unmasked = blur.reshape(-1, 3).mean(axis=0) / blur
+
+    np.testing.assert_allclose(ff.compute_gain(reference), unmasked, rtol=0.01)
+
+
+def test_almost_all_dark_reference_uses_the_whole_frame():
+    reference = np.full((128, 192, 3), 0.01, dtype=np.float32)
+    reference[60:63, 90:93] = 1.0
+
+    gain = ff.compute_gain(reference)
+    assert np.isfinite(gain).all()
+    assert gain.min() >= 0.25 and gain.max() <= 4.0
+
+
 def test_gain_resized_to_image(gain_store):
     # Gain baked at one size must resize to a differently-sized working image.
     gain_store("rig", _radial_falloff(64, 64))
@@ -92,3 +153,57 @@ def test_invalidate_drops_cache(gain_store):
     ff.set_gain_provider(lambda pid: None)  # provider now yields nothing
     ff.invalidate_gain("rig")
     assert ff.flatfield_token(cfg) == ""
+
+
+def test_a_half_frame_takes_its_own_half_of_the_gain(gain_store):
+    """The preview flat-fields one half after slicing; it must match the export, which
+    flat-fields the whole scan and slices after."""
+    from dataclasses import replace
+
+    from negpy.domain.models import WorkspaceConfig
+    from negpy.services.assets.half_frame import slice_chain
+    from negpy.services.rendering.image_processor import ImageProcessor
+
+    gain_store("p", _radial_falloff(120, 200))
+    cfg = FlatFieldConfig(apply=True, profile_id="p")
+    scan = np.full((120, 200, 3), 0.4, np.float32) * _radial_falloff(120, 200)
+    cut = ((1, 0.5, None, 0.04, "x"),)
+
+    expected = slice_chain(ff.apply_flatfield(scan, cfg), cut)
+
+    half = np.ascontiguousarray(slice_chain(scan, cut))
+    np.testing.assert_allclose(ff.apply_flatfield(half, cfg, lambda g: slice_chain(g, cut)), expected, rtol=0.02)
+
+    processor = ImageProcessor()
+    processor.run_pipeline(
+        half,
+        replace(WorkspaceConfig(), flatfield=cfg),
+        "half",
+        render_size_ref=100.0,
+        prefer_gpu=False,
+        readback_metrics=False,
+        gain_slices=cut,
+    )
+    np.testing.assert_allclose(processor._precorrect_value, expected, rtol=0.02)
+
+
+def test_without_the_cut_the_gain_would_be_stretched(gain_store):
+    from negpy.services.assets.half_frame import slice_chain
+
+    gain_store("p", _radial_falloff(120, 200))
+    cfg = FlatFieldConfig(apply=True, profile_id="p")
+    scan = np.full((120, 200, 3), 0.4, np.float32) * _radial_falloff(120, 200)
+    cut = ((1, 0.5, None, 0.04, "x"),)
+    half = np.ascontiguousarray(slice_chain(scan, cut))
+    expected = slice_chain(ff.apply_flatfield(scan, cfg), cut)
+    assert not np.allclose(ff.apply_flatfield(half, cfg), expected, rtol=0.02)
+
+
+def test_thumbnail_ir_planes_are_cut_like_the_buffer():
+    from negpy.desktop.workers.render import _slice_meta_planes
+
+    ir = np.arange(100 * 200, dtype=np.float32).reshape(100, 200)
+    out = _slice_meta_planes({"ir_preview": ir, "detect_preview": None, "x": 1}, {"half": 2, "split_x": 0.5})
+    assert out["ir_preview"].shape == (100, 100)
+    assert out["ir_preview"][0, 0] == 100
+    assert out["detect_preview"] is None and out["x"] == 1

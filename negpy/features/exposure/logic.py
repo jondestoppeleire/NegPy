@@ -492,7 +492,7 @@ def print_curve(
         shoulder=shoulder_eff if shoulder is None else shoulder,
         shoulder_width=exposure.shoulder_width if shoulder_width is None else shoulder_width,
         paper=profile,
-        midtone_gamma=effective_midtone_gamma(None, exposure.midtone_gamma) if midtone_gamma is None else midtone_gamma,
+        midtone_gamma=effective_midtone_gamma(profile, exposure.midtone_gamma) if midtone_gamma is None else midtone_gamma,
         bpc=not exposure.paper_black,
         shadow_density=exposure.shadow_density,
         highlight_density=exposure.highlight_density if highlight_density is None else highlight_density,
@@ -891,7 +891,7 @@ def local_grade_factor_map(grade_deltas: np.ndarray, grade: float) -> np.ndarray
     _grade_trim_mult gives a per-layer trim, so a masked region prints at its own
     grade on the same ladder. Rotation happens about the channel pivot in the
     kernel, which is what keeps a grade-only mask from shifting its own midtone.
-    Single source for the CPU kernel and the GPU's uploaded map.
+    Single source for the CPU kernel; exposure.wgsl mirrors it.
     """
     from negpy.features.exposure.models import EXPOSURE_CONSTANTS
 

@@ -61,8 +61,12 @@ _LENS_FIELDS = (
 )
 _SENSOR_FIELDS = (
     "sensor_profile",
+    "sensor_matrix",
+    "sensor_unmix",
     "crosstalk_profile",
     "crosstalk_strength",
+    "crosstalk_matrix",
+    "crosstalk_process",
     "hue_trim",
 )
 # ProcessConfig is split across five cards. Each tuple is both the card's reset scope and
@@ -851,8 +855,8 @@ class ControlsPanel(QWidget):
         )
         ton.sepia_slider.setToolTip(
             tooltip_with_shortcut(
-                "Simulates sepia bleach-redevelop toning — warms the highlights first while shadows hold; "
-                "partial strength gives the classic split-sepia look. B&W Negative mode only",
+                "Simulates sepia bleach-redevelop toning — warms the highlights first; more strength reaches "
+                "further into the mids, and the deepest shadows stay black at any strength. B&W Negative mode only",
                 ["sepia_inc", "sepia_dec"],
             )
         )

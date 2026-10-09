@@ -981,23 +981,30 @@ class TestAppController(unittest.TestCase):
             patch("negpy.desktop.controller.load_or_promote", return_value=None),
             patch("negpy.desktop.controller.write_sidecar") as mock_write,
         ):
-            written, failed = self.controller._write_edit_sidecars([frame])
+            written, failed, skipped = self.controller._write_edit_sidecars([frame])
 
-        self.assertEqual((written, failed), (1, 0))
+        self.assertEqual((written, failed, skipped), (1, 0, 0))
         self.mock_session_manager.config_for_asset.assert_called_once_with(frame)
         params = mock_write.call_args.args[1]
         self.assertIs(params, hydrated)
         self.assertIsNone(params.geometry.crop_rect)
 
-    def test_write_edit_sidecars_never_rehomes_a_forked_frame(self):
-        frame = {"name": "b.dng", "path": "/tmp/b.dng", "hash": "hash2#roll:r1"}
+    def test_write_edit_sidecars_skips_forks_and_composites(self):
+        """Their path is the shared frame's, so a sidecar there would replace that frame's edit."""
+        frames = [
+            {"name": "b.dng", "path": "/tmp/b.dng", "hash": "hash2#roll:r1"},
+            {"name": "a.tif", "path": "/tmp/a.tif", "hash": "h#stitch", "stitch_paths": ["/tmp/a.tif", "/tmp/c.tif"]},
+            {"name": "a.tif", "path": "/tmp/a.tif", "hash": "h#hdr", "hdr_paths": ["/tmp/a.tif", "/tmp/d.tif"]},
+        ]
         with (
             patch("negpy.desktop.controller.load_or_promote", return_value=None) as mock_load,
-            patch("negpy.desktop.controller.write_sidecar"),
+            patch("negpy.desktop.controller.write_sidecar") as mock_write,
         ):
-            self.controller._write_edit_sidecars([frame])
+            result = self.controller._write_edit_sidecars(frames)
 
-        self.assertTrue(mock_load.call_args.kwargs["forked"])
+        self.assertEqual(result, (0, 0, 3))
+        mock_load.assert_not_called()
+        mock_write.assert_not_called()
 
     def test_discovery_promotes_sidecars_before_adding_files(self):
         state = self.mock_session_manager.state
@@ -2196,6 +2203,30 @@ class TestAppController(unittest.TestCase):
         self.mock_session_manager.update_config.assert_not_called()
         self.controller.request_render.assert_not_called()
 
+    def test_crop_edits_show_no_spinner_with_no_frame_loaded(self):
+        self.controller.request_render = MagicMock()
+        loading = MagicMock()
+        self.controller.loading_started.connect(loading)
+
+        self.controller.set_crop_ratio("4:3")
+        self.controller.apply_auto_crop()
+        self.controller.reset_crop()
+
+        loading.assert_not_called()
+        self.assertEqual(self.controller.request_render.call_count, 3)
+
+    def test_crop_edits_show_the_spinner_on_a_loaded_frame(self):
+        self.controller.state.preview_raw = np.empty((8, 8, 3), dtype=np.float32)
+        self.controller.request_render = MagicMock()
+        loading = MagicMock()
+        self.controller.loading_started.connect(loading)
+
+        self.controller.set_crop_ratio("4:3")
+        self.controller.apply_auto_crop()
+        self.controller.reset_crop()
+
+        self.assertEqual(loading.call_count, 3)
+
     def test_set_crop_ratio_preserves_metering_bounds(self):
         """A ratio change is a pure reframe and must not re-meter. Clearing the
         per-file bounds makes the next render re-analyze over the new (smaller) ROI,
@@ -2691,6 +2722,7 @@ class TestBatchExportFiltering(unittest.TestCase):
         self.mock_session_manager.state = AppState()
         self.mock_session_manager.repo = MagicMock()
         self.mock_session_manager.repo.load_file_settings.return_value = None
+        self.mock_session_manager.config_for_asset.side_effect = lambda f: self.mock_session_manager.repo.load_file_settings(f["hash"])
 
         self.mock_session_manager.state.uploaded_files = [
             {"name": "IMG_0001.cr2", "path": "/tmp/IMG_0001.cr2", "hash": "h1"},
@@ -2851,6 +2883,7 @@ class TestLinearOutputExportCurrentFile(unittest.TestCase):
         self.mock_session_manager.state = AppState()
         self.mock_session_manager.repo = MagicMock()
         self.mock_session_manager.repo.load_file_settings.return_value = None
+        self.mock_session_manager.config_for_asset.side_effect = lambda f: self.mock_session_manager.repo.load_file_settings(f["hash"])
 
         self.mock_session_manager.state.uploaded_files = [
             {
@@ -3026,6 +3059,7 @@ class TestPresetExportCurrentFileTriplet(unittest.TestCase):
         self.mock_session_manager.state = AppState()
         self.mock_session_manager.repo = MagicMock()
         self.mock_session_manager.repo.load_file_settings.return_value = None
+        self.mock_session_manager.config_for_asset.side_effect = lambda f: self.mock_session_manager.repo.load_file_settings(f["hash"])
 
         self.mock_session_manager.state.uploaded_files = [
             {
@@ -3093,6 +3127,7 @@ class TestPresetBatchExport(unittest.TestCase):
         self.mock_session_manager.state = AppState()
         self.mock_session_manager.repo = MagicMock()
         self.mock_session_manager.repo.load_file_settings.return_value = None
+        self.mock_session_manager.config_for_asset.side_effect = lambda f: self.mock_session_manager.repo.load_file_settings(f["hash"])
 
         self.mock_session_manager.state.uploaded_files = [
             {"name": "IMG_0001.cr2", "path": "/tmp/IMG_0001.cr2", "hash": "h1"},
@@ -4293,6 +4328,7 @@ class TestBatchAnalysisFiltering(unittest.TestCase):
         self.mock_session_manager.state = AppState()
         self.mock_session_manager.repo = MagicMock()
         self.mock_session_manager.repo.load_file_settings.return_value = None
+        self.mock_session_manager.config_for_asset.side_effect = lambda f: self.mock_session_manager.repo.load_file_settings(f["hash"])
 
         self.mock_session_manager.state.uploaded_files = [
             {"name": "IMG_0001.cr2", "path": "/tmp/IMG_0001.cr2", "hash": "h1"},
@@ -4807,7 +4843,7 @@ class TestNegativePeekColor(unittest.TestCase):
         state.preview_cam_xyz = cam_xyz
         state.preview_camera_wb = camera_wb
         self.controller._paint_negative_peek()
-        return state.last_metrics
+        return state.peek_frame
 
     def test_the_peek_applies_the_camera_matrix(self):
         import numpy as np
@@ -4858,7 +4894,7 @@ class TestNegativePeekColor(unittest.TestCase):
         state.preview_cam_xyz = self.D3300
         state.preview_camera_wb = wb
         self.controller._paint_negative_peek()
-        without_wb = np.array(state.last_metrics["base_positive"])
+        without_wb = np.array(state.peek_frame["base_positive"])
 
         np.testing.assert_allclose(with_wb, without_wb, atol=1e-5)
 
@@ -4886,8 +4922,9 @@ class TestNegativePeekColor(unittest.TestCase):
         or right_panel's analysis-chart refresh mistakes the settled peek frame for a
         mid-gesture one and never re-syncs the histogram."""
         self.controller.state.last_metrics["interactive"] = True
-        metrics = self._paint(self.D3300)
-        self.assertFalse(metrics["interactive"])
+        self.controller.state.negative_peek = True
+        self._paint(self.D3300)
+        self.assertFalse(self.controller.state.canvas_value("interactive"))
 
 
 class TestEmbeddedPeek(unittest.TestCase):
@@ -4945,7 +4982,7 @@ class TestEmbeddedPeek(unittest.TestCase):
             self.controller.toggle_embedded_peek(force=True)
 
         self.assertTrue(self.controller.state.embedded_peek)
-        metrics = self.controller.state.last_metrics
+        metrics = self.controller.state.peek_frame
         np.testing.assert_allclose(metrics["base_positive"], preview)
         self.assertTrue(metrics["splash"])
         self.assertFalse(metrics["proof"])
@@ -4985,6 +5022,76 @@ class TestEmbeddedPeek(unittest.TestCase):
         self.controller.state.preview_raw = None
         self.controller.toggle_embedded_peek(force=True)
         self.assertFalse(self.controller.state.embedded_peek)
+
+    def _peek_then_edit(self):
+        """Embedded peek on, then an edit whose print lands while the peek holds the canvas."""
+        import numpy as np
+
+        self.controller.state.current_file_hash = "h1"
+        with patch("negpy.desktop.controller.PreviewManager.try_splash_preview", return_value=(self._preview(), (8, 6))):
+            self.controller.toggle_embedded_peek(force=True)
+        self.controller._thumb_config = self.controller.state.config
+        self.controller.state.config = replace(self.controller.state.config)
+        self.print_buffer = np.full((6, 8, 3), 0.25, dtype=np.float32)
+        return {"base_positive": self.print_buffer, "content_rect": (0, 0, 8, 6), "source_hash": "h1"}
+
+    def test_a_render_under_a_peek_refreshes_the_thumbnail_from_the_print(self):
+        metrics = self._peek_then_edit()
+        tasks: list = []
+        self.controller.thumbnail_update_requested.connect(tasks.append)
+        with patch.object(self.controller, "_asset_for_render", return_value={"hash": "h1"}):
+            self.controller._on_render_finished(None, metrics)
+
+        self.assertEqual(len(tasks), 1)
+        self.assertIs(tasks[0].buffer, self.print_buffer)
+
+    def test_late_metrics_leave_the_peek_on_the_canvas(self):
+        """Reference View and the canvas size read the canvas value; under a peek it is the peek."""
+        import numpy as np
+
+        metrics = self._peek_then_edit()
+        with patch.object(self.controller, "_update_thumbnail_from_state"):
+            self.controller._on_render_finished(None, metrics)
+        self.controller._on_metrics_updated(metrics)
+
+        state = self.controller.state
+        self.assertIs(state.last_metrics["base_positive"], self.print_buffer)
+        np.testing.assert_allclose(state.canvas_value("base_positive"), self._preview())
+        self.assertIsNone(state.canvas_value("content_rect"))
+        self.assertTrue(state.canvas_value("splash"))
+
+    def test_closing_the_peek_keeps_its_frame_until_the_print_lands(self):
+        """The canvas shows the peek until the next render repaints it; size and zoom must agree."""
+        import numpy as np
+
+        metrics = self._peek_then_edit()
+        self.controller.state.last_metrics["base_positive"] = self.print_buffer
+        with patch.object(self.controller, "request_render"):
+            self.controller.toggle_embedded_peek(force=False)
+        np.testing.assert_allclose(self.controller.state.canvas_value("base_positive"), self._preview())
+
+        with patch.object(self.controller, "_update_thumbnail_from_state"):
+            self.controller._on_render_finished(None, metrics)
+        self.assertIs(self.controller.state.canvas_value("base_positive"), self.print_buffer)
+
+    def test_the_render_after_the_peek_drops_its_frame(self):
+        metrics = self._peek_then_edit()
+        self.controller.state.embedded_peek = False
+        with patch.object(self.controller, "_update_thumbnail_from_state"):
+            self.controller._on_render_finished(None, metrics)
+        self.assertIsNone(self.controller.state.peek_frame)
+        self.assertIs(self.controller.state.canvas_value("base_positive"), self.print_buffer)
+
+    def test_the_flat_peek_render_leaves_the_thumbnail_alone(self):
+        """Its pixels are the flat master; a plain render under the lit toggle is the print."""
+        metrics = self._peek_then_edit()
+        self.controller.state.embedded_peek = False
+        self.controller.state.flat_peek = True
+        with patch.object(self.controller, "_update_thumbnail_from_state") as refresh:
+            self.controller._on_render_finished(None, {**metrics, "config_override": True})
+            refresh.assert_not_called()
+            self.controller._on_render_finished(None, metrics)
+            refresh.assert_called_once_with(persist=False)
 
 
 class TestCompareFlatPeekInteraction(unittest.TestCase):
@@ -5058,6 +5165,41 @@ class TestCompareFlatPeekInteraction(unittest.TestCase):
         _, kwargs = rr.call_args
         self.assertEqual(kwargs.get("config_override"), flat_master_config(self.controller.state.config))
 
+    def test_an_edit_ends_flat_peek(self):
+        """The debounced render after an edit paints the print, so the badge and the
+        toolbar button must go off with it, and one press of M turns the peek back on."""
+        from negpy.features.exposure.models import RenderIntent
+
+        self.controller.state.flat_peek = True
+        seen: list = []
+        self.controller.flat_peek_changed.connect(seen.append)
+        dispatched: list = []
+        self.controller.render_requested.connect(dispatched.append)
+        self.controller.request_render()
+        self.assertFalse(self.controller.state.flat_peek)
+        self.assertEqual(seen, [False])
+        self.assertFalse(dispatched[-1].config_override)
+
+        self.controller._is_rendering = False
+        self.controller.toggle_flat_peek()
+        self.assertTrue(self.controller.state.flat_peek)
+        self.assertEqual(dispatched[-1].config.exposure.render_intent, RenderIntent.FLAT)
+
+    def test_a_frame_switch_ends_flat_peek(self):
+        import numpy as np
+
+        self.controller.preview_load_requested.disconnect(self.controller.preview_load_worker.process)
+        self.controller.state.flat_peek = True
+        seen: list = []
+        self.controller.flat_peek_changed.connect(seen.append)
+        self.controller.load_file("next.arw")
+        self.assertFalse(self.controller.state.flat_peek)
+        self.assertEqual(seen, [False])
+        # Once the new frame's decode lands, one press turns it back on.
+        self.controller.state.preview_raw = np.empty((8, 8, 3), dtype=np.float32)
+        self.controller.toggle_flat_peek()
+        self.assertTrue(self.controller.state.flat_peek)
+
     def test_rerender_active_view_is_a_plain_render_when_no_overlay(self):
         with patch.object(self.controller, "request_render") as rr:
             self.controller.rerender_active_view()
@@ -5079,7 +5221,7 @@ class TestCompareFlatPeekInteraction(unittest.TestCase):
 
         self.assertTrue(self.controller.state.negative_peek)
         self.assertTrue(painted)
-        metrics = self.controller.state.last_metrics
+        metrics = self.controller.state.peek_frame
         # No camera matrix on this source, so the display level and the encode are
         # all that separate it from the buffer the loader read. See TestNegativePeekColor
         # for the camera-native path.
@@ -5136,11 +5278,11 @@ class TestCompareFlatPeekInteraction(unittest.TestCase):
 
         self.controller.toggle_negative_peek(force=True)
 
-        painted = self.controller.state.last_metrics["base_positive"]
+        painted = self.controller.state.peek_frame["base_positive"]
         # Quarter turn swaps the axes, then the crop keeps the left half of the width.
         self.assertEqual(painted.shape, (10, 3, 3))
         # No border stage ran, so nothing may claim the frame is inset.
-        self.assertIsNone(self.controller.state.last_metrics["content_rect"])
+        self.assertIsNone(self.controller.state.peek_frame["content_rect"])
 
     def test_the_crop_tool_peeks_the_uncropped_frame(self):
         import numpy as np
@@ -5157,7 +5299,7 @@ class TestCompareFlatPeekInteraction(unittest.TestCase):
         self.controller.toggle_negative_peek(force=True)
 
         # Framing a crop against a pre-cropped frame would be impossible.
-        self.assertEqual(self.controller.state.last_metrics["base_positive"].shape, (6, 10, 3))
+        self.assertEqual(self.controller.state.peek_frame["base_positive"].shape, (6, 10, 3))
 
     def test_any_plain_render_leaves_the_negative_peek(self):
         self.controller.state.negative_peek = True
@@ -5178,7 +5320,7 @@ class TestCompareFlatPeekInteraction(unittest.TestCase):
         # A geometry op must not drop the peek, and the peek is not a render.
         rr.assert_not_called()
         self.assertTrue(self.controller.state.negative_peek)
-        self.assertIn("base_positive", self.controller.state.last_metrics)
+        self.assertIn("base_positive", self.controller.state.peek_frame)
 
 
 class TestClearThumbnailCache(unittest.TestCase):
@@ -5984,8 +6126,9 @@ class TestLibrarySearch(unittest.TestCase):
         task = self.tasks[0]
         self.assertEqual(task.roots, ["/photos"])
         self.assertEqual(task.query, "film:portra")
-        self.assertEqual(set(task.configs_by_path), {"/photos/a.nef"})
-        self.assertEqual(task.marks_by_path, {"/photos/a.nef": "keeper"})
+        self.mock_session_manager.repo.load_settings_by_path.assert_not_called()
+        self.assertEqual(set(task.load_configs()), {"/photos/a.nef"})
+        self.assertEqual(task.load_marks(), {"/photos/a.nef": "keeper"})
 
     def test_results_replace_the_session(self):
         with patch.object(self.controller, "request_asset_discovery") as discovery:
@@ -6284,8 +6427,22 @@ class TestSplashPreviewRaceGuard(unittest.TestCase):
         panel._requested_file_path = requested_path
         panel._file_hash_for_path.return_value = hash_for_path
         panel._split_active_half.return_value = ("RAW", (100, 100))
+        panel._is_stale_preview.return_value = False
         panel.state = AppState()
         return panel
+
+    def test_a_decode_from_an_earlier_load_is_dropped(self):
+        """Both halves of a scan share a path; only the generation tells their decodes apart."""
+        panel = self._panel()
+        panel._prefetch_gen = 5
+        panel._is_stale_preview = lambda g: AppController._is_stale_preview(panel, g)
+
+        AppController._on_splash_preview(panel, "a.dng", "RAW", (100, 100), 4)
+        AppController._on_preview_loaded(panel, "a.dng", "RAW", (100, 100), "sRGB", None, "", None, None, 4)
+
+        self.assertNotIn("base_positive", panel.state.last_metrics)
+        self.assertIsNone(panel.state.preview_raw)
+        panel.request_render.assert_not_called()
 
     def test_splash_skipped_once_the_real_render_for_this_file_already_landed(self):
         panel = self._panel(hash_for_path="h1")

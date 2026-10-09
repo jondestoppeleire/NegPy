@@ -348,6 +348,7 @@ class SheetLook:
     black: int = 0
     edge: EdgeStyle = EdgeStyle()
     label: str = ""
+    white_paper: bool = False
 
 
 def sheet_black(paper_black: bool) -> int:

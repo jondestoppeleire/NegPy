@@ -266,7 +266,6 @@ class CaptureWorker(QObject):
 
     @pyqtSlot(CaptureRequest)
     def run_capture(self, req: CaptureRequest) -> None:
-        self._cancel.clear()
         _t0 = time.perf_counter()
         try:
             if not self._holds_camera():
@@ -377,6 +376,11 @@ class CaptureWorker(QObject):
 
     def cancel(self) -> None:
         self._cancel.set()
+
+    def arm(self) -> None:
+        """Clears a Stop left from an earlier run. Called on the GUI thread before dispatch,
+        so a Stop pressed before the queued run starts is kept."""
+        self._cancel.clear()
 
     @pyqtSlot(str)
     def poll_light_temp(self, port: str) -> None:
@@ -563,7 +567,6 @@ class CaptureWorker(QObject):
 
     @pyqtSlot(CalibrationRequest)
     def run_calibration(self, req: CalibrationRequest) -> None:
-        self._cancel.clear()
         try:
             import tempfile
 

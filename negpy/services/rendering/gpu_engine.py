@@ -75,7 +75,7 @@ from negpy.features.process.path import RenderPath, render_path
 from negpy.infrastructure.gpu.device import GPUDevice
 from negpy.infrastructure.gpu.resources import GPUBuffer, GPUTexture
 from negpy.infrastructure.gpu.shader_loader import ShaderLoader
-from negpy.kernel.image.logic import rgba_to_rgb_into
+from negpy.kernel.image.logic import rgba_to_rgb_into, working_oetf_decode
 from negpy.kernel.system.config import APP_CONFIG
 from negpy.kernel.system.logging import get_logger
 from negpy.kernel.system.paths import get_resource_path
@@ -135,13 +135,12 @@ def _build_analysis_source(
     tiling_mode: bool,
     max_size: int,
 ) -> Tuple[np.ndarray, float]:
-    """The shared meter grid's own buffer: sliced, oriented and downsampled once for
-    every meter reading it.
+    """The shared meter grid's own buffer: oriented, downsampled, warped and sliced once
+    for every meter reading it.
 
-    Downsampled before fine rotation and keystone, not after: both are full-frame
-    resamples whose cost scales with pixel count, and only a meter reads the result,
-    so warping the full-res crop just to shrink it away spends the expensive part on
-    pixels the analysis never sees.
+    The whole frame is warped before the ROI is cut, as the CPU engine and the print
+    stage do: a crop rotated about its own centre is a different region. Downsampled
+    first, since only a meter reads the result.
     """
     analysis_source = img
     if geometry.rotation != 0:
@@ -150,22 +149,26 @@ def _build_analysis_source(
         analysis_source = np.fliplr(analysis_source)
     if geometry.flip_vertical:
         analysis_source = np.flipud(analysis_source)
+    full_h, full_w = analysis_source.shape[:2]
+    analysis_source = _downsample_for_analysis(np.ascontiguousarray(analysis_source), max_size)
+    if geometry.fine_rotation != 0.0:
+        analysis_source = apply_fine_rotation(analysis_source, geometry.fine_rotation)
+    if geometry.distortion_k1 != 0.0:
+        analysis_source = apply_radial_distortion(analysis_source, geometry.distortion_k1)
+    analysis_source = apply_keystone(analysis_source, geometry.converge_v, geometry.converge_h)
     # A freehand analysis_rect overrides the crop ROI and centered buffer, like the
     # CPU path. Tiled export uses explicit overrides, so it stays on the ROI.
-    base_roi = roi if not tiling_mode else None
+    base_roi = None
+    if roi is not None and not tiling_mode:
+        sy, sx = analysis_source.shape[0] / full_h, analysis_source.shape[1] / full_w
+        y1, y2, x1, x2 = roi
+        base_roi = (round(y1 * sy), round(y2 * sy), round(x1 * sx), round(x2 * sx))
     analysis_roi, an_buffer = resolve_analysis_region(
         analysis_source.shape, base_roi, analysis_buffer, analysis_rect if not tiling_mode else None
     )
     if analysis_roi is not None:
         ay1, ay2, ax1, ax2 = analysis_roi
         analysis_source = np.ascontiguousarray(analysis_source[ay1:ay2, ax1:ax2])
-    analysis_source = _downsample_for_analysis(analysis_source, max_size)
-    if geometry.fine_rotation != 0.0:
-        analysis_source = apply_fine_rotation(analysis_source, geometry.fine_rotation)
-    # The meters must read the frame the print stage gets. The CPU engine normalizes
-    # the keystoned buffer, so this replay has to carry it too or the two engines
-    # measure different bounds.
-    analysis_source = apply_keystone(analysis_source, geometry.converge_v, geometry.converge_h)
     return analysis_source, an_buffer
 
 
@@ -191,12 +194,8 @@ def _analysis_cache_key(settings: WorkspaceConfig, analysis_source_hash: str) ->
     White/black point offsets and trims apply downstream as uniforms and must
     not invalidate it.
 
-    Of geometry, only what selects the analyzed region: rotation and flips change
-    the buffer's own shape, crop_rect/autocrop_offset the ROI within it. Fine
-    rotation, keystone and distortion reshuffle pixels within that same region
-    (_build_analysis_source applies them to the meter's own buffer) without
-    changing what region it is, so dragging one of those sliders must not blow
-    this cache the way a creative slider does not.
+    Every geometry field that moves which pixels land in the metered region: the
+    orientation, the warps and the crop.
     """
     e = settings.exposure
     p = settings.process
@@ -224,6 +223,12 @@ def _analysis_cache_key(settings: WorkspaceConfig, analysis_source_hash: str) ->
         g.flip_vertical,
         g.crop_rect,
         g.autocrop_offset,
+        g.fine_rotation,
+        g.converge_v,
+        g.converge_h,
+        g.distortion_k1,
+        g.crop_to_valid,
+        g.crop_from_auto,
         e.cast_removal_strength > 0.0,
         e.auto_exposure,
         e.auto_normalize_contrast,
@@ -356,6 +361,8 @@ class GPUEngine:
         self._last_full_frame: bool = False
         # (radius, scale_factor) of the sharpen taps currently in sharpen_k.
         self._sharpen_kernel_key: Optional[tuple] = None
+        # (method, radius, dims) of the blur state in the sharpen textures; None once their input moved.
+        self._sharpen_state_key: Optional[tuple] = None
 
         # Bind groups reference resources, not contents, so they survive across frames.
         # Cache and reuse them (cleared in cleanup()): about 28 fewer wgpu calls per frame.
@@ -449,10 +456,11 @@ class GPUEngine:
         self._tex_gen[key] = self._render_gen
         return self._tex_cache[key]
 
-    def evict_stale_textures(self) -> None:
-        """Drop pool textures untouched by the previous render. Bounds batch-export
-        VRAM: a same-dimensions roll keeps its chain, a dimension change frees the
-        old one a render later."""
+    def evict_stale_textures(self, destroy: bool = True) -> None:
+        """Drop pool textures untouched by the previous render. Bounds VRAM: a
+        same-dimensions roll keeps its chain, a dimension change frees the old one a
+        render later. A preview passes destroy=False, since the canvas may still sample
+        an evicted texture; it is then freed when its last reference goes."""
         self._render_gen += 1
         stale = [k for k, gen in self._tex_gen.items() if gen < self._render_gen - 1]
         if not stale:
@@ -460,8 +468,16 @@ class GPUEngine:
         for key in stale:
             tex = self._tex_cache.pop(key, None)
             self._tex_gen.pop(key, None)
-            if tex is not None:
+            if tex is not None and destroy:
                 tex.destroy()
+        # A new texture under the same key starts empty, so its upload must not be skipped.
+        labels = {key[3] for key in stale}
+        if labels & {"local_ev", "local_key"}:
+            self._local_ev_key = None
+        if labels & {"rl_a", "rl_b", "sharpen_h", "sharpen_v"}:
+            self._sharpen_state_key = None
+        if "contrast_mask" in labels:
+            self._mask_tex_key = None
         # Bind groups keyed by id() never match a destroyed view again; drop, don't leak.
         self._bind_group_cache.clear()
 
@@ -487,6 +503,7 @@ class GPUEngine:
         self._last_settings = None
         self._local_ev_key = None
         self._mask_tex_key = None
+        self._sharpen_state_key = None
 
     def _init_resources(self) -> None:
         """Initializes hardware pipelines and persistent buffers."""
@@ -728,12 +745,14 @@ class GPUEngine:
             prefilter_key = (
                 (
                     analysis_source_hash,
-                    # roi already reflects rotation/crop_rect/autocrop_offset; flips are the
-                    # one region-selecting field it doesn't carry. Fine rotation, keystone and
-                    # distortion reshuffle pixels within the region without changing it, so
-                    # they must not blow this cache the way a creative slider does not.
+                    # roi already reflects rotation/crop_rect/autocrop_offset; flips and the
+                    # warps move pixels without changing it.
                     settings.geometry.flip_horizontal,
                     settings.geometry.flip_vertical,
+                    settings.geometry.fine_rotation,
+                    settings.geometry.converge_v,
+                    settings.geometry.converge_h,
+                    settings.geometry.distortion_k1,
                     roi,
                     p.analysis_buffer,
                     p.analysis_rect,
@@ -878,7 +897,15 @@ class GPUEngine:
                     mask_key = ("tiled",)
                     mask_rect = (frame[0] - global_offset[0], frame[1] - global_offset[1], frame[2], frame[3])
             else:
-                mask_key = (analysis_key, bounds, roi, (h_rot, w_rot), settings.exposure.mask_spacer)
+                geo = settings.geometry
+                mask_key = (
+                    analysis_key,
+                    bounds,
+                    roi,
+                    (h_rot, w_rot),
+                    settings.exposure.mask_spacer,
+                    (geo.rotation, geo.fine_rotation, geo.flip_horizontal, geo.flip_vertical, geo.converge_v, geo.converge_h, k1_eff),
+                )
                 if self._mask_plane is None or self._mask_plane[0] != mask_key:
                     self._mask_plane = (
                         mask_key,
@@ -1072,7 +1099,7 @@ class GPUEngine:
             )
             if wants_ev_map:
                 # This stage re-runs for any exposure change, but the map only moves
-                # with the masks, the geometry and the grade.
+                # with the masks and the geometry; the shader applies the grade.
                 tiled_maps = local_maps is not None
                 raster_key = (
                     settings.local,
@@ -1087,8 +1114,7 @@ class GPUEngine:
                     w_rot,
                     h_rot,
                 )
-                ev_key = (raster_key, settings.exposure.grade)
-                if tiled_maps or self._local_ev_key != ev_key:
+                if tiled_maps or self._local_ev_key != raster_key:
                     if local_maps is None:
                         if self._local_maps_cache is not None and self._local_maps_cache[0] == raster_key:
                             local_maps = self._local_maps_cache[1]
@@ -1107,29 +1133,19 @@ class GPUEngine:
                                 converge_h=settings.geometry.converge_h,
                             )
                             self._local_maps_cache = (raster_key, local_maps)
-                    from negpy.features.exposure.logic import local_grade_factor_map
-
                     if local_maps is None:
                         local_maps = np.zeros((h_rot, w_rot, 2), dtype=np.float32)
                     ev_plane = local_maps[:, :, 0]
-                    # r = dodge/burn EV, g = local grade slope factor, b = its ISO-R deltas,
-                    # which tone-limited masks add their grade to. One texture, so the
-                    # local-grade map costs no bind slot.
-                    tex_local_ev.upload(
-                        np.dstack(
-                            [
-                                ev_plane,
-                                local_grade_factor_map(local_maps[:, :, 1], settings.exposure.grade),
-                                local_maps[:, :, 1],
-                            ]
-                        )
-                    )
+                    # r = dodge/burn EV, b = local grade ISO-R deltas, which tone-limited masks
+                    # add their grade to; g is unused. One texture, so the local-grade map
+                    # costs no bind slot.
+                    tex_local_ev.upload(np.dstack([ev_plane, np.zeros_like(ev_plane), local_maps[:, :, 1]]))
                     if local_maps.shape[2] > 2:
                         planes = np.zeros((*ev_plane.shape, MAX_KEYED_MASKS), dtype=np.float32)
                         planes[:, :, : local_maps.shape[2] - 2] = local_maps[:, :, 2:]
                         tex_local_key.upload(planes)
                     # A tiled export passes a per-tile slice, which is not reusable.
-                    self._local_ev_key = None if tiled_maps else ev_key
+                    self._local_ev_key = None if tiled_maps else raster_key
             if render_path(settings.process) is not RenderPath.PRINT:
                 # The transfer curve takes no dodge/burn map: local EV is a print-exposure
                 # input, and this path replaces the print.
@@ -1197,19 +1213,27 @@ class GPUEngine:
         else:
             prev_tex = tex_expo
 
+        if start_stage <= 2:
+            self._sharpen_state_key = None
         if start_stage <= 4:
             # Sharpen state (USM blur, or RL deconvolution) feeds the lab pass. A 1x1 dummy
-            # keeps binding 3 valid when sharpening is off.
+            # keeps binding 3 valid when sharpening is off. The blur reads only its input,
+            # the radius and the kernel, so a lab-only change reuses the last one.
             usage = wgpu.TextureUsage.STORAGE_BINDING | wgpu.TextureUsage.TEXTURE_BINDING
             lab_u = self._get_uniform_binding("lab")
+            sharpen_key = (settings.lab.sharpen_method, float(settings.lab.sharpen_radius), w_rot, h_rot)
+            blur_current = sharpen_key == self._sharpen_state_key
+            if settings.lab.sharpen > 0:
+                self._sharpen_state_key = sharpen_key
             if settings.lab.sharpen > 0 and settings.lab.sharpen_method == SharpenMethod.RL:
                 # Iterative RL: ping-pong two textures through init + N x (blur_h, div_v,
                 # blur_h, mult_v). The final estimate lands back in rl_a.
                 tex_rl_a = self._get_intermediate_texture(w_rot, h_rot, usage, "rl_a")
                 tex_rl_b = self._get_intermediate_texture(w_rot, h_rot, usage, "rl_b")
-                self._dispatch_pass(enc, "rl_init", [(0, prev_tex.view), (1, tex_rl_a.view)], w_rot, h_rot)
+                if not blur_current:
+                    self._dispatch_pass(enc, "rl_init", [(0, prev_tex.view), (1, tex_rl_a.view)], w_rot, h_rot)
                 sk = self._buffers["sharpen_k"]
-                for _ in range(rl_iterations(settings.lab.sharpen_radius)):
+                for _ in range(0 if blur_current else rl_iterations(settings.lab.sharpen_radius)):
                     self._dispatch_pass(enc, "rl_blur_h", [(0, tex_rl_a.view), (1, tex_rl_b.view), (2, lab_u), (3, sk)], w_rot, h_rot)
                     self._dispatch_pass(enc, "rl_div_v", [(0, tex_rl_b.view), (1, tex_rl_a.view), (2, lab_u), (3, sk)], w_rot, h_rot)
                     self._dispatch_pass(enc, "rl_blur_h", [(0, tex_rl_a.view), (1, tex_rl_b.view), (2, lab_u), (3, sk)], w_rot, h_rot)
@@ -1218,30 +1242,14 @@ class GPUEngine:
             elif settings.lab.sharpen > 0:
                 tex_sharpen_h = self._get_intermediate_texture(w_rot, h_rot, usage, "sharpen_h")
                 tex_sharpen_v = self._get_intermediate_texture(w_rot, h_rot, usage, "sharpen_v")
-                self._dispatch_pass(
-                    enc,
-                    "lab_sharpen_h",
-                    [
-                        (0, prev_tex.view),
-                        (1, tex_sharpen_h.view),
-                        (2, lab_u),
-                        (3, self._buffers["sharpen_k"]),
-                    ],
-                    w_rot,
-                    h_rot,
-                )
-                self._dispatch_pass(
-                    enc,
-                    "lab_sharpen_v",
-                    [
-                        (0, tex_sharpen_h.view),
-                        (1, tex_sharpen_v.view),
-                        (2, lab_u),
-                        (3, self._buffers["sharpen_k"]),
-                    ],
-                    w_rot,
-                    h_rot,
-                )
+                if not blur_current:
+                    sk = self._buffers["sharpen_k"]
+                    self._dispatch_pass(
+                        enc, "lab_sharpen_h", [(0, prev_tex.view), (1, tex_sharpen_h.view), (2, lab_u), (3, sk)], w_rot, h_rot
+                    )
+                    self._dispatch_pass(
+                        enc, "lab_sharpen_v", [(0, tex_sharpen_h.view), (1, tex_sharpen_v.view), (2, lab_u), (3, sk)], w_rot, h_rot
+                    )
             else:
                 tex_sharpen_v = self._get_intermediate_texture(1, 1, usage, "sharpen_v")
             self._dispatch_pass(
@@ -1693,7 +1701,13 @@ class GPUEngine:
                 settings.exposure.highlight_yellow * t_cmy_m,
                 float(t_wb_k),
             )
-            + struct.pack("ffff", float(ZONE_BLACK_TAPER), 1.0 if t_positive_source else 0.0, 0.0, 0.0)
+            + struct.pack(
+                "ffff",
+                float(ZONE_BLACK_TAPER),
+                1.0 if t_positive_source else 0.0,
+                math.radians(float(settings.process.hue_trim)),
+                0.0,
+            )
             + struct.pack("ffff", t_cast_gain[0], t_cast_gain[1], t_cast_gain[2], 0.0)
             + struct.pack(
                 "ffff",
@@ -2065,7 +2079,8 @@ class GPUEngine:
 
         pw, ph, cw, ch, ox, oy, _ = self._calculate_layout_dims(settings, crop_w, crop_h, render_size_ref)
         color_hex = PrintService.effective_border_color(settings.finish, settings.toning).lstrip("#")
-        bg = tuple(int(color_hex[i : i + 2], 16) / 255.0 for i in (0, 2, 4))
+        # The layout pass writes scene-linear values that output_encode encodes after it.
+        bg = tuple(float(v) for v in working_oetf_decode(np.array([int(color_hex[i : i + 2], 16) / 255.0 for i in (0, 2, 4)], np.float32)))
         scale = float(cw) / max(1.0, float(crop_w))
         y_data = (
             struct.pack("ffffii", bg[0], bg[1], bg[2], 1.0, ox, oy) + struct.pack("iiii", cw, ch, crop_w, crop_h) + struct.pack("f", scale)
@@ -2135,12 +2150,13 @@ class GPUEngine:
             off_y = PrintService.weighted_offset_y(paper_h, content_h, border_px, border_bottom_px)
         else:
             if settings.export.paper_aspect_ratio == AspectRatio.ORIGINAL:
+                # Same formulas as PrintService.apply_layout, or the mat gains a 1 px line.
                 if cw >= ch:
-                    content_w = max(1, paper_long_px - 2 * border_px)
-                    content_h = max(1, int(ch * (content_w / cw)))
+                    content_w = max(10, paper_long_px - 2 * border_px)
+                    content_h = max(1, int(content_w / (cw / ch)))
                 else:
-                    content_h = max(1, paper_long_px - border_y_px)
-                    content_w = max(1, int(cw * (content_h / ch)))
+                    content_h = max(10, paper_long_px - border_y_px)
+                    content_w = max(1, int(content_h * (cw / ch)))
                 paper_w, paper_h = content_w + 2 * border_px, content_h + border_y_px
                 off_x, off_y = border_px, border_px
             else:
@@ -2150,9 +2166,8 @@ class GPUEngine:
                     cw,
                     ch,
                 )
-                inner_w, inner_h = paper_w - 2 * border_px, paper_h - border_y_px
-                scale = min(inner_w / cw, inner_h / ch)
-                content_w, content_h = int(cw * scale), int(ch * scale)
+                inner_w, inner_h = max(10, paper_w - 2 * border_px), max(10, paper_h - border_y_px)
+                content_w, content_h = PrintService.fit_content(cw, ch, inner_w, inner_h)
 
                 off_x = (paper_w - content_w) // 2
                 off_y = PrintService.weighted_offset_y(paper_h, content_h, border_px, border_bottom_px)
@@ -2619,6 +2634,9 @@ class GPUEngine:
             halo = max(halo, int(np.ceil(max(3.0, 15.0 * scale_factor))))
         if settings.lab.halation_strength > 0.0:
             halo = max(halo, int(np.ceil(max(5.0, 25.0 * scale_factor))))
+        # Chroma Denoise taps reach 2 * chroma_denoise * scale_factor px (lab.wgsl).
+        if settings.lab.chroma_denoise > 0.0:
+            halo = max(halo, int(np.ceil(2.0 * settings.lab.chroma_denoise * scale_factor)) + 1)
         halo = min(halo, 512)
 
         # Opt-in (AppConfig.low_vram_export_tiling, off by default): a smaller tile
@@ -2634,6 +2652,7 @@ class GPUEngine:
         # deferring the map_sync by one tile is safe and overlaps the wait.
         pending: Optional[tuple] = None
         tile_index = 0
+        pooled_shape: Optional[tuple] = None  # low VRAM: the one tile input shape the pool holds
         for ty in range(0, crop_h, tile_size):
             for tx in range(0, crop_w, tile_size):
                 tw, th = min(tile_size, crop_w - tx), min(tile_size, crop_h - ty)
@@ -2644,6 +2663,9 @@ class GPUEngine:
                 )
                 maps_tile = np.ascontiguousarray(local_maps_rot[iy1:iy2, ix1:ix2]) if local_maps_rot is not None else None
                 ox, oy = x1 + tx - ix1, y1 + ty - iy1
+                if low_vram and pooled_shape not in (None, (iy2 - iy1, ix2 - ix1)):
+                    self._release_texture_pool()
+                pooled_shape = (iy2 - iy1, ix2 - ix1)
                 tile_res, _ = self.process_to_texture(
                     img_rot[iy1:iy2, ix1:ix2],
                     settings,
@@ -2669,7 +2691,6 @@ class GPUEngine:
                 handle = self._submit_readback(tile_res, slot=0 if low_vram else tile_index % 2)
                 if low_vram:
                     self._resolve_readback(handle, full_source_res[ty : ty + th, tx : tx + tw], (oy, ox))
-                    self._release_texture_pool()
                 else:
                     if pending is not None:
                         p_handle, p_ty, p_tx, p_th, p_tw, p_oy, p_ox = pending
@@ -2679,6 +2700,8 @@ class GPUEngine:
         if pending is not None:
             p_handle, p_ty, p_tx, p_th, p_tw, p_oy, p_ox = pending
             self._resolve_readback(p_handle, full_source_res[p_ty : p_ty + p_th, p_tx : p_tx + p_tw], (p_oy, p_ox))
+        if low_vram:
+            self._release_texture_pool()
 
         # Mirrors PrintService.apply_layout: only INTER_AREA is area-correct on a shrink.
         shrinking = content_w < crop_w or content_h < crop_h
@@ -2697,7 +2720,7 @@ class GPUEngine:
             result = scaled_content
         else:
             result = np.zeros((paper_h, paper_w, 3), dtype=np.float32)
-            color_hex = settings.finish.border_color.lstrip("#")
+            color_hex = PrintService.effective_border_color(settings.finish, settings.toning).lstrip("#")
             result[:] = tuple(int(color_hex[i : i + 2], 16) / 255.0 for i in (0, 2, 4))
             result[off_y : off_y + content_h, off_x : off_x + content_w] = scaled_content
         metrics_ref["base_positive"] = result
