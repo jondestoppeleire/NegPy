@@ -64,6 +64,67 @@ def test_correction_flattens_uneven_illumination(gain_store):
     assert corrected.dtype == np.float32
 
 
+def test_carrier_edge_in_reference_does_not_overcorrect():
+    h, w = 128, 192
+    clean = _radial_falloff(h, w)
+    banded = clean.copy()
+    banded[-6:] = 0.01  # dark carrier band along the bottom edge
+
+    expected = clean * ff.compute_gain(clean)
+    corrected = banded * ff.compute_gain(banded)
+    ratio = corrected[:-10] / expected[:-10]
+    assert np.abs(ratio / np.median(ratio) - 1.0).max() < 0.05
+
+
+def test_half_lit_carrier_on_the_image_border_is_masked():
+    h, w = 128, 192
+    clean = _radial_falloff(h, w)
+    edged = clean.copy()
+    edged[0] *= 0.3  # carrier lip on the outermost row, partly lit
+
+    ratio = (edged * ff.compute_gain(edged))[2:] / (clean * ff.compute_gain(clean))[2:]
+    assert np.abs(ratio / np.median(ratio) - 1.0).max() < 0.01
+
+
+def test_carrier_filling_most_of_the_reference_is_masked():
+    h, w = 128, 192
+    reference = np.full((h, w, 3), 0.01, dtype=np.float32)
+    reference[20:108, 40:120] = _radial_falloff(88, 80)  # opening covers under half the frame
+
+    corrected = reference * ff.compute_gain(reference)
+    opening = corrected[24:104, 44:116]
+    assert opening.max() / opening.min() < 1.5
+
+
+def test_gain_far_from_the_opening_stays_bounded():
+    h, w = 128, 192
+    reference = np.full((h, w, 3), 0.01, dtype=np.float32)
+    reference[40:88, 60:132] = 1.0
+
+    gain = ff.compute_gain(reference)
+    assert gain.max() < 1.5
+
+
+def test_border_free_reference_matches_the_unmasked_gain():
+    import cv2
+
+    reference = _radial_falloff(128, 192)
+    sigma = 192 / 16.0
+    blur = cv2.GaussianBlur(reference, (0, 0), sigmaX=sigma, sigmaY=sigma)
+    unmasked = blur.reshape(-1, 3).mean(axis=0) / blur
+
+    np.testing.assert_allclose(ff.compute_gain(reference), unmasked, rtol=0.01)
+
+
+def test_almost_all_dark_reference_uses_the_whole_frame():
+    reference = np.full((128, 192, 3), 0.01, dtype=np.float32)
+    reference[60:63, 90:93] = 1.0
+
+    gain = ff.compute_gain(reference)
+    assert np.isfinite(gain).all()
+    assert gain.min() >= 0.25 and gain.max() <= 4.0
+
+
 def test_gain_resized_to_image(gain_store):
     # Gain baked at one size must resize to a differently-sized working image.
     gain_store("rig", _radial_falloff(64, 64))
