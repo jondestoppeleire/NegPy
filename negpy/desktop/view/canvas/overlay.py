@@ -1034,7 +1034,7 @@ class CanvasOverlay(QWidget):
             and self._tool_mode not in UNCROPPED_PREVIEW_TOOLS
             and not self.state.last_metrics.get("crop_preview_full")
         ):
-            d = visible_rect
+            d = self._content_view_rect()
             margin_w = d.width() * self._buffer_overlay_ratio
             margin_h = d.height() * self._buffer_overlay_ratio
             inner = QRectF(d.x() + margin_w, d.y() + margin_h, d.width() - 2 * margin_w, d.height() - 2 * margin_h)
@@ -1130,7 +1130,7 @@ class CanvasOverlay(QWidget):
             self._draw_rotation_grid(painter, visible_rect)
 
         if self._crop_preview_visible and self._crop_preview_rect:
-            self._draw_crop_preview(painter, visible_rect)
+            self._draw_crop_preview(painter, self._content_view_rect())
 
         # Keyed off the stashed baseline, not state.compare_mode: the toggle flips before its
         # render lands, and half a split with no before frame is just the edit.
