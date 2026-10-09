@@ -5165,6 +5165,41 @@ class TestCompareFlatPeekInteraction(unittest.TestCase):
         _, kwargs = rr.call_args
         self.assertEqual(kwargs.get("config_override"), flat_master_config(self.controller.state.config))
 
+    def test_an_edit_ends_flat_peek(self):
+        """The debounced render after an edit paints the print, so the badge and the
+        toolbar button must go off with it, and one press of M turns the peek back on."""
+        from negpy.features.exposure.models import RenderIntent
+
+        self.controller.state.flat_peek = True
+        seen: list = []
+        self.controller.flat_peek_changed.connect(seen.append)
+        dispatched: list = []
+        self.controller.render_requested.connect(dispatched.append)
+        self.controller.request_render()
+        self.assertFalse(self.controller.state.flat_peek)
+        self.assertEqual(seen, [False])
+        self.assertFalse(dispatched[-1].config_override)
+
+        self.controller._is_rendering = False
+        self.controller.toggle_flat_peek()
+        self.assertTrue(self.controller.state.flat_peek)
+        self.assertEqual(dispatched[-1].config.exposure.render_intent, RenderIntent.FLAT)
+
+    def test_a_frame_switch_ends_flat_peek(self):
+        import numpy as np
+
+        self.controller.preview_load_requested.disconnect(self.controller.preview_load_worker.process)
+        self.controller.state.flat_peek = True
+        seen: list = []
+        self.controller.flat_peek_changed.connect(seen.append)
+        self.controller.load_file("next.arw")
+        self.assertFalse(self.controller.state.flat_peek)
+        self.assertEqual(seen, [False])
+        # Once the new frame's decode lands, one press turns it back on.
+        self.controller.state.preview_raw = np.empty((8, 8, 3), dtype=np.float32)
+        self.controller.toggle_flat_peek()
+        self.assertTrue(self.controller.state.flat_peek)
+
     def test_rerender_active_view_is_a_plain_render_when_no_overlay(self):
         with patch.object(self.controller, "request_render") as rr:
             self.controller.rerender_active_view()

@@ -38,7 +38,7 @@ Drag a panel by its top edge (the strip above Session, or the margin around the 
 
 ### Peek Negative
 
-The toolbar's film button (or `N`) shows the scan as loaded: not inverted, not metered, no edits; crop, rotation and flip still apply. Use it to check density, mask color and scanner clipping. It is scaled to its brightest tone, so read density from the density histogram, not the brightness. Touching a control closes it; a crop drag closes it on release.
+The toolbar's film button (or `N`) shows the scan as loaded: not inverted, not metered, no edits; crop, rotation and flip still apply. Use it to check density, mask color and scanner clipping. It is scaled to its brightest tone, so read density from the density histogram, not the brightness. It stays up while you edit. A frame change closes it, and so does a crop, straighten or keystone when you commit it.
 
 ### Peek Embedded Preview
 
@@ -940,7 +940,7 @@ A gear library for Metadata (§11), Roll Settings and every gear picker. **My Ge
 
 *   **Print** (default): the look you see on screen.
 *   **Flat**: a neutral, low-contrast master for editing elsewhere. It skips the print look, effects, toning and vignette, and writes a 16-bit TIFF, or lossless JPEG XL when JXL is selected with sRGB, P3, Rec 2020 or Grayscale.
-    *   **Preview Flat**: show the flat master on the canvas.
+    *   **Preview Flat**: show the flat master on the canvas. Rotation and flip keep it up; any other edit or a frame change closes it.
     *   **Roll Analysis** (Roll tab): share one exposure baseline across all visible frames so flat masters match. Run it before a flat batch.
 *   **Linear**: write the decoded buffer as linear 16-bit, with rotation, flip and only the corrections turned on below. **TIFF** (default, untagged) or **JPEG XL** (lossless; always tagged with sRGB primaries, wrong for native primaries). **Effort** (1 to 9, default 7) trades JPEG XL speed for size.
     *   **Pakon RAW**: 4× expansion by default; F335 files (16-bit sensor) none.
