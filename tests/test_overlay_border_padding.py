@@ -41,3 +41,20 @@ def test_the_crop_to_valid_wedge_grows_out_of_the_picture() -> None:
     overlay._draw_ui(painter)
     top = _rects(painter)[0]
     assert top.bottom() == 10.0  # the wedge ends at the picture's top edge, not the border's
+
+
+def test_a_zoom_mid_drag_keeps_the_exclusion_stroke_and_the_rotate_handle_on_the_image() -> None:
+    from PyQt6.QtCore import QPointF
+
+    overlay = CanvasOverlay(AppState())
+    old = QRectF(0, 0, 200, 100)
+    overlay._view_rect = QRectF(-100, -50, 400, 200)  # zoomed 2x about the centre
+    overlay._exclude_drag_pts = [QPointF(50, 25)]
+    overlay._rotate_center = QPointF(100, 50)
+    overlay._rotate_press = QPointF(150, 50)
+
+    overlay._remap_inflight_points(old)
+
+    assert overlay._exclude_drag_pts == [QPointF(0, 0)]
+    assert overlay._rotate_center == QPointF(100, 50)
+    assert overlay._rotate_press == QPointF(200, 50)

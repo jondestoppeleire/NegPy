@@ -797,6 +797,12 @@ class CanvasOverlay(QWidget):
             self._scratch_pts = [remap(p) for p in self._scratch_pts]
         if self._heal_drag_pts:
             self._heal_drag_pts = [remap(p) for p in self._heal_drag_pts]
+        if self._exclude_drag_pts:
+            self._exclude_drag_pts = [remap(p) for p in self._exclude_drag_pts]
+        if self._rotate_center is not None:
+            self._rotate_center = remap(self._rotate_center)
+        if self._rotate_press is not None:
+            self._rotate_press = remap(self._rotate_press)
         if self._local_edit_verts is not None:
             self._local_edit_verts = [remap(p) for p in self._local_edit_verts]
         if self._straighten_p1 is not None:
