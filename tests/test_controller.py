@@ -6020,8 +6020,9 @@ class TestLibrarySearch(unittest.TestCase):
         task = self.tasks[0]
         self.assertEqual(task.roots, ["/photos"])
         self.assertEqual(task.query, "film:portra")
-        self.assertEqual(set(task.configs_by_path), {"/photos/a.nef"})
-        self.assertEqual(task.marks_by_path, {"/photos/a.nef": "keeper"})
+        self.mock_session_manager.repo.load_settings_by_path.assert_not_called()
+        self.assertEqual(set(task.load_configs()), {"/photos/a.nef"})
+        self.assertEqual(task.load_marks(), {"/photos/a.nef": "keeper"})
 
     def test_results_replace_the_session(self):
         with patch.object(self.controller, "request_asset_discovery") as discovery:

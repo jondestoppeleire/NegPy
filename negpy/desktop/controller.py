@@ -1764,8 +1764,8 @@ class AppController(QObject):
             LibrarySearchTask(
                 roots=roots,
                 query=query,
-                configs_by_path=self.session.repo.load_settings_by_path(),
-                marks_by_path=self.session.repo.load_file_marks_by_path(),
+                load_configs=self.session.repo.load_settings_by_path,
+                load_marks=self.session.repo.load_file_marks_by_path,
                 rewalk=rewalk,
             )
         )
