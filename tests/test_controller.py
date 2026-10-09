@@ -5149,7 +5149,7 @@ class TestFlatFieldPeek(unittest.TestCase):
         self.assertIs(self.controller.state.last_metrics["base_positive"], print_buffer, "the print stays in last_metrics")
         view = self.controller.state.peek_frame["base_positive"]
         h, w = view.shape[:2]
-        # 0.2 of the view is 2% of the source: the gain is too smooth to follow the outer pixels.
+        # 0.2 of the view is 4% of the source: the gain is too smooth to follow the outer pixels.
         self.assertLess(np.abs(view[h // 5 : -h // 5, w // 5 : -w // 5] - 0.5).max(), 0.2)
         self.assertFalse(self.controller.state.peek_frame["proof"])
         self.assertIn("Check Flat Field 'Rig'", seen[-1])

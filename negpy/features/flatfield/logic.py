@@ -39,7 +39,7 @@ _MIN_LIT_WEIGHT = 0.05
 # that self-corrects to a wider spread than UNEVEN_LIMIT gets a warning at bake.
 # The limit sits above the shortfall a smooth gain leaves at the frame edge on a steep
 # falloff, so a good flat does not warn.
-EVENNESS_RANGE = 0.05
+EVENNESS_RANGE = 0.10
 GAIN_VIEW_RANGE = 0.15
 UNEVEN_LIMIT = 0.06
 # A linear decode puts the sensor's white level near 1.0; more than _CLIP_FRACTION of lit
