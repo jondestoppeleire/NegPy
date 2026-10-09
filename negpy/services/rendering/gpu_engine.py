@@ -2666,6 +2666,7 @@ class GPUEngine:
         # deferring the map_sync by one tile is safe and overlaps the wait.
         pending: Optional[tuple] = None
         tile_index = 0
+        pooled_shape: Optional[tuple] = None  # low VRAM: the one tile input shape the pool holds
         for ty in range(0, crop_h, tile_size):
             for tx in range(0, crop_w, tile_size):
                 tw, th = min(tile_size, crop_w - tx), min(tile_size, crop_h - ty)
@@ -2676,6 +2677,9 @@ class GPUEngine:
                 )
                 maps_tile = np.ascontiguousarray(local_maps_rot[iy1:iy2, ix1:ix2]) if local_maps_rot is not None else None
                 ox, oy = x1 + tx - ix1, y1 + ty - iy1
+                if low_vram and pooled_shape not in (None, (iy2 - iy1, ix2 - ix1)):
+                    self._release_texture_pool()
+                pooled_shape = (iy2 - iy1, ix2 - ix1)
                 tile_res, _ = self.process_to_texture(
                     img_rot[iy1:iy2, ix1:ix2],
                     settings,
@@ -2701,7 +2705,6 @@ class GPUEngine:
                 handle = self._submit_readback(tile_res, slot=0 if low_vram else tile_index % 2)
                 if low_vram:
                     self._resolve_readback(handle, full_source_res[ty : ty + th, tx : tx + tw], (oy, ox))
-                    self._release_texture_pool()
                 else:
                     if pending is not None:
                         p_handle, p_ty, p_tx, p_th, p_tw, p_oy, p_ox = pending
@@ -2711,6 +2714,8 @@ class GPUEngine:
         if pending is not None:
             p_handle, p_ty, p_tx, p_th, p_tw, p_oy, p_ox = pending
             self._resolve_readback(p_handle, full_source_res[p_ty : p_ty + p_th, p_tx : p_tx + p_tw], (p_oy, p_ox))
+        if low_vram:
+            self._release_texture_pool()
 
         # Mirrors PrintService.apply_layout: only INTER_AREA is area-correct on a shrink.
         shrinking = content_w < crop_w or content_h < crop_h
