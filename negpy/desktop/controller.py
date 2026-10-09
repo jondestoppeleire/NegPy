@@ -1389,8 +1389,23 @@ class AppController(QObject):
         self._active_batch_title = title
         self._active_batch_abortable = abortable
         self._active_batch_token = self._batch_serial
+        worker = self._batch_worker(owner)
+        if worker is not None:
+            worker.arm()
         self.batch_started.emit(title, abortable)
         return self._active_batch_token
+
+    def _batch_worker(self, owner: str) -> Any:
+        return {
+            "export": self.export_worker,
+            "contact_sheet": self.export_worker,
+            "normalization": self.norm_worker,
+            "stitch": self.stitch_worker,
+            "hdr": self.hdr_worker,
+            "frame_merge": self.frame_merge_worker,
+            "embeddings": self.embedding_worker,
+            "library_index": self.embedding_worker,
+        }.get(owner)
 
     def _batch_busy(self, requested: str) -> bool:
         if self._active_batch is None:
@@ -6017,6 +6032,7 @@ class AppController(QObject):
         """Start a capture; the Scanlight sidebar tracks state via signals."""
         self._ensure_capture_thread()
         self._last_capture_req = req
+        self.capture_worker.arm()
         self.capture_requested.emit(req)
 
     def cancel_capture(self) -> None:
@@ -6051,6 +6067,7 @@ class AppController(QObject):
 
     def start_calibration(self, req: CalibrationRequest) -> None:
         self._ensure_capture_thread()
+        self.capture_worker.arm()
         self.calibration_requested.emit(req)
 
     def poll_connection(self, port: str) -> None:

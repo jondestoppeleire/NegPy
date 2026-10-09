@@ -1884,6 +1884,11 @@ class NormalizationWorker(QObject):
         """Requests the running analysis stop; no baseline is applied."""
         self._cancel.set()
 
+    def arm(self) -> None:
+        """Clears a Stop left from an earlier run. Called on the GUI thread before dispatch,
+        so a Stop pressed before the queued run starts is kept."""
+        self._cancel.clear()
+
     @pyqtSlot(NormalizationTask)
     def process(self, task: NormalizationTask) -> None:
         """
@@ -1907,7 +1912,6 @@ class NormalizationWorker(QObject):
         from negpy.features.process.models import ProcessMode
         from negpy.features.geometry.processor import GeometryProcessor
 
-        self._cancel.clear()
         total = len(task.frames)
         limit = max(1, APP_CONFIG.max_workers // 2)
         semaphore = asyncio.Semaphore(limit)

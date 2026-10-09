@@ -294,6 +294,11 @@ class ExportWorker(QObject):
         """Requests the running batch stop after the current file (keeps partial output)."""
         self._cancel.set()
 
+    def arm(self) -> None:
+        """Clears a Stop left from an earlier run. Called on the GUI thread before dispatch,
+        so a Stop pressed before the queued run starts is kept."""
+        self._cancel.clear()
+
     @pyqtSlot(list)
     def run_batch(self, tasks: List[ExportTask]) -> None:
         """Processes an ordered list of export tasks, pipelined: the prefetcher
@@ -301,7 +306,6 @@ class ExportWorker(QObject):
         render while the current one renders. One finish in flight, so at most
         two full-res buffers are held. A failed file never stops the batch, and every
         exit emits `finished` or `cancelled`: that releases the batch lane."""
-        self._cancel.clear()
         self._written = set()
         total = len(tasks)
         finisher = ThreadPoolExecutor(max_workers=1)
@@ -482,7 +486,6 @@ class ExportWorker(QObject):
         run_batch: linear output bypasses the render pipeline and the export settings."""
         from negpy.services.export.linear_output import export_linear_output
 
-        self._cancel.clear()
         total = len(tasks)
         try:
             for i, task in enumerate(tasks):
@@ -509,7 +512,6 @@ class ExportWorker(QObject):
 
         Every exit emits `finished` or `cancelled`: that releases the batch lane.
         """
-        self._cancel.clear()
         parts: list[str] = []
         try:
             geometry = film_geometry(job.format, job.frame_size)
