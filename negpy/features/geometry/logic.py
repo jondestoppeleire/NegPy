@@ -1679,6 +1679,7 @@ def _radial_center(w: int, h: int) -> Tuple[float, float, float]:
     return (w - 1) * 0.5, (h - 1) * 0.5, 0.5 * math.hypot(w, h)
 
 
+@lru_cache(maxsize=32)
 def compute_distortion_scale(k1: float, w: int, h: int, _samples: int = 128) -> float:
     """Largest scale at which the output frame still maps fully inside the input — fills
     the frame without empty/replicated borders. Numeric, so it's sign-agnostic (the

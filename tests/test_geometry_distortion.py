@@ -198,3 +198,12 @@ def test_cpu_gpu_distortion_parity(k1):
     assert cpu.shape == gpu.shape
     mad = float(np.mean(np.abs(cpu - gpu)))
     assert mad < 0.02, f"mean abs diff {mad:.4f}"
+
+
+def test_mapping_many_points_solves_the_distortion_scale_once():
+    from negpy.features.geometry import logic
+
+    logic.compute_distortion_scale.cache_clear()
+    for i in range(50):
+        logic.map_point_radial(10.0 + i, 20.0, 0.07, 641, 479)
+    assert logic.compute_distortion_scale.cache_info().misses == 1
