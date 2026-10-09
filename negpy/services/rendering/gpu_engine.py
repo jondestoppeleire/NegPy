@@ -361,6 +361,8 @@ class GPUEngine:
         self._last_full_frame: bool = False
         # (radius, scale_factor) of the sharpen taps currently in sharpen_k.
         self._sharpen_kernel_key: Optional[tuple] = None
+        # (method, radius, dims) of the blur state in the sharpen textures; None once their input moved.
+        self._sharpen_state_key: Optional[tuple] = None
 
         # Bind groups reference resources, not contents, so they survive across frames.
         # Cache and reuse them (cleared in cleanup()): about 28 fewer wgpu calls per frame.
@@ -472,6 +474,8 @@ class GPUEngine:
         labels = {key[3] for key in stale}
         if labels & {"local_ev", "local_key"}:
             self._local_ev_key = None
+        if labels & {"rl_a", "rl_b", "sharpen_h", "sharpen_v"}:
+            self._sharpen_state_key = None
         if "contrast_mask" in labels:
             self._mask_tex_key = None
         # Bind groups keyed by id() never match a destroyed view again; drop, don't leak.
@@ -499,6 +503,7 @@ class GPUEngine:
         self._last_settings = None
         self._local_ev_key = None
         self._mask_tex_key = None
+        self._sharpen_state_key = None
 
     def _init_resources(self) -> None:
         """Initializes hardware pipelines and persistent buffers."""
@@ -1219,19 +1224,27 @@ class GPUEngine:
         else:
             prev_tex = tex_expo
 
+        if start_stage <= 2:
+            self._sharpen_state_key = None
         if start_stage <= 4:
             # Sharpen state (USM blur, or RL deconvolution) feeds the lab pass. A 1x1 dummy
-            # keeps binding 3 valid when sharpening is off.
+            # keeps binding 3 valid when sharpening is off. The blur reads only its input,
+            # the radius and the kernel, so a lab-only change reuses the last one.
             usage = wgpu.TextureUsage.STORAGE_BINDING | wgpu.TextureUsage.TEXTURE_BINDING
             lab_u = self._get_uniform_binding("lab")
+            sharpen_key = (settings.lab.sharpen_method, float(settings.lab.sharpen_radius), w_rot, h_rot)
+            blur_current = sharpen_key == self._sharpen_state_key
+            if settings.lab.sharpen > 0:
+                self._sharpen_state_key = sharpen_key
             if settings.lab.sharpen > 0 and settings.lab.sharpen_method == SharpenMethod.RL:
                 # Iterative RL: ping-pong two textures through init + N x (blur_h, div_v,
                 # blur_h, mult_v). The final estimate lands back in rl_a.
                 tex_rl_a = self._get_intermediate_texture(w_rot, h_rot, usage, "rl_a")
                 tex_rl_b = self._get_intermediate_texture(w_rot, h_rot, usage, "rl_b")
-                self._dispatch_pass(enc, "rl_init", [(0, prev_tex.view), (1, tex_rl_a.view)], w_rot, h_rot)
+                if not blur_current:
+                    self._dispatch_pass(enc, "rl_init", [(0, prev_tex.view), (1, tex_rl_a.view)], w_rot, h_rot)
                 sk = self._buffers["sharpen_k"]
-                for _ in range(rl_iterations(settings.lab.sharpen_radius)):
+                for _ in range(0 if blur_current else rl_iterations(settings.lab.sharpen_radius)):
                     self._dispatch_pass(enc, "rl_blur_h", [(0, tex_rl_a.view), (1, tex_rl_b.view), (2, lab_u), (3, sk)], w_rot, h_rot)
                     self._dispatch_pass(enc, "rl_div_v", [(0, tex_rl_b.view), (1, tex_rl_a.view), (2, lab_u), (3, sk)], w_rot, h_rot)
                     self._dispatch_pass(enc, "rl_blur_h", [(0, tex_rl_a.view), (1, tex_rl_b.view), (2, lab_u), (3, sk)], w_rot, h_rot)
@@ -1240,30 +1253,14 @@ class GPUEngine:
             elif settings.lab.sharpen > 0:
                 tex_sharpen_h = self._get_intermediate_texture(w_rot, h_rot, usage, "sharpen_h")
                 tex_sharpen_v = self._get_intermediate_texture(w_rot, h_rot, usage, "sharpen_v")
-                self._dispatch_pass(
-                    enc,
-                    "lab_sharpen_h",
-                    [
-                        (0, prev_tex.view),
-                        (1, tex_sharpen_h.view),
-                        (2, lab_u),
-                        (3, self._buffers["sharpen_k"]),
-                    ],
-                    w_rot,
-                    h_rot,
-                )
-                self._dispatch_pass(
-                    enc,
-                    "lab_sharpen_v",
-                    [
-                        (0, tex_sharpen_h.view),
-                        (1, tex_sharpen_v.view),
-                        (2, lab_u),
-                        (3, self._buffers["sharpen_k"]),
-                    ],
-                    w_rot,
-                    h_rot,
-                )
+                if not blur_current:
+                    sk = self._buffers["sharpen_k"]
+                    self._dispatch_pass(
+                        enc, "lab_sharpen_h", [(0, prev_tex.view), (1, tex_sharpen_h.view), (2, lab_u), (3, sk)], w_rot, h_rot
+                    )
+                    self._dispatch_pass(
+                        enc, "lab_sharpen_v", [(0, tex_sharpen_h.view), (1, tex_sharpen_v.view), (2, lab_u), (3, sk)], w_rot, h_rot
+                    )
             else:
                 tex_sharpen_v = self._get_intermediate_texture(1, 1, usage, "sharpen_v")
             self._dispatch_pass(
