@@ -5180,9 +5180,9 @@ class AppController(QObject):
         """One card's Roll button: pushes just that card, leaving every other diverged
         card marked. Force Settings is the Roll tab's own modifier over all of them, so
         it does not widen a single-card push."""
-        return self._push_cards_to_roll([card_key] if self.roll_card_locked(card_key) else [], sweep=False)
+        return self._push_cards_to_roll([card_key] if self.roll_card_locked(card_key) else [])
 
-    def _push_cards_to_roll(self, pushed: List[str], sweep: bool) -> int:
+    def _push_cards_to_roll(self, pushed: List[str]) -> int:
         roll_id = self.state.active_roll_id
         if roll_id is None:
             self.set_status(_NOTHING_TO_APPLY, 2500)
@@ -5195,11 +5195,6 @@ class AppController(QObject):
             rolls.set_frame_override(self.session.repo, roll_id, rolls.unforked_hash(active_hash), card_key, False)
 
         touched = set(pushed)
-        if sweep:
-            for card_key in self._ROLL_CARDS:
-                if self._reclaim_locked_frames(card_key, roll_id):
-                    touched.add(card_key)
-
         if not touched:
             self.set_status(_NOTHING_TO_APPLY, 2500)
             return 0
@@ -5238,7 +5233,7 @@ class AppController(QObject):
         one section driving several cards (Optics), pushed in one go."""
         keys = (card_key,) if isinstance(card_key, str) else card_key
         if scope == "roll":
-            self._push_cards_to_roll([k for k in keys if self.roll_card_locked(k)], sweep=False)
+            self._push_cards_to_roll([k for k in keys if self.roll_card_locked(k)])
         else:
             for key in keys:
                 self.set_roll_card_locked(key, True)
