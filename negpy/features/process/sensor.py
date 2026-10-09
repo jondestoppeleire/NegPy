@@ -24,6 +24,8 @@ from negpy.features.process.models import ProcessConfig, SensorUnmix
 from negpy.kernel.system.parallel import parallel_njit
 
 _EPS = 1e-4
+# Three captures whose normalized responses are this ill-conditioned are one light three times.
+_MAX_CONDITION = 1e3
 
 # Two-Scale's color layer: no channel is corrected below this fraction of its raw value.
 COLOR_FLOOR = 0.15
@@ -77,10 +79,14 @@ def build_sensor_matrix(
     if np.any(diag <= _EPS * s.max(axis=0)):
         raise ValueError("a capture has no signal in its own channel — check the R/G/B assignment")
     s_norm = s / diag
+    not_independent = "captures are not independent — three distinct single-band exposures are required"
+    # Near-singular: the inverse would amplify capture noise into the correction.
+    if np.linalg.cond(s_norm) > _MAX_CONDITION:
+        raise ValueError(not_independent)
     try:
         correction = np.linalg.inv(s_norm)
     except np.linalg.LinAlgError:
-        raise ValueError("captures are not independent — three distinct single-band exposures are required") from None
+        raise ValueError(not_independent) from None
     return tuple(float(x) for x in correction.reshape(-1))
 
 
