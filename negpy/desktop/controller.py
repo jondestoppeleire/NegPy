@@ -2276,6 +2276,17 @@ class AppController(QObject):
             self.rgb_scan_mode_changed.emit(False)
         _ = keep
 
+    def _forget_unloaded_frames(self) -> None:
+        """Drops the in-memory thumbnails, stale flags and embeddings of frames no longer loaded."""
+        loaded = self.state.uploaded_files
+        keys = {asset_thumbnail_key(f) for f in loaded}
+        hashes = {f["hash"] for f in loaded}
+        for key in set(self.state.thumbnails) - keys:
+            del self.state.thumbnails[key]
+        self.state.stale_thumbnails &= keys
+        for h in set(self.state.embeddings) - hashes:
+            del self.state.embeddings[h]
+
     def _on_discovery_finished(self, valid_assets: List[Dict]) -> None:
         """
         Adds discovered assets to the session and starts thumbnail generation.
@@ -2314,6 +2325,7 @@ class AppController(QObject):
             self.session.state.uploaded_files.clear()
             self.session.state.rendered_thumbnails.clear()
             self.session.add_files([], validated_info=valid_assets)
+            self._forget_unloaded_frames()
             self.generate_missing_thumbnails()
             self._seed_stale_thumbnails(list(self.session.state.uploaded_files), restart=True)
             if not self._thumbnail_queue_active:
