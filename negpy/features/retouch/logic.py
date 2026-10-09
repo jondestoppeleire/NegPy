@@ -823,7 +823,7 @@ def downsample_ir(plane: np.ndarray, target_long_edge: int, dims: Optional[Tuple
     if dims == (w, h):
         return np.ascontiguousarray(plane)
     # Erode by the resample footprint: a 1.25x downsample must not fatten by a 4.5x kernel.
-    k = max(1, int(round(long_edge / target_long_edge)) | 1)
+    k = max(1, int(round(long_edge / max(dims))) | 1)
     if k > 1:
         kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (k, k))
         if plane.nbytes > _IR_DOWNSAMPLE_WORK_BYTES:
