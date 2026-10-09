@@ -2026,24 +2026,30 @@ class AppController(QObject):
             return HalfGeometry(split_x=split, split_axis=axis)
         return HalfGeometry()
 
-    def _remap_half_frame_edits(self, file_hash: str, old_geom: HalfGeometry, new_geom: HalfGeometry) -> None:
-        """Re-anchor both halves' saved manual edits from ``old_geom`` to ``new_geom``,
-        so a heal stroke, dust spot, scratch line or dodge/burn mask stays on the same
-        physical film location when the split or crop moves."""
+    def _remap_half_frame_edits(self, file_hash: str, new_geom: HalfGeometry, old_geom: Optional[HalfGeometry] = None) -> None:
+        """Re-anchor both halves' saved manual edits from ``old_geom`` (by default the file's
+        effective geometry) to ``new_geom``, so a heal stroke, dust spot, scratch line or
+        dodge/burn mask stays on the same physical film location when the split or crop moves.
+        The default may decode the scan, so it is resolved only for a file with saved half edits."""
+        path = self._path_for_base_hash(file_hash)
+        rows = [
+            (half, h, saved)
+            for half in (1, 2)
+            for h in (half_hash(file_hash, half), *rolls.forked_edit_hashes(self.session.repo, half_hash(file_hash, half)))
+            if (saved := self.session.repo.load_file_settings(h)) is not None
+        ]
+        if not rows:
+            return
+        if old_geom is None:
+            old_geom = self._half_frame_geometry_for(file_hash, path)
         if old_geom == new_geom:
             return
-        path = self._path_for_base_hash(file_hash)
-        for half in (1, 2):
-            shared = half_hash(file_hash, half)
-            for h in (shared, *rolls.forked_edit_hashes(self.session.repo, shared)):
-                saved = self.session.repo.load_file_settings(h)
-                if saved is None:
-                    continue
-                updated = remap_workspace_config(saved, half, old_geom, new_geom)
-                if updated == saved:
-                    continue
-                self.session.push_external_history(h, saved, updated)
-                self.session.repo.save_file_settings(h, updated, file_path=path)
+        for half, h, saved in rows:
+            updated = remap_workspace_config(saved, half, old_geom, new_geom)
+            if updated == saved:
+                continue
+            self.session.push_external_history(h, saved, updated)
+            self.session.repo.save_file_settings(h, updated, file_path=path)
 
     _HALF_FRAME_APPLY_SCOPE_KEY = "half_frame_apply_scope"
 
@@ -2125,12 +2131,12 @@ class AppController(QObject):
                 if h and h not in overrides:
                     targets.add(h)
             for h in targets:
-                self._remap_half_frame_edits(h, self._half_frame_geometry_for(h, self._path_for_base_hash(h)), new_geom)
+                self._remap_half_frame_edits(h, new_geom)
             self.save_half_frame_profile(result["crop_rect"], result["split_x"], result["gutter_thickness"], result["split_axis"])
         else:
             scoped_targets = selected_hashes if scope == "selected" and selected_hashes else [file_hash]
             for h in scoped_targets:
-                self._remap_half_frame_edits(h, self._half_frame_geometry_for(h, self._path_for_base_hash(h)), new_geom)
+                self._remap_half_frame_edits(h, new_geom)
                 self.save_half_frame_override(h, result["crop_rect"], result["split_x"], result["gutter_thickness"], result["split_axis"])
         return result
 
@@ -2165,7 +2171,8 @@ class AppController(QObject):
             if not file_hash or file_hash in seen:
                 continue
             seen.add(file_hash)
-            old_geom = self._half_frame_geometry_for(file_hash, a["path"])
+            # No path: a crop with nothing saved is None either way, and the remap decodes only when it must.
+            old_geom = self._half_frame_geometry_for(file_hash)
             split_x, gutter_thickness, crop_rect, split_axis = detected[a["path"]]
             new_geom = replace(
                 old_geom,
@@ -2174,7 +2181,7 @@ class AppController(QObject):
                 crop_rect=old_geom.crop_rect if crop_rect is None else crop_rect,
                 split_axis=split_axis,
             )
-            self._remap_half_frame_edits(file_hash, old_geom, new_geom)
+            self._remap_half_frame_edits(file_hash, new_geom)
             self.save_half_frame_override(
                 file_hash,
                 new_geom.crop_rect or (0.0, 0.0, 1.0, 1.0),

@@ -1003,7 +1003,21 @@ def test_a_resplit_remaps_a_roll_forked_half_too(tmp_path):
     ctrl._path_for_base_hash.return_value = "/p/a.tif"
     old, new = HalfGeometry(split_x=0.5), HalfGeometry(split_x=0.6)
 
-    AppController._remap_half_frame_edits(ctrl, "H", old, new)
+    AppController._remap_half_frame_edits(ctrl, "H", new, old)
 
     x, y, _ = repo.load_file_settings(forked).retouch.manual_dust_spots[0]
     assert (x, y) == pytest.approx(remap_point(0.4, 0.4, 1, old, new))
+
+
+def test_a_resplit_decodes_no_scan_without_saved_half_edits(tmp_path):
+    from negpy.desktop.controller import AppController
+    from negpy.infrastructure.storage.repository import StorageRepository
+
+    repo = StorageRepository(str(tmp_path / "e.db"), str(tmp_path / "s.db"))
+    repo.initialize()
+    ctrl = MagicMock()
+    ctrl.session.repo = repo
+
+    AppController._remap_half_frame_edits(ctrl, "H", HalfGeometry(split_x=0.6))
+
+    ctrl._half_frame_geometry_for.assert_not_called()
