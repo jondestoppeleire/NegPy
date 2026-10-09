@@ -117,15 +117,18 @@ def resolve_batch_selection(
 
     A named selection wins. With none, a transport that measures the film gets an empty tuple,
     meaning every frame it finds; a feeder gets every slot it holds, because its own frame
-    count reads 0 and an empty tuple there would scan nothing.
+    count reads 0 and an empty tuple there would scan nothing. Only a single-frame device
+    reads `scan_window`; a strip sets its windows per frame.
     """
     if settings.selected_frames:
         frames = tuple(sorted(settings.selected_frames))
         windows = {f: settings.frame_windows[f] for f in frames if f in settings.frame_windows}
         return frames, windows, None
-    if whole_strip or capacity is None:
+    if whole_strip:
+        return (), {}, None
+    if capacity is None:
         return (), {}, settings.scan_window
-    return tuple(range(1, capacity + 1)), {}, settings.scan_window
+    return tuple(range(1, capacity + 1)), {}, None
 
 
 def parse_frame_spec(text: str) -> tuple[int, ...]:
