@@ -242,6 +242,14 @@ def test_leaving_every_frame_out_disables_export(dialog):
     assert not d.export_btn.isEnabled()
 
 
+def test_white_paper_toggle_reaches_the_look_and_the_settings(dialog):
+    d = dialog()
+    assert not d.look().white_paper
+    d.white_btn.setChecked(True)
+    assert d.look().white_paper
+    assert d.settings().white_paper is True
+
+
 def test_edge_print_toggle_reaches_the_look_and_the_settings(dialog):
     d = dialog()
     assert d.look().edge.printed
