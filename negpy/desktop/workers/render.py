@@ -424,6 +424,7 @@ class RenderWorker(QObject):
             metrics["compare"] = task.compare
             metrics["interactive"] = task.interactive
             metrics["crop_preview_full"] = task.crop_preview_full
+            metrics["config_override"] = task.config_override
 
             self.finished.emit(result, metrics)
             self.metrics_updated.emit(metrics)

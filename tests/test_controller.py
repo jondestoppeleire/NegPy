@@ -4843,7 +4843,7 @@ class TestNegativePeekColor(unittest.TestCase):
         state.preview_cam_xyz = cam_xyz
         state.preview_camera_wb = camera_wb
         self.controller._paint_negative_peek()
-        return state.last_metrics
+        return state.peek_frame
 
     def test_the_peek_applies_the_camera_matrix(self):
         import numpy as np
@@ -4894,7 +4894,7 @@ class TestNegativePeekColor(unittest.TestCase):
         state.preview_cam_xyz = self.D3300
         state.preview_camera_wb = wb
         self.controller._paint_negative_peek()
-        without_wb = np.array(state.last_metrics["base_positive"])
+        without_wb = np.array(state.peek_frame["base_positive"])
 
         np.testing.assert_allclose(with_wb, without_wb, atol=1e-5)
 
@@ -4922,8 +4922,9 @@ class TestNegativePeekColor(unittest.TestCase):
         or right_panel's analysis-chart refresh mistakes the settled peek frame for a
         mid-gesture one and never re-syncs the histogram."""
         self.controller.state.last_metrics["interactive"] = True
-        metrics = self._paint(self.D3300)
-        self.assertFalse(metrics["interactive"])
+        self.controller.state.negative_peek = True
+        self._paint(self.D3300)
+        self.assertFalse(self.controller.state.canvas_value("interactive"))
 
 
 class TestEmbeddedPeek(unittest.TestCase):
@@ -4981,7 +4982,7 @@ class TestEmbeddedPeek(unittest.TestCase):
             self.controller.toggle_embedded_peek(force=True)
 
         self.assertTrue(self.controller.state.embedded_peek)
-        metrics = self.controller.state.last_metrics
+        metrics = self.controller.state.peek_frame
         np.testing.assert_allclose(metrics["base_positive"], preview)
         self.assertTrue(metrics["splash"])
         self.assertFalse(metrics["proof"])
@@ -5021,6 +5022,76 @@ class TestEmbeddedPeek(unittest.TestCase):
         self.controller.state.preview_raw = None
         self.controller.toggle_embedded_peek(force=True)
         self.assertFalse(self.controller.state.embedded_peek)
+
+    def _peek_then_edit(self):
+        """Embedded peek on, then an edit whose print lands while the peek holds the canvas."""
+        import numpy as np
+
+        self.controller.state.current_file_hash = "h1"
+        with patch("negpy.desktop.controller.PreviewManager.try_splash_preview", return_value=(self._preview(), (8, 6))):
+            self.controller.toggle_embedded_peek(force=True)
+        self.controller._thumb_config = self.controller.state.config
+        self.controller.state.config = replace(self.controller.state.config)
+        self.print_buffer = np.full((6, 8, 3), 0.25, dtype=np.float32)
+        return {"base_positive": self.print_buffer, "content_rect": (0, 0, 8, 6), "source_hash": "h1"}
+
+    def test_a_render_under_a_peek_refreshes_the_thumbnail_from_the_print(self):
+        metrics = self._peek_then_edit()
+        tasks: list = []
+        self.controller.thumbnail_update_requested.connect(tasks.append)
+        with patch.object(self.controller, "_asset_for_render", return_value={"hash": "h1"}):
+            self.controller._on_render_finished(None, metrics)
+
+        self.assertEqual(len(tasks), 1)
+        self.assertIs(tasks[0].buffer, self.print_buffer)
+
+    def test_late_metrics_leave_the_peek_on_the_canvas(self):
+        """Reference View and the canvas size read the canvas value; under a peek it is the peek."""
+        import numpy as np
+
+        metrics = self._peek_then_edit()
+        with patch.object(self.controller, "_update_thumbnail_from_state"):
+            self.controller._on_render_finished(None, metrics)
+        self.controller._on_metrics_updated(metrics)
+
+        state = self.controller.state
+        self.assertIs(state.last_metrics["base_positive"], self.print_buffer)
+        np.testing.assert_allclose(state.canvas_value("base_positive"), self._preview())
+        self.assertIsNone(state.canvas_value("content_rect"))
+        self.assertTrue(state.canvas_value("splash"))
+
+    def test_closing_the_peek_keeps_its_frame_until_the_print_lands(self):
+        """The canvas shows the peek until the next render repaints it; size and zoom must agree."""
+        import numpy as np
+
+        metrics = self._peek_then_edit()
+        self.controller.state.last_metrics["base_positive"] = self.print_buffer
+        with patch.object(self.controller, "request_render"):
+            self.controller.toggle_embedded_peek(force=False)
+        np.testing.assert_allclose(self.controller.state.canvas_value("base_positive"), self._preview())
+
+        with patch.object(self.controller, "_update_thumbnail_from_state"):
+            self.controller._on_render_finished(None, metrics)
+        self.assertIs(self.controller.state.canvas_value("base_positive"), self.print_buffer)
+
+    def test_the_render_after_the_peek_drops_its_frame(self):
+        metrics = self._peek_then_edit()
+        self.controller.state.embedded_peek = False
+        with patch.object(self.controller, "_update_thumbnail_from_state"):
+            self.controller._on_render_finished(None, metrics)
+        self.assertIsNone(self.controller.state.peek_frame)
+        self.assertIs(self.controller.state.canvas_value("base_positive"), self.print_buffer)
+
+    def test_the_flat_peek_render_leaves_the_thumbnail_alone(self):
+        """Its pixels are the flat master; a plain render under the lit toggle is the print."""
+        metrics = self._peek_then_edit()
+        self.controller.state.embedded_peek = False
+        self.controller.state.flat_peek = True
+        with patch.object(self.controller, "_update_thumbnail_from_state") as refresh:
+            self.controller._on_render_finished(None, {**metrics, "config_override": True})
+            refresh.assert_not_called()
+            self.controller._on_render_finished(None, metrics)
+            refresh.assert_called_once_with(persist=False)
 
 
 class TestCompareFlatPeekInteraction(unittest.TestCase):
@@ -5115,7 +5186,7 @@ class TestCompareFlatPeekInteraction(unittest.TestCase):
 
         self.assertTrue(self.controller.state.negative_peek)
         self.assertTrue(painted)
-        metrics = self.controller.state.last_metrics
+        metrics = self.controller.state.peek_frame
         # No camera matrix on this source, so the display level and the encode are
         # all that separate it from the buffer the loader read. See TestNegativePeekColor
         # for the camera-native path.
@@ -5172,11 +5243,11 @@ class TestCompareFlatPeekInteraction(unittest.TestCase):
 
         self.controller.toggle_negative_peek(force=True)
 
-        painted = self.controller.state.last_metrics["base_positive"]
+        painted = self.controller.state.peek_frame["base_positive"]
         # Quarter turn swaps the axes, then the crop keeps the left half of the width.
         self.assertEqual(painted.shape, (10, 3, 3))
         # No border stage ran, so nothing may claim the frame is inset.
-        self.assertIsNone(self.controller.state.last_metrics["content_rect"])
+        self.assertIsNone(self.controller.state.peek_frame["content_rect"])
 
     def test_the_crop_tool_peeks_the_uncropped_frame(self):
         import numpy as np
@@ -5193,7 +5264,7 @@ class TestCompareFlatPeekInteraction(unittest.TestCase):
         self.controller.toggle_negative_peek(force=True)
 
         # Framing a crop against a pre-cropped frame would be impossible.
-        self.assertEqual(self.controller.state.last_metrics["base_positive"].shape, (6, 10, 3))
+        self.assertEqual(self.controller.state.peek_frame["base_positive"].shape, (6, 10, 3))
 
     def test_any_plain_render_leaves_the_negative_peek(self):
         self.controller.state.negative_peek = True
@@ -5214,7 +5285,7 @@ class TestCompareFlatPeekInteraction(unittest.TestCase):
         # A geometry op must not drop the peek, and the peek is not a render.
         rr.assert_not_called()
         self.assertTrue(self.controller.state.negative_peek)
-        self.assertIn("base_positive", self.controller.state.last_metrics)
+        self.assertIn("base_positive", self.controller.state.peek_frame)
 
 
 class TestClearThumbnailCache(unittest.TestCase):

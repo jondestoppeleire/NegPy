@@ -298,6 +298,10 @@ class AppState:
     negative_peek: bool = False
     # Transient: preview is showing the camera's own embedded preview, as a reference.
     embedded_peek: bool = False
+    # The canvas keys a negative or embedded peek painted. Kept out of last_metrics, which
+    # holds the print for the thumbnail, the memo and every measurement. It stays until the
+    # print is painted again, not until the peek flag drops.
+    peek_frame: Optional[Dict[str, Any]] = None
 
     # Linear Output: export the loader's raw decoded buffer as an untagged 16-bit TIFF.
     linear_output: bool = False
@@ -333,6 +337,13 @@ class AppState:
             self.local_hidden_masks_by_hash[h] = set(value)
         else:
             self.local_hidden_masks_by_hash.pop(h, None)
+
+    def canvas_value(self, key: str, default: Any = None) -> Any:
+        """A last_metrics key as the canvas shows it: the painted peek's value while it is on screen."""
+        peek = self.peek_frame
+        if peek is not None and key in peek:
+            return peek[key]
+        return self.last_metrics.get(key, default)
 
 
 def _asset_key(asset: Dict[str, Any]) -> tuple:
@@ -2178,6 +2189,7 @@ class DesktopSessionManager(QObject):
         self.state.preview_ir = None
         self.state.preview_detect = None
         self.state.preview_embedded = None
+        self.state.peek_frame = None
         self.state.has_ir = False
         self.state.config = self._empty_session_config()
         self._config_dirty = False

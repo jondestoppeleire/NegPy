@@ -1038,7 +1038,7 @@ class CanvasOverlay(QWidget):
             self._buffer_overlay_visible
             and self._buffer_overlay_ratio > 1e-4
             and self._tool_mode not in UNCROPPED_PREVIEW_TOOLS
-            and not self.state.last_metrics.get("crop_preview_full")
+            and not self.state.canvas_value("crop_preview_full")
         ):
             d = self._content_view_rect()
             margin_w = d.width() * self._buffer_overlay_ratio
@@ -1114,7 +1114,7 @@ class CanvasOverlay(QWidget):
             not self.state.flat_peek
             and not self.state.negative_peek
             and self._tool_mode not in UNCROPPED_PREVIEW_TOOLS
-            and not self.state.last_metrics.get("crop_preview_full")
+            and not self.state.canvas_value("crop_preview_full")
         )
         if self.state.test_strip and content_aligned:
             # Takes the content rect over from the zone grid: both would claim it.

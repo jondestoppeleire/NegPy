@@ -2681,6 +2681,7 @@ class AppController(QObject):
         self.state.preview_ir = None
         self.state.preview_detect = None
         self.state.preview_embedded = None
+        self.state.peek_frame = None
         self.state.has_ir = False
         self.state.original_res = (0, 0)
         if self.state.negative_peek:
@@ -6692,19 +6693,7 @@ class AppController(QObject):
         img = apply_camera_matrix(img, matrix)
         if level is not None:
             img = img * level
-        with self.state.metrics_lock:
-            self.state.last_metrics["base_positive"] = working_oetf_encode(img)
-            self.state.last_metrics.pop("render_identity", None)
-            self.state.last_metrics["content_rect"] = None
-            self.state.last_metrics["crop_preview_full"] = context.crop_preview_full
-            self.state.last_metrics["splash"] = False
-            self.state.last_metrics["proof"] = False
-            # A prior interactive/peek render (e.g. Flat Peek, which renders with
-            # readback_metrics=False) can leave this stale True, which makes
-            # right_panel's _update_analysis mistake this settled frame for a
-            # mid-gesture one and skip the histogram refresh.
-            self.state.last_metrics["interactive"] = False
-        self.image_updated.emit()
+        self._store_peek_frame(working_oetf_encode(img), splash=False, crop_preview_full=context.crop_preview_full)
 
     def toggle_negative_peek(self, force: Optional[bool] = None) -> None:
         """Show the negative as it was loaded, without changing the saved edit.
@@ -6779,15 +6768,25 @@ class AppController(QObject):
         img = GeometryProcessor(geometry).process(source, context)
         if not context.crop_preview_full:
             img = CropProcessor(geometry).process(img, context)
-        with self.state.metrics_lock:
-            # Already display-encoded sRGB, so no working OETF: the camera's curve is the
-            # whole point of the view.
-            self.state.last_metrics["base_positive"] = img
-            self.state.last_metrics["content_rect"] = None
-            self.state.last_metrics["crop_preview_full"] = context.crop_preview_full
-            self.state.last_metrics["splash"] = True
-            self.state.last_metrics["proof"] = False
-            self.state.last_metrics["interactive"] = False
+        # Already display-encoded sRGB, so no working OETF: the camera's curve is the whole
+        # point of the view.
+        self._store_peek_frame(img, splash=True, crop_preview_full=context.crop_preview_full)
+
+    def _store_peek_frame(self, buffer: np.ndarray, splash: bool, crop_preview_full: bool) -> None:
+        """Put a painted peek on the canvas, beside the print in last_metrics rather than over it.
+
+        `interactive` is False because a prior Flat Peek render (readback_metrics=False) can
+        leave the print's flag True, and right_panel then skips the histogram refresh.
+        """
+        self.state.peek_frame = {
+            "base_positive": buffer,
+            "content_rect": None,
+            "crop_preview_full": crop_preview_full,
+            "render_long_edge": int(max(buffer.shape[:2])),
+            "splash": splash,
+            "proof": False,
+            "interactive": False,
+        }
         self.image_updated.emit()
 
     def toggle_embedded_peek(self, force: Optional[bool] = None) -> None:
@@ -7731,6 +7730,7 @@ class AppController(QObject):
             and not metrics.get("ephemeral")
             and not metrics.get("interactive")
             and not metrics.get("crop_preview_full")
+            and not metrics.get("config_override")
             and self.state.config is not self._thumb_config
         )
 
@@ -7738,9 +7738,6 @@ class AppController(QObject):
             self.state.last_metrics.update(metrics)
             _stamp_render_serial(self.state.last_metrics, metrics)
             self.state.last_metrics["splash"] = False
-            # last_metrics carries over between frames, so a peek's suppressed proof must
-            # not outlive it onto the next render.
-            self.state.last_metrics["proof"] = True
 
         self._freeze_resolved_auto_crop(metrics)
         record_meters(self.state.auto_meters, self.state.current_file_hash or "", metrics)
@@ -7765,6 +7762,7 @@ class AppController(QObject):
         elif self.state.embedded_peek:
             self._paint_embedded_peek()
         else:
+            self.state.peek_frame = None
             self.image_updated.emit()
 
         # By reference, because display buffers are read-only downstream. After the repaint:

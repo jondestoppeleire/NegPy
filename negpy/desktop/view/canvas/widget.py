@@ -268,7 +268,7 @@ class ImageCanvas(QWidget):
 
     def _image_dims(self) -> Optional[Tuple[int, int]]:
         """Current rendered image size as (width, height), or None if nothing is shown."""
-        buf = self.state.last_metrics.get("base_positive")
+        buf = self.state.canvas_value("base_positive")
         if buf is None:
             return None
         import numpy as np
@@ -306,7 +306,7 @@ class ImageCanvas(QWidget):
         """Rendered-buffer pixels per source pixel. Below 1 when the frame rendered
         against a downscaled preview, so zoom stays quoted in scan pixels whatever
         resolution the pipeline was handed."""
-        long_edge = float(self.state.last_metrics.get("render_long_edge") or 0.0)
+        long_edge = float(self.state.canvas_value("render_long_edge") or 0.0)
         source_edge = float(max(self.state.original_res or (0, 0)))
         if long_edge <= 0.0 or source_edge <= 0.0:
             return 1.0
