@@ -450,7 +450,9 @@ class ContactSheetDialog(QDialog):
             "fa5s.print", " White Paper", settings.white_paper, "Print on white paper with dark labels, to save ink on a home printer"
         )
         self.white_btn.toggled.connect(lambda _checked: self._schedule_render())
-        col.addWidget(self.white_btn)
+        second = QHBoxLayout()
+        second.setSpacing(THEME.space_md)
+        second.addWidget(self.white_btn, 1)
 
         self.pick_btn = tool_toggle(
             "fa5s.times-circle",
@@ -458,7 +460,8 @@ class ContactSheetDialog(QDialog):
             "Show every frame; click one to leave it out or put it back. Rejected frames start left out",
         )
         self.pick_btn.toggled.connect(lambda _checked: self._schedule_render())
-        col.addWidget(self.pick_btn)
+        second.addWidget(self.pick_btn, 1)
+        col.addLayout(second)
 
         self.summary_label = hint_label()
         self.summary_label.setWordWrap(True)
