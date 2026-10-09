@@ -705,6 +705,8 @@ class CanvasOverlay(QWidget):
         """Repaint the split after the stashed baseline frame changed (or went away)."""
         self._compare_qimage_cache = None
         self._split_dragging = False
+        if not self._compare_split_active() and self.cursor().shape() == Qt.CursorShape.SplitHCursor:
+            self.unsetCursor()
         self.update()
 
     def drop_gpu_texture(self) -> None:
@@ -795,6 +797,12 @@ class CanvasOverlay(QWidget):
             self._scratch_pts = [remap(p) for p in self._scratch_pts]
         if self._heal_drag_pts:
             self._heal_drag_pts = [remap(p) for p in self._heal_drag_pts]
+        if self._exclude_drag_pts:
+            self._exclude_drag_pts = [remap(p) for p in self._exclude_drag_pts]
+        if self._rotate_center is not None:
+            self._rotate_center = remap(self._rotate_center)
+        if self._rotate_press is not None:
+            self._rotate_press = remap(self._rotate_press)
         if self._local_edit_verts is not None:
             self._local_edit_verts = [remap(p) for p in self._local_edit_verts]
         if self._straighten_p1 is not None:
@@ -1032,7 +1040,7 @@ class CanvasOverlay(QWidget):
             and self._tool_mode not in UNCROPPED_PREVIEW_TOOLS
             and not self.state.last_metrics.get("crop_preview_full")
         ):
-            d = visible_rect
+            d = self._content_view_rect()
             margin_w = d.width() * self._buffer_overlay_ratio
             margin_h = d.height() * self._buffer_overlay_ratio
             inner = QRectF(d.x() + margin_w, d.y() + margin_h, d.width() - 2 * margin_w, d.height() - 2 * margin_h)
@@ -1067,6 +1075,10 @@ class CanvasOverlay(QWidget):
 
         if self.state.config.local.masks and (self.state.local_masks_shown or self._tool_mode in _SHAPE_FOR_TOOL):
             self._draw_local_masks(painter)
+        else:
+            # Hit-testing reads these, so a hidden mask keeps no handle to grab.
+            self._local_mask_screen_polys = []
+            self._local_mask_screen_ctrl = []
         if self._tool_mode == ToolMode.LOCAL_DRAW:
             self._draw_lasso_in_progress(painter)
         if self._tool_mode in (ToolMode.LOCAL_OVAL, ToolMode.LOCAL_GRADIENT):
@@ -1124,7 +1136,7 @@ class CanvasOverlay(QWidget):
             self._draw_rotation_grid(painter, visible_rect)
 
         if self._crop_preview_visible and self._crop_preview_rect:
-            self._draw_crop_preview(painter, visible_rect)
+            self._draw_crop_preview(painter, self._content_view_rect())
 
         # Keyed off the stashed baseline, not state.compare_mode: the toggle flips before its
         # render lands, and half a split with no before frame is just the edit.
@@ -1281,9 +1293,28 @@ class CanvasOverlay(QWidget):
         painter.drawEllipse(self._mouse_pos, radius, radius)
 
     def _brush_screen_radius(self, size: float) -> float:
+        """A heal's footprint is a fraction of the whole source frame, not of the crop."""
+        scale = self._screen_per_raw_px()
+        h_raw, w_raw = self.state.original_res
+        if scale is None:
+            rect = self._content_view_rect()
+            return (size / (2.0 * HEAL_SIZE_REF)) * max(rect.width(), rect.height())
+        return (size / (2.0 * HEAL_SIZE_REF)) * max(w_raw, h_raw) * scale
+
+    def _screen_per_raw_px(self) -> Optional[float]:
+        """Screen pixels per source pixel, read off the uv grid of the shown render."""
+        with self.state.metrics_lock:
+            uv = self.state.last_metrics.get("uv_grid")
+        h_raw, w_raw = self.state.original_res
         rect = self._content_view_rect()
-        max_screen_dim = max(rect.width(), rect.height())
-        return (size / (2.0 * HEAL_SIZE_REF)) * max_screen_dim
+        if uv is None or uv.ndim != 3 or uv.shape[1] < 2 or not (h_raw and w_raw) or rect.isEmpty():
+            return None
+        row = uv.shape[0] // 2
+        du, dv = (uv[row, 1] - uv[row, 0])[:2]
+        raw_per_grid = float(np.hypot(du * w_raw, dv * h_raw))
+        if raw_per_grid <= 0.0:
+            return None
+        return rect.width() / uv.shape[1] / raw_per_grid
 
     def _preview_curve_path(self, pts: List[QPointF]) -> QPainterPath:
         """Smoothed path through the placed points plus the live cursor."""
@@ -2359,7 +2390,12 @@ class CanvasOverlay(QWidget):
             # the selected mask drops its fill and the fills it overlaps, so the change under
             # them stays visible.
             if working is None and i not in self._local_muted_masks:
-                sigma_screen = mask.feather * min(self._view_rect.width(), self._view_rect.height())
+                # The engine feathers by the whole frame's short side, not the padded view's.
+                scale = self._screen_per_raw_px()
+                content = self._content_view_rect()
+                sigma_screen = mask.feather * (
+                    min(self.state.original_res) * scale if scale is not None else min(content.width(), content.height())
+                )
                 pad = 3.0 * sigma_screen + 2.0
                 # A gradient has no boundary, and an inverted mask applies outside its own.
                 # Rasterise both on the full frame, not on a padded bounding box.

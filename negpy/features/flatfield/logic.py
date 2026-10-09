@@ -81,14 +81,19 @@ def flatfield_token(config: FlatFieldConfig) -> str:
     return f"|ff:{config.profile_id}:{entry[1]}"
 
 
-def apply_flatfield(image: ImageBuffer, config: FlatFieldConfig) -> ImageBuffer:
-    """Multiply the linear source by the reference gain map. No-op when inactive or unresolved."""
+def apply_flatfield(
+    image: ImageBuffer, config: FlatFieldConfig, gain_crop: Optional[Callable[[np.ndarray], np.ndarray]] = None
+) -> ImageBuffer:
+    """Multiply the linear source by the reference gain map. No-op when inactive or unresolved.
+
+    ``gain_crop`` cuts the gain to the part of the frame *image* holds, such as one half-frame;
+    the gain is then resized to *image*."""
     if not config.apply or not config.profile_id:
         return image
     entry = _resolve(config.profile_id)
     if entry is None:
         return image
-    gain = entry[0]
+    gain = entry[0] if gain_crop is None else gain_crop(entry[0])
     if gain.shape[:2] != image.shape[:2]:
         gain = cv2.resize(gain, (image.shape[1], image.shape[0]), interpolation=cv2.INTER_LINEAR)
     return (image * gain).astype(np.float32)

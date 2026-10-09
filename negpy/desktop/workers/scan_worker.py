@@ -374,6 +374,8 @@ class ScanWorker(QObject):
     def run_prescan(self, req: PrescanRequest) -> None:
         """Full-window color preview at prescan_dpi; emit RGB without writing a file."""
         if req.prescan_dpi <= 0:
+            with self._state_lock:
+                self._request_prepared = False
             self.prescan_error.emit("Device does not support Prescan")
             return
 

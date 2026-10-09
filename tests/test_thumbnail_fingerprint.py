@@ -33,6 +33,14 @@ class TestThumbnailFingerprint:
         reloaded = WorkspaceConfig.from_flat_dict(config.to_dict())
         assert _fp(reloaded) == _fp(config)
 
+    def test_the_print_size_counts_only_while_a_carrier_is_drawn(self) -> None:
+        config = WorkspaceConfig()
+        larger = replace(config, export=replace(config.export, export_print_size=40.0))
+        assert _fp(larger) == _fp(config)
+        carrier = replace(config, finish=replace(config.finish, carrier_width=1.0))
+        carrier_larger = replace(carrier, export=replace(carrier.export, export_print_size=40.0))
+        assert _fp(carrier_larger) != _fp(carrier)
+
     def test_a_pixel_setting_changes_it(self) -> None:
         config = WorkspaceConfig()
         edited = replace(config, exposure=replace(config.exposure, density=config.exposure.density + 0.1))

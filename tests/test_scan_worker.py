@@ -754,3 +754,12 @@ def test_run_meter_cancelled_mid_run_keeps_nothing() -> None:
     worker.run_meter(MeterRequest(device_id="nk:1", params=ScanParams(dpi=4000, depth=16, capture_ir=False, frame=2)))
 
     assert (metered, errors, cancelled) == ([], [], [None])
+
+
+def test_a_refused_prescan_does_not_leave_a_request_prepared() -> None:
+    from negpy.desktop.workers.scan_worker import PrescanRequest
+
+    worker = ScanWorker()
+    worker.prepare_scan()
+    worker.run_prescan(PrescanRequest(device_id="dev", prescan_dpi=0))
+    worker.prepare_scan()  # raises while a stale request is still prepared

@@ -981,23 +981,30 @@ class TestAppController(unittest.TestCase):
             patch("negpy.desktop.controller.load_or_promote", return_value=None),
             patch("negpy.desktop.controller.write_sidecar") as mock_write,
         ):
-            written, failed = self.controller._write_edit_sidecars([frame])
+            written, failed, skipped = self.controller._write_edit_sidecars([frame])
 
-        self.assertEqual((written, failed), (1, 0))
+        self.assertEqual((written, failed, skipped), (1, 0, 0))
         self.mock_session_manager.config_for_asset.assert_called_once_with(frame)
         params = mock_write.call_args.args[1]
         self.assertIs(params, hydrated)
         self.assertIsNone(params.geometry.crop_rect)
 
-    def test_write_edit_sidecars_never_rehomes_a_forked_frame(self):
-        frame = {"name": "b.dng", "path": "/tmp/b.dng", "hash": "hash2#roll:r1"}
+    def test_write_edit_sidecars_skips_forks_and_composites(self):
+        """Their path is the shared frame's, so a sidecar there would replace that frame's edit."""
+        frames = [
+            {"name": "b.dng", "path": "/tmp/b.dng", "hash": "hash2#roll:r1"},
+            {"name": "a.tif", "path": "/tmp/a.tif", "hash": "h#stitch", "stitch_paths": ["/tmp/a.tif", "/tmp/c.tif"]},
+            {"name": "a.tif", "path": "/tmp/a.tif", "hash": "h#hdr", "hdr_paths": ["/tmp/a.tif", "/tmp/d.tif"]},
+        ]
         with (
             patch("negpy.desktop.controller.load_or_promote", return_value=None) as mock_load,
-            patch("negpy.desktop.controller.write_sidecar"),
+            patch("negpy.desktop.controller.write_sidecar") as mock_write,
         ):
-            self.controller._write_edit_sidecars([frame])
+            result = self.controller._write_edit_sidecars(frames)
 
-        self.assertTrue(mock_load.call_args.kwargs["forked"])
+        self.assertEqual(result, (0, 0, 3))
+        mock_load.assert_not_called()
+        mock_write.assert_not_called()
 
     def test_discovery_promotes_sidecars_before_adding_files(self):
         state = self.mock_session_manager.state
@@ -2715,6 +2722,7 @@ class TestBatchExportFiltering(unittest.TestCase):
         self.mock_session_manager.state = AppState()
         self.mock_session_manager.repo = MagicMock()
         self.mock_session_manager.repo.load_file_settings.return_value = None
+        self.mock_session_manager.config_for_asset.side_effect = lambda f: self.mock_session_manager.repo.load_file_settings(f["hash"])
 
         self.mock_session_manager.state.uploaded_files = [
             {"name": "IMG_0001.cr2", "path": "/tmp/IMG_0001.cr2", "hash": "h1"},
@@ -2875,6 +2883,7 @@ class TestLinearOutputExportCurrentFile(unittest.TestCase):
         self.mock_session_manager.state = AppState()
         self.mock_session_manager.repo = MagicMock()
         self.mock_session_manager.repo.load_file_settings.return_value = None
+        self.mock_session_manager.config_for_asset.side_effect = lambda f: self.mock_session_manager.repo.load_file_settings(f["hash"])
 
         self.mock_session_manager.state.uploaded_files = [
             {
@@ -3050,6 +3059,7 @@ class TestPresetExportCurrentFileTriplet(unittest.TestCase):
         self.mock_session_manager.state = AppState()
         self.mock_session_manager.repo = MagicMock()
         self.mock_session_manager.repo.load_file_settings.return_value = None
+        self.mock_session_manager.config_for_asset.side_effect = lambda f: self.mock_session_manager.repo.load_file_settings(f["hash"])
 
         self.mock_session_manager.state.uploaded_files = [
             {
@@ -3117,6 +3127,7 @@ class TestPresetBatchExport(unittest.TestCase):
         self.mock_session_manager.state = AppState()
         self.mock_session_manager.repo = MagicMock()
         self.mock_session_manager.repo.load_file_settings.return_value = None
+        self.mock_session_manager.config_for_asset.side_effect = lambda f: self.mock_session_manager.repo.load_file_settings(f["hash"])
 
         self.mock_session_manager.state.uploaded_files = [
             {"name": "IMG_0001.cr2", "path": "/tmp/IMG_0001.cr2", "hash": "h1"},
@@ -4317,6 +4328,7 @@ class TestBatchAnalysisFiltering(unittest.TestCase):
         self.mock_session_manager.state = AppState()
         self.mock_session_manager.repo = MagicMock()
         self.mock_session_manager.repo.load_file_settings.return_value = None
+        self.mock_session_manager.config_for_asset.side_effect = lambda f: self.mock_session_manager.repo.load_file_settings(f["hash"])
 
         self.mock_session_manager.state.uploaded_files = [
             {"name": "IMG_0001.cr2", "path": "/tmp/IMG_0001.cr2", "hash": "h1"},
@@ -6008,8 +6020,9 @@ class TestLibrarySearch(unittest.TestCase):
         task = self.tasks[0]
         self.assertEqual(task.roots, ["/photos"])
         self.assertEqual(task.query, "film:portra")
-        self.assertEqual(set(task.configs_by_path), {"/photos/a.nef"})
-        self.assertEqual(task.marks_by_path, {"/photos/a.nef": "keeper"})
+        self.mock_session_manager.repo.load_settings_by_path.assert_not_called()
+        self.assertEqual(set(task.load_configs()), {"/photos/a.nef"})
+        self.assertEqual(task.load_marks(), {"/photos/a.nef": "keeper"})
 
     def test_results_replace_the_session(self):
         with patch.object(self.controller, "request_asset_discovery") as discovery:
@@ -6308,8 +6321,22 @@ class TestSplashPreviewRaceGuard(unittest.TestCase):
         panel._requested_file_path = requested_path
         panel._file_hash_for_path.return_value = hash_for_path
         panel._split_active_half.return_value = ("RAW", (100, 100))
+        panel._is_stale_preview.return_value = False
         panel.state = AppState()
         return panel
+
+    def test_a_decode_from_an_earlier_load_is_dropped(self):
+        """Both halves of a scan share a path; only the generation tells their decodes apart."""
+        panel = self._panel()
+        panel._prefetch_gen = 5
+        panel._is_stale_preview = lambda g: AppController._is_stale_preview(panel, g)
+
+        AppController._on_splash_preview(panel, "a.dng", "RAW", (100, 100), 4)
+        AppController._on_preview_loaded(panel, "a.dng", "RAW", (100, 100), "sRGB", None, "", None, None, 4)
+
+        self.assertNotIn("base_positive", panel.state.last_metrics)
+        self.assertIsNone(panel.state.preview_raw)
+        panel.request_render.assert_not_called()
 
     def test_splash_skipped_once_the_real_render_for_this_file_already_landed(self):
         panel = self._panel(hash_for_path="h1")

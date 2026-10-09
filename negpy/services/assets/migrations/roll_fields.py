@@ -12,7 +12,7 @@ import sqlite3
 from contextlib import closing
 
 from negpy.features.exposure.models import ExposureConfig
-from negpy.features.process.models import ProcessConfig, cast_removal_for_mode
+from negpy.features.process.models import ProcessConfig, ProcessMode, cast_removal_for_mode
 from negpy.kernel.system.logging import get_logger
 from negpy.services.assets import rolls
 
@@ -109,7 +109,7 @@ def migrate_cast_removal_roll_locks(repo) -> None:
                     continue
                 if "cast_removal_strength" not in data:
                     continue
-                mode_default = cast_removal_for_mode(data.get("process_mode", default_mode), default_strength)
+                mode_default = cast_removal_for_mode(ProcessMode(data.get("process_mode", default_mode)), default_strength)
                 if float(data["cast_removal_strength"]) == mode_default:
                     continue
                 for roll_id in _rolls_for_row(repo, file_hash, file_path):

@@ -92,3 +92,57 @@ def test_invalidate_drops_cache(gain_store):
     ff.set_gain_provider(lambda pid: None)  # provider now yields nothing
     ff.invalidate_gain("rig")
     assert ff.flatfield_token(cfg) == ""
+
+
+def test_a_half_frame_takes_its_own_half_of_the_gain(gain_store):
+    """The preview flat-fields one half after slicing; it must match the export, which
+    flat-fields the whole scan and slices after."""
+    from dataclasses import replace
+
+    from negpy.domain.models import WorkspaceConfig
+    from negpy.services.assets.half_frame import slice_chain
+    from negpy.services.rendering.image_processor import ImageProcessor
+
+    gain_store("p", _radial_falloff(120, 200))
+    cfg = FlatFieldConfig(apply=True, profile_id="p")
+    scan = np.full((120, 200, 3), 0.4, np.float32) * _radial_falloff(120, 200)
+    cut = ((1, 0.5, None, 0.04, "x"),)
+
+    expected = slice_chain(ff.apply_flatfield(scan, cfg), cut)
+
+    half = np.ascontiguousarray(slice_chain(scan, cut))
+    np.testing.assert_allclose(ff.apply_flatfield(half, cfg, lambda g: slice_chain(g, cut)), expected, rtol=0.02)
+
+    processor = ImageProcessor()
+    processor.run_pipeline(
+        half,
+        replace(WorkspaceConfig(), flatfield=cfg),
+        "half",
+        render_size_ref=100.0,
+        prefer_gpu=False,
+        readback_metrics=False,
+        gain_slices=cut,
+    )
+    np.testing.assert_allclose(processor._precorrect_value, expected, rtol=0.02)
+
+
+def test_without_the_cut_the_gain_would_be_stretched(gain_store):
+    from negpy.services.assets.half_frame import slice_chain
+
+    gain_store("p", _radial_falloff(120, 200))
+    cfg = FlatFieldConfig(apply=True, profile_id="p")
+    scan = np.full((120, 200, 3), 0.4, np.float32) * _radial_falloff(120, 200)
+    cut = ((1, 0.5, None, 0.04, "x"),)
+    half = np.ascontiguousarray(slice_chain(scan, cut))
+    expected = slice_chain(ff.apply_flatfield(scan, cfg), cut)
+    assert not np.allclose(ff.apply_flatfield(half, cfg), expected, rtol=0.02)
+
+
+def test_thumbnail_ir_planes_are_cut_like_the_buffer():
+    from negpy.desktop.workers.render import _slice_meta_planes
+
+    ir = np.arange(100 * 200, dtype=np.float32).reshape(100, 200)
+    out = _slice_meta_planes({"ir_preview": ir, "detect_preview": None, "x": 1}, {"half": 2, "split_x": 0.5})
+    assert out["ir_preview"].shape == (100, 100)
+    assert out["ir_preview"][0, 0] == 100
+    assert out["detect_preview"] is None and out["x"] == 1

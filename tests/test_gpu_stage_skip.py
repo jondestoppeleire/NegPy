@@ -183,29 +183,24 @@ class TestLocalMapCache(unittest.TestCase):
 
         self.assertEqual(self._count_rasterisations(drag), 1)
 
-    def test_grade_change_reapplies_factor_without_rerasterising(self):
-        """The green lane carries a grade-derived slope factor, but the raster itself
-        does not depend on grade: a grade move re-uploads with a new factor only."""
-        from negpy.features.exposure import logic as exposure_logic
+    def test_grade_change_uploads_no_map_and_matches_a_fresh_render(self):
+        """The raster holds the local grade's ISO-R deltas; the shader applies the grade."""
+        from unittest.mock import patch
 
-        factor_calls = {"n": 0}
-        real_factor = exposure_logic.local_grade_factor_map
+        from negpy.infrastructure.gpu.resources import GPUTexture
 
-        def factor_spy(*a, **k):
-            factor_calls["n"] += 1
-            return real_factor(*a, **k)
+        graded = _sub(self.cfg, "exposure", grade=140.0)
+        self._render(self.cfg)
+        with patch.object(GPUTexture, "upload", autospec=True, side_effect=GPUTexture.upload) as upload:
+            self._render(graded)
+        uploaded = [c.args[0] for c in upload.call_args_list]
+        self.assertNotIn(self.eng._tex_cache.get(next(k for k in self.eng._tex_cache if k[3] == "local_ev")), uploaded)
 
-        exposure_logic.local_grade_factor_map = factor_spy
-        try:
-
-            def move_grade():
-                self._render(self.cfg)
-                self._render(_sub(self.cfg, "exposure", grade=4.0))
-
-            self.assertEqual(self._count_rasterisations(move_grade), 1)
-        finally:
-            exposure_logic.local_grade_factor_map = real_factor
-        self.assertEqual(factor_calls["n"], 2)
+        tex, _ = self.eng.process_to_texture(self.img, graded, scale_factor=1.0, readback_metrics=False, source_hash="frame")
+        fresh = self.GPUEngine()
+        self.addCleanup(fresh.destroy_all)
+        ref, _ = fresh.process_to_texture(self.img, graded, scale_factor=1.0, readback_metrics=False, source_hash="frame")
+        np.testing.assert_array_equal(self.eng._readback_downsampled(tex), fresh._readback_downsampled(ref))
 
     def test_mask_edit_rebuilds_the_map(self):
         def move_mask():

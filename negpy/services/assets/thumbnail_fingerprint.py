@@ -87,6 +87,9 @@ def thumbnail_fingerprint(
         "input_icc": _file_identity(input_icc_path),
         "companions": [_file_identity(p) for p in _companion_paths(config)],
     }
+    if config.finish.carrier_width > 0.0:
+        # The carrier's width is in print units, so the export print size reaches its pixels.
+        payload["carrier_print_size"] = config.export.export_print_size
     blob = json.dumps(payload, sort_keys=True, default=str)
     return hashlib.sha256(blob.encode()).hexdigest()
 

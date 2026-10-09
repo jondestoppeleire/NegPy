@@ -204,3 +204,12 @@ def test_run_pipeline_gates_triplets(monkeypatch):
     wb_cfg = replace(cfg, process=replace(cfg.process, linear_raw=False))
     ip.run_pipeline(img, wb_cfg, "h", render_size_ref=float(APP_CONFIG.preview_render_size), prefer_gpu=False)
     assert calls == [None]  # camera-WB buffer: wrong basis for a neutral-WB matrix
+
+
+def test_three_near_identical_captures_are_refused():
+    with pytest.raises(ValueError, match="not independent"):
+        build_sensor_matrix((1.0, 0.999, 0.998), (0.999, 1.0, 0.999), (0.998, 0.999, 1.0))
+
+
+def test_a_broadband_light_with_heavy_crosstalk_still_builds():
+    build_sensor_matrix((1.0, 0.8, 0.5), (0.9, 1.0, 0.9), (0.5, 0.8, 1.0))
