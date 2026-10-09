@@ -1,3 +1,4 @@
+import hashlib
 import os
 import ctypes
 import threading
@@ -197,6 +198,13 @@ def _resolve_armed_autocrop(
     if rect is None:
         return settings, None
     return dc_replace(settings, geometry=dc_replace(geom, crop_rect=rect, crop_detect_key=key)), (rect, key)
+
+
+def _camera_token(cam_xyz: Optional[list], camera_wb: Optional[list]) -> str:
+    """The camera matrix and as-shot WB a slide's transfer reads; an Input ICC swaps them."""
+    if cam_xyz is None and camera_wb is None:
+        return ""
+    return "|cam" + hashlib.md5(repr((np.asarray(cam_xyz).tolist() if cam_xyz is not None else None, camera_wb)).encode()).hexdigest()[:12]
 
 
 def _use_half_size_decode(raw: Any) -> bool:
@@ -686,11 +694,14 @@ class ImageProcessor:
         cam_xyz: Optional[list] = None,
         camera_wb: Optional[list] = None,
         cache_stages: bool = True,
+        gain_slices: tuple = (),
     ) -> Tuple[Any, Dict[str, Any]]:
         """
         Executes rendering pipeline. Returns result (ndarray/GPUTexture) and metrics.
 
         ``skip_flatfield``: the export CPU fallbacks pass an already-flat-fielded buffer.
+        ``gain_slices``: the ``slice_half`` cuts that took *img* out of the decoded frame,
+        such as one half-frame; the flat-field gain takes the same cuts.
         """
         # Flat-field is a source pre-correction, before geometry and crop. Folding its token
         # into source_hash invalidates the engine cache when it changes. Stitch buffers arrive
@@ -701,6 +712,7 @@ class ImageProcessor:
             source_hash,
             img.shape,
             skip_flatfield,
+            gain_slices,
             metadata_lens_corrections(settings),
             flatfield_token(settings.flatfield),
             sensor_token(settings.process),
@@ -713,7 +725,9 @@ class ImageProcessor:
         else:
             source = img
             if not skip_flatfield and not settings.stitch.stitch_enabled and not metadata_lens_corrections(settings):
-                img = apply_flatfield(img, settings.flatfield)
+                from negpy.services.assets.half_frame import slice_chain
+
+                img = apply_flatfield(img, settings.flatfield, (lambda g: slice_chain(g, gain_slices)) if gain_slices else None)
             # Sensor unmix is a source pre-correction like flat-field. skip_flatfield buffers
             # come from _load_source_f32, which already applied it.
             if not skip_flatfield and preview_takes_unmix(settings):
@@ -773,7 +787,7 @@ class ImageProcessor:
                 img = self._hair_inpaint(img, hair_masks, repair_hash + hair_token, dust_label)
             img = self._clone_bake(img, settings)
 
-        source_hash = base_hash + hair_token + f"|res{w_cols}x{h_orig}"
+        source_hash = base_hash + hair_token + f"|res{w_cols}x{h_orig}" + _camera_token(cam_xyz, camera_wb)
 
         scale_factor = max(h_orig, w_cols) / float(APP_CONFIG.preview_render_size)
 
@@ -836,6 +850,7 @@ class ImageProcessor:
                         render_size_ref=render_size_ref,
                     )
                 else:
+                    self.engine_gpu.evict_stale_textures(destroy=False)
                     processed, gpu_metrics = self.engine_gpu.process_to_texture(
                         img,
                         settings,
@@ -2105,7 +2120,9 @@ class ImageProcessor:
             return pil_img, self._get_target_icc_bytes(color_space, output_icc_path)
         except Exception as e:
             logger.error(f"CMS transformation failed: {e}")
-            return pil_img, None
+            # The pixels never left the working space, so tag them with it (a CMYK or Gray
+            # profile cannot take RGB pixels). Untagged, the export reads as sRGB.
+            return pil_img, self._get_target_icc_bytes(working_color_space, input_icc_path)
 
     @staticmethod
     def soft_proof_preview(
@@ -2188,13 +2205,13 @@ class ImageProcessor:
             )
             if result is None:
                 return pil_img
-            result = result if result.mode == "RGB" else result.convert("RGB")
             # Output-to-display transform, so the proof is shown in display space instead
             # of being reinterpreted by the viewer. Always runs, not only when a monitor
             # profile is known: without it the proof leaks output-space numbers to the
-            # screen and shifts per output space (issue #243). Skipped for GRAY outputs,
-            # whose `result` has left `p_dst`'s space after RGB-ising.
-            if out_mode == "RGB":
+            # screen and shifts per output space (issue #243). A GRAY result goes through
+            # it too, from "L", since its TRC matches only an sRGB-TRC display. A display
+            # profile lcms cannot target keeps the output-space result, not the unproofed source.
+            try:
                 proofed = ImageCms.profileToProfile(
                     result,
                     p_dst,
@@ -2203,9 +2220,12 @@ class ImageProcessor:
                     outputMode="RGB",
                     flags=ImageCms.Flags.BLACKPOINTCOMPENSATION,
                 )
-                if proofed is not None:
-                    result = proofed
-            return result
+            except Exception as e:
+                logger.warning(f"Soft-proof display transform failed, showing the output-space proof: {e}")
+                proofed = None
+            if proofed is not None:
+                result = proofed
+            return result if result.mode == "RGB" else result.convert("RGB")
         except Exception as e:
             logger.error(f"Soft-proof preview failed: {e}")
             return pil_img

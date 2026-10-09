@@ -41,11 +41,15 @@ def read_exif_from_file(file_path: str) -> Optional[dict]:
 
 
 def _read_exif_uncached(file_path: str) -> Optional[dict]:
+    import mmap
+
     import piexif
 
-    # Try piexif first (works for JPEG, TIFF)
+    # Try piexif first (works for JPEG, TIFF). Given a path it reads a whole TIFF into
+    # memory; a map pages in only the IFDs it walks.
     try:
-        return piexif.load(file_path)
+        with open(file_path, "rb") as fh, mmap.mmap(fh.fileno(), 0, access=mmap.ACCESS_READ) as mapped:
+            return piexif.load(mapped)
     except Exception:
         pass
 
@@ -96,15 +100,38 @@ def read_orientation(file_path: str) -> int:
         return 1
 
     exif = read_exif_from_file(file_path)
-    if not exif:
-        return 1
     try:
-        val = exif.get("0th", {}).get(piexif.ImageIFD.Orientation)
+        val = (exif or {}).get("0th", {}).get(piexif.ImageIFD.Orientation)
     except Exception:
-        return 1
+        val = None
     if isinstance(val, int) and 1 <= val <= 8:
         return val
-    return 1
+    return _libraw_orientation(file_path)
+
+
+# LibRaw's flip codes as EXIF orientations: 3 is 180 degrees, 5 is 90 CCW, 6 is 90 CW.
+_LIBRAW_FLIP_TO_EXIF = {0: 1, 3: 3, 5: 8, 6: 6}
+
+
+def _libraw_orientation(file_path: str) -> int:
+    """The orientation LibRaw reads from a camera RAW piexif cannot parse (CR3, RAF). 1 otherwise."""
+    from negpy.infrastructure.loaders.constants import (
+        SUPPORTED_JPEG_EXTENSIONS,
+        SUPPORTED_JXL_EXTENSIONS,
+        SUPPORTED_RAW_EXTENSIONS,
+        SUPPORTED_TIFF_EXTENSIONS,
+    )
+
+    camera_raw = SUPPORTED_RAW_EXTENSIONS - SUPPORTED_TIFF_EXTENSIONS - SUPPORTED_JPEG_EXTENSIONS - SUPPORTED_JXL_EXTENSIONS
+    if os.path.splitext(file_path)[1].lower() not in camera_raw:
+        return 1
+    try:
+        import rawpy
+
+        with rawpy.imread(file_path) as raw:
+            return _LIBRAW_FLIP_TO_EXIF.get(int(raw.sizes.flip), 1)
+    except Exception:
+        return 1
 
 
 def identify_color_space_from_icc(icc_bytes: Optional[bytes]) -> Optional[str]:
@@ -121,6 +148,15 @@ def identify_color_space_from_icc(icc_bytes: Optional[bytes]) -> Optional[str]:
         logger.warning(f"Could not parse embedded ICC profile: {e}")
         return None
 
+    # The bundled v4 profiles (icc/) carry only these short tags as their description.
+    short = {
+        "a98c": ColorSpace.ADOBE_RGB.value,
+        "romm": ColorSpace.PROPHOTO.value,
+        "2020": ColorSpace.REC2020.value,
+        "sp3": ColorSpace.P3_D65.value,
+    }
+    if desc.strip() in short:
+        return short[desc.strip()]
     # Order matters: more specific matches first.
     if "prophoto" in desc:
         return ColorSpace.PROPHOTO.value
@@ -423,6 +459,9 @@ def bounded_tiff_page_preview(
     if len(shape) not in (2, 3) or (len(shape) == 3 and shape[2] not in (1, 3, 4)):
         return None
     if page.dtype not in (np.uint8, np.uint16) or int(getattr(page, "planarconfig", 1)) != 1:
+        return None
+    # Palette, MinIsWhite and CMYK samples are not intensities; the full decode handles them.
+    if int(getattr(page, "photometric", 2)) not in (1, 2):
         return None
 
     height, width = shape[:2]

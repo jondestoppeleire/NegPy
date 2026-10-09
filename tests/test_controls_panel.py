@@ -427,3 +427,26 @@ def test_the_frame_half_does_not_promise_a_rejoin():
     ControlsPanel._sync_scope_buttons(panel)
 
     assert "rejoin" not in panel.film_section.set_scope_buttons.call_args.kwargs["frame_tooltip"]
+
+
+def test_the_calibration_reset_clears_the_unmix_matrices():
+    """A profile reset alone leaves the matrix it loaded, and the unmix runs on."""
+    panel = MagicMock()
+    panel.controller.state = AppState()
+    cfg = DEFAULT_WORKSPACE_CONFIG
+    panel.controller.state.config = replace(
+        cfg,
+        process=replace(
+            cfg.process,
+            sensor_profile="custom",
+            sensor_matrix=(1.0, -0.1, 0.0, -0.1, 1.0, -0.1, 0.0, -0.1, 1.0),
+            crosstalk_matrix=(1.0, -0.05, 0.0, -0.2, 1.0, -0.05, 0.0, -0.1, 1.0),
+            crosstalk_process=ProcessMode.E6,
+        ),
+    )
+
+    ControlsPanel._reset_process_fields(panel, _SENSOR_FIELDS)
+
+    after = panel.controller.apply_config.call_args[0][0].process
+    for field in ("sensor_profile", "sensor_matrix", "crosstalk_matrix", "crosstalk_process"):
+        assert getattr(after, field) == getattr(DEFAULT_WORKSPACE_CONFIG.process, field), field

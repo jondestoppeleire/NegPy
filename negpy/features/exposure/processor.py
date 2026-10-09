@@ -18,6 +18,7 @@ from negpy.features.exposure.logic import (
     local_ev_scale,
     local_grade_factor_map,
     highlight_hold_offset,
+    shadow_hold_offset,
     per_channel_curve_params,
 )
 from negpy.features.exposure.models import EXPOSURE_CONSTANTS, ExposureConfig, RenderIntent
@@ -184,6 +185,7 @@ class NormalizationProcessor:
         context.metrics["highlight_point"] = measure_highlight_point_from_log(prefiltered, anchor_bounds, None, 0.0)
 
         context.metrics["final_bounds"] = bounds
+        context.metrics["pre_trim_bounds"] = pre_trim_bounds
         context.metrics["normalized_log"] = res
         context.metrics["histogram_density"] = density_histogram(res, context.active_roi)
         return res
@@ -259,6 +261,12 @@ class PhotometricProcessor:
                 slopes[1], pivots[1], hl_point, d_min=d_min, paper=paper, preflash=self.config.preflash, grade=self.config.grade
             )
             if self.config.auto_normalize_contrast and hl_point is not None
+            else 0.0
+        )
+        sh_point = context.metrics.get("shadow_point")
+        sh_auto = (
+            shadow_hold_offset(slopes[1], pivots[1], sh_point, d_min=d_min, paper=paper)
+            if self.config.auto_normalize_contrast and sh_point is not None
             else 0.0
         )
 
@@ -362,7 +370,7 @@ class PhotometricProcessor:
                 self.config.shoulder_width_trim_green,
                 self.config.shoulder_width_trim_blue,
             ),
-            shadow_density=self.config.shadow_density,
+            shadow_density=self.config.shadow_density + sh_auto,
             highlight_density=self.config.highlight_density + hl_auto,
             shadow_grade_deltas=sg_deltas,
             highlight_grade_deltas=hg_deltas,

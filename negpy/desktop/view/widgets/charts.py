@@ -201,6 +201,7 @@ class PhotometricCurveWidget(QWidget):
         flat: bool = False,
         mask_centre: float | None = None,
         highlight_density: float | None = None,
+        shadow_density: float | None = None,
     ) -> None:
         from negpy.features.exposure.logic import (
             _expit,
@@ -268,6 +269,7 @@ class PhotometricCurveWidget(QWidget):
                 shoulder_width=sw_ch,
                 midtone_gamma=mg_ch,
                 highlight_density=highlight_density,
+                shadow_density=shadow_density,
                 shadow_grade_delta=sg_ch,
                 highlight_grade_delta=hg_ch,
                 curvature=curv_ch,
@@ -320,7 +322,11 @@ class PhotometricCurveWidget(QWidget):
             )
             if diverged:
                 toe3, sh3 = per_channel_toe_shoulder(toe_eff, shoulder_eff, knee_trims[:3], knee_trims[3:])
-                mg3 = per_channel_midtone_gamma(None, params.midtone_gamma, snap_trims)
+                from negpy.features.exposure.papers import effective_paper_profile
+
+                mg3 = per_channel_midtone_gamma(
+                    effective_paper_profile(params.paper_profile, process_mode), params.midtone_gamma, snap_trims
+                )
                 tw3, sw3 = per_channel_widths(params.toe_width, params.shoulder_width, width_trims[:3], width_trims[3:])
                 ch_colors = (QColor(THEME.channel_red_text), QColor(THEME.channel_green_text), QColor(THEME.channel_blue_text))
                 self._channel_curves = [

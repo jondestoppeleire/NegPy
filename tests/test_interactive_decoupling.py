@@ -93,6 +93,7 @@ class TestSettleOnlyWorkIsSkipped(unittest.TestCase):
                 compare_mode=False,
                 negative_peek=False,
                 embedded_peek=False,
+                flatfield_peek=False,
             ),
             image_updated=MagicMock(),
             _update_thumbnail_from_state=MagicMock(),
@@ -126,10 +127,11 @@ class TestSettleOnlyWorkIsSkipped(unittest.TestCase):
         stub._update_thumbnail_from_state.assert_called_once()
 
     def test_analysis_panel_skips_interactive_frames(self):
+        from negpy.desktop.session import AppState
         from negpy.desktop.view.sidebar.right_panel import RightPanel
 
         panel = MagicMock()
-        panel.controller.session.state.last_metrics = {"interactive": True}
+        panel.controller.session.state = AppState(last_metrics={"interactive": True})
         RightPanel._update_analysis(panel)
         panel._update_histograms.assert_not_called()
 

@@ -498,13 +498,13 @@ class MainWindow(QMainWindow):
 
     def _reference_snapshot(self):
         """The frame on the canvas as displayed now; the pane keeps it until pinned again."""
-        metrics = self.state.last_metrics
-        buffer = metrics.get("base_positive")
-        if not self.state.current_file_path or buffer is None or metrics.get("splash"):
+        shown = self.state.canvas_value
+        buffer = shown("base_positive")
+        if not self.state.current_file_path or buffer is None or shown("splash"):
             return None
         if isinstance(buffer, GPUTexture):
             buffer = buffer.readback()[:, :, :3]
-        display_cs, monitor, proof = self.controller.display_transform_params(proofed=bool(metrics.get("proof", True)))
+        display_cs, monitor, proof = self.controller.display_transform_params(proofed=bool(shown("proof", True)))
         return ImageConverter.to_qimage(np.ascontiguousarray(buffer, dtype=np.float32), display_cs, monitor, proof)
 
     def light_table_active(self) -> bool:
@@ -693,22 +693,21 @@ class MainWindow(QMainWindow):
             # file, so keep the viewer blank.
             return
         self.empty_state.setVisible(False)
-        metrics = self.state.last_metrics
-        if "base_positive" not in metrics:
-            logger.warning("Render completed but 'base_positive' not found in metrics")
-            return
-
+        shown = self.state.canvas_value
         # Passed on as it is: the GPU display path samples the texture and applies the
         # working-to-display LUT in its shader.
-        buffer = metrics["base_positive"]
-        content_rect = metrics.get("content_rect")
+        buffer = shown("base_positive")
+        if buffer is None:
+            logger.warning("Render completed but 'base_positive' not found in metrics")
+            return
+        content_rect = shown("content_rect")
 
         if isinstance(buffer, np.ndarray) and not self.state.gpu_enabled:
             finish_conf = self.state.config.finish
             export_conf = self.state.config.export
             # No padding for a crop_preview_full buffer (the uncropped frame), as on the GPU: it would misalign
             # the tool rect. The buffer's flag decides, not the live tool: a render can land after the tool changes.
-            should_preview = (finish_conf.border_size > 0 or export_conf.paper_aspect_ratio != AspectRatio.ORIGINAL) and not metrics.get(
+            should_preview = (finish_conf.border_size > 0 or export_conf.paper_aspect_ratio != AspectRatio.ORIGINAL) and not shown(
                 "crop_preview_full"
             )
 
@@ -734,7 +733,7 @@ class MainWindow(QMainWindow):
         # Shared with the filmstrip thumbnail, so the same frame cannot render two different
         # colors in the two places (see display_transform_params).
         display_cs, monitor_bytes, proof = self.controller.display_transform_params(
-            splash=bool(metrics.get("splash")), proofed=bool(metrics.get("proof", True))
+            splash=bool(shown("splash")), proofed=bool(shown("proof", True))
         )
         self.canvas.update_buffer(buffer, display_cs, content_rect=content_rect, monitor_icc_bytes=monitor_bytes, proof=proof)
 

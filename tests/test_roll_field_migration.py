@@ -104,3 +104,28 @@ def test_cast_removal_locks_only_a_strength_off_its_modes_default(repo):
     assert rolls.frame_override_cards(repo, roll, "a") == {"cast_removal"}
     assert rolls.frame_override_cards(repo, roll, "b") == set(), "runs once"
     assert rolls.frame_override_cards(repo, roll, "c") == set()
+
+
+def test_cast_removal_reads_a_legacy_slide_mode_as_a_slide(repo):
+    import json
+    import sqlite3
+    from contextlib import closing
+
+    from negpy.features.process.models import ProcessMode
+    from negpy.services.assets.migrations.roll_fields import migrate_cast_removal_roll_locks
+
+    roll = rolls.create_virtual_roll(repo, "Roll", ["/r/a.tif"])
+    base = WorkspaceConfig()
+    slide = replace(
+        base, process=replace(base.process, process_mode=ProcessMode.E6), exposure=replace(base.exposure, cast_removal_strength=0.0)
+    )
+    repo.save_file_settings("a", slide, file_path="/r/a.tif")
+    with closing(sqlite3.connect(repo.edits_db_path)) as conn, conn:
+        (raw,) = conn.execute("SELECT settings_json FROM file_settings WHERE file_hash = 'a'").fetchone()
+        conn.execute(
+            "UPDATE file_settings SET settings_json = ? WHERE file_hash = 'a'", (json.dumps({**json.loads(raw), "process_mode": "E-6"}),)
+        )
+
+    migrate_cast_removal_roll_locks(repo)
+
+    assert rolls.frame_override_cards(repo, roll, "a") == set()

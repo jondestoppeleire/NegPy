@@ -1850,7 +1850,7 @@ class FileBrowser(QWidget):
                 if base and self.controller.half_frame_override(base) is not None:
                     menu.addAction("Reset Split to Roll Default").triggered.connect(lambda: self._on_reset_half_frame_split(base))
             if state.active_roll_id and active.get("path"):
-                if rolls.is_forked(self.session.repo, state.active_roll_id, active.get("hash") or ""):
+                if rolls.is_forked(self.session.repo, state.active_roll_id, rolls.unforked_hash(active.get("hash") or "")):
                     menu.addAction("Use the Shared Edit Again…").triggered.connect(self.prompt_unfork_edit)
                 elif len(rolls.rolls_containing_path(self.session.repo, active["path"])) >= 2:
                     menu.addAction("Edit Independently in This Roll").triggered.connect(

@@ -38,7 +38,7 @@ Drag a panel by its top edge (the strip above Session, or the margin around the 
 
 ### Peek Negative
 
-The toolbar's film button (or `N`) shows the scan as loaded: not inverted, not metered, no edits; crop, rotation and flip still apply. Use it to check density, mask color and scanner clipping. It is scaled to its brightest tone, so read density from the density histogram, not the brightness. Touching a control closes it; a crop drag closes it on release.
+The toolbar's film button (or `N`) shows the scan as loaded: not inverted, not metered, no edits; crop, rotation and flip still apply. Use it to check density, mask color and scanner clipping. It is scaled to its brightest tone, so read density from the density histogram, not the brightness. It stays up while you edit. A frame change closes it, and so does a crop, straighten or keystone when you commit it.
 
 ### Peek Embedded Preview
 
@@ -416,7 +416,7 @@ Color timing, like enlarger dichroic filters. The **Global / Shadows / Highlight
 **Automatic helpers**, in the **Auto** menu (magic-wand icon) beside the channel selector, on by default:
 
 *   **Auto Density**: meters each frame's midtone and anchors print brightness there.
-*   **Auto Grade**: sets the grade partly from the frame's textured density range, harder when needed so textured shadows reach black (Shadow Reach), and holds textured highlights off paper white (Highlight Hold).
+*   **Auto Grade**: sets the grade partly from the frame's textured density range, harder when needed so textured shadows reach black (Shadow Reach), opens the shadows of a contrasty frame (Shadow Hold), and holds textured highlights off paper white (Highlight Hold).
 *   **Auto Density and Grade**: turns both helpers on or off together.
 *   **Set Targets…** (last item in the Auto menu): the brightness and contrast the helpers aim for, for all frames.
 *   With a helper on, its sliders show what prints: **Print Density** the metered density, **ISO-R Grade** the grade the frame prints at, **Highlights Density** with the automatic burn. Moving one trims the helper, the tick marks the helper's own choice and a double-click returns to it. Turning a helper off drops its share, so the sliders show your own values; turning it on adds it back.
@@ -431,7 +431,7 @@ Color timing, like enlarger dichroic filters. The **Global / Shadows / Highlight
 
 *   **Print Density** (0.0 to 2.0): overall brightness (enlarger time). Lower is brighter.
 *   **ISO-R Grade** (50 to 180): contrast as paper ISO-R. R110 is about grade 2; **lower R is harder**. In R/G/B mode a **Grade** trim rotates one layer's slope about the midtone.
-*   **Shadows Density** (±0.9 ΔD) / **Highlights Density** (±0.5 ΔD): brighten or darken only the shadows or highlights, within paper black and white. They also work on slides.
+*   **Shadows Density** / **Highlights Density** (±1.0 ΔD): brighten or darken only the shadows or highlights, within paper black and white. With Auto Grade on, each shows its automatic share (Shadow Hold's lift, Highlight Hold's burn). They also work on slides.
 *   **Shadows Grade** / **Highlights Grade** (split grade, ±50 ISO-R): local contrast in the deep shadows or highlights.
 *   **Preflash** (0 to 1): an even flash over the sheet, as a fraction of the paper's threshold exposure. It pulls highlight detail off paper white and softens the print slightly; bare paper stays white. Hidden on slides.
 *   **Contrast Mask** (±0.5, hidden in Transparency): a blurred mask sandwiched with the negative; the value is its signed gamma. Positive compresses the range by (1 − gamma) so a harder grade fits, keeping fine detail. Negative expands the range by (1 + gamma) for a negative too flat for Grade; past about −0.4, highlights clip. Past about ±0.2, strong edges get a halo.
@@ -727,9 +727,9 @@ Applying it sets the defaults for new files and rewrites every edited frame in t
 
 *   **Profile**: the sensor matrix. Custom `.toml` matrices go in `<Documents>/NegPy/sensor/`.
 *   **Method**: how the matrix is applied. *Two-Scale* (default) is *Linear* wherever the calibration can be trusted; where a color is mostly leak, as in neon or deep blue, it stops the speckle and keeps the grain at the film's own. *Linear* subtracts the leak exactly and prints those colors as speckled, fully saturated color. *Density* applies the matrix to densities: no speckle, but strong colors come out slightly less vivid. Two-Scale and Density read the film base color from the frame; a scan clipped there uses Linear.
-*   **Calibrate** (vials icon on the header): build a profile from three bare-light R/G/B exposures. A Single Capture Scanlight preset can save one during its own calibration.
+*   **Calibrate** (vials icon on the header): build a profile from three bare-light R/G/B exposures. Pick them as files, or press **Capture from Camera…** to shoot and measure them with a tethered camera and a Scanlight, with no film in the holder; it asks before the first exposure, and the button is grayed out until both are connected. A Single Capture Scanlight preset can save one during its own calibration.
 
-Needs **Linear RAW**; grayed out on Transparency and on a Trichrome triplet. **Re-run Roll Analysis** after changing it.
+Needs **Linear RAW**; grayed out on Transparency and on a Trichrome triplet. **Re-run Roll Analysis** after changing it. CAMERA_SCANNING.md has a workflow for each way to build and assign a profile.
 
 **Crosstalk** (hidden in B&W Negative): a channel unmix on the densities before inversion. Dyes, light and sensor all mix the channels, so a matrix describes your whole scanning setup.
 
@@ -844,6 +844,7 @@ Corrects uneven illumination (vignetting, falloff) from a copy-stand or scanner 
 
 *   **Profile**, with **+** and **trash** on the FLAT FIELD CORRECTION header: **+** bakes a reference image into a named profile in NegPy's `flatfield` folder, after which the image can be deleted. **Trash** asks first; every frame using the profile loses its correction.
 *   **Apply Flat Field** (bulb toggle beside the dropdown): apply the selected profile to this roll, enabled once a profile exists.
+*   **Check Flat Field** (eye toggle): shows how well the selected profile corrects its own reference, from any frame and without the reference file. A good profile shows an even gray; a band or patch shows where it is off, and the stronger it is, the larger the error: full white or black is 10% or more. The status line gives the spread. A profile saved before this check shows the light it corrects instead; save it again to check it. Saving a profile warns when its reference is clipped or does not correct itself evenly.
 
 A newly chosen profile becomes the rig's default for the next roll.
 
@@ -940,7 +941,7 @@ A gear library for Metadata (§11), Roll Settings and every gear picker. **My Ge
 
 *   **Print** (default): the look you see on screen.
 *   **Flat**: a neutral, low-contrast master for editing elsewhere. It skips the print look, effects, toning and vignette, and writes a 16-bit TIFF, or lossless JPEG XL when JXL is selected with sRGB, P3, Rec 2020 or Grayscale.
-    *   **Preview Flat**: show the flat master on the canvas.
+    *   **Preview Flat**: show the flat master on the canvas. Rotation and flip keep it up; any other edit or a frame change closes it.
     *   **Roll Analysis** (Roll tab): share one exposure baseline across all visible frames so flat masters match. Run it before a flat batch.
 *   **Linear**: write the decoded buffer as linear 16-bit, with rotation, flip and only the corrections turned on below. **TIFF** (default, untagged) or **JPEG XL** (lossless; always tagged with sRGB primaries, wrong for native primaries). **Effort** (1 to 9, default 7) trades JPEG XL speed for size.
     *   **Pakon RAW**: 4× expansion by default; F335 files (16-bit sensor) none.
@@ -1010,6 +1011,7 @@ A darkroom proof of the roll: every visible frame at true size, as cut film stri
 *   **Print**: **As Edited**, or **Straight Proof**: the whole roll at one exposure on grade 2 from its Roll Analysis baseline (per scene in **Scene** order), so thin and dense negatives print light and dark. It needs the roll scanned at one exposure; positives from other software cannot be proofed.
 *   **Edge Print**: the maker's markings on the film edge (stock name, frame numbers, DX barcode). Off prints plain film.
 *   **Roll Label**: the roll name, film, developer, camera and date above the strips, set in the edge print's capitals and ink.
+*   **White Paper**: white paper and a dark roll label instead of the darkroom black, to save ink on a home printer. The film strips print as before.
 *   **Pick Frames**: click a frame to leave it out or put it back; rejected frames start out.
 
 Sheets are JPEGs named `contact_sheet.jpg` (`contact_sheet_1of2.jpg` and on when the roll needs more sheets), with the **JPEG Quality** and **Progressive** settings above.
@@ -1095,7 +1097,7 @@ Shown while a Scanlight is connected.
 *   **Preset**: shows its RGB levels, ISO, shutter and aperture and forces them each frame. **+** calibrates: place the rectangle on clear film base, name it, run it; it solves a shutter and LED levels just under clipping, or says which way to adjust. **Create a manual preset…** sets one by hand, and the save button stores it.
 *   **Red**, **Green**, **Blue**, **White** (0 to 255): LED levels, editable while building a manual preset. **Light Off** turns every channel off.
 *   **Capture mode**: **Triplet** shoots one exposure per LED and merges them; **Single Capture** shoots one exposure with red, green and blue lit together and imports it as an ordinary RAW. Picked in the calibration window, or here while building a manual preset.
-*   **Sensor Profile** (calibration window, Single Capture only, default on): also saves a sensor profile under the preset's name; a roll scanned with the preset takes it and turns Linear RAW on. A preset's profile is not carried to other rolls.
+*   **Create Sensor Profile** (calibration window, Single Capture only, default on): also saves a sensor profile under the preset's name; a roll scanned with the preset takes it and turns Linear RAW on. A preset's profile is not carried to other rolls.
 *   **ISO**, **Shutter**, **Aperture**: the preset's exposure, editable while building a manual preset.
 *   **Channel Delay** (0 to 5000 ms): pauses between R, G and B for bodies that lock up. Triplet presets only.
 

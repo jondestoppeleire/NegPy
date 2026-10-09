@@ -61,9 +61,12 @@ _LENS_FIELDS = (
 )
 _SENSOR_FIELDS = (
     "sensor_profile",
+    "sensor_matrix",
     "sensor_unmix",
     "crosstalk_profile",
     "crosstalk_strength",
+    "crosstalk_matrix",
+    "crosstalk_process",
     "hue_trim",
 )
 # ProcessConfig is split across five cards. Each tuple is both the card's reset scope and
@@ -486,6 +489,7 @@ class ControlsPanel(QWidget):
             (self.retouch_sidebar.right_click_btn, "toggle_right_click_excludes"),
             (self.retouch_sidebar.ir_dust_btn, "toggle_ir_removal"),
             (self.flatfield_sidebar.enable_btn, "toggle_flat_field"),
+            (self.flatfield_sidebar.check_btn, "toggle_flatfield_peek"),
             (self.autocrop_sidebar.auto_crop_all_btn, "batch_autocrop"),
             (self.tone_sidebar.auto_density_action, "toggle_auto_density"),
             (self.tone_sidebar.auto_grade_action, "toggle_auto_grade"),
@@ -598,7 +602,8 @@ class ControlsPanel(QWidget):
         exp.shadow_density_slider.setToolTip(
             tooltip_with_shortcut(
                 "Shadow zone density (ΔD): weighted to the deep shadows, bounded by paper black. "
-                "Positive darkens shadows; negative lifts them",
+                "Positive darkens shadows; negative lifts them. With Auto Grade on, it includes "
+                "the automatic shadow lift",
                 ["shadow_density_inc", "shadow_density_dec"],
             )
         )

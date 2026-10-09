@@ -195,6 +195,11 @@ class TestSettings:
         settings = ContactSheetSettings(250.0, 300.0, 600, False, False)
         assert ContactSheetSettings.from_dict(settings.to_dict()) == settings
 
+    def test_white_paper_round_trips_and_defaults_off(self):
+        settings = ContactSheetSettings(white_paper=True)
+        assert ContactSheetSettings.from_dict(settings.to_dict()).white_paper is True
+        assert ContactSheetSettings.from_dict({"white_paper": "yes"}).white_paper is False
+
     def test_edge_print_defaults_on_for_records_without_it(self):
         assert ContactSheetSettings.from_dict({"dpi": 600}).edge_print is True
 

@@ -113,6 +113,9 @@ class RenderTask:
     split_x: float = 0.5
     split_axis: str = "x"
     gutter_thickness: float = 0.0
+    # The slice_half cuts that took `buffer` out of the decoded frame (a half, or a
+    # diptych's crop), for the flat-field gain to take too.
+    gain_slices: tuple = ()
 
 
 @dataclass(frozen=True)
@@ -352,6 +355,7 @@ class RenderWorker(QObject):
                 crop_preview_full=task.crop_preview_full,
                 cam_xyz=task.cam_xyz,
                 camera_wb=task.camera_wb,
+                gain_slices=task.gain_slices + ((n, task.split_x, None, task.gutter_thickness, task.split_axis),),
             )
             if isinstance(out, GPUTexture):
                 out = np.ascontiguousarray(out.readback()[:, :, :3])
@@ -387,6 +391,7 @@ class RenderWorker(QObject):
                     crop_preview_full=task.crop_preview_full,
                     cam_xyz=task.cam_xyz,
                     camera_wb=task.camera_wb,
+                    gain_slices=task.gain_slices,
                 )
 
             # CPU renders have no in-shader histogram; bin the float output here.
@@ -419,6 +424,7 @@ class RenderWorker(QObject):
             metrics["compare"] = task.compare
             metrics["interactive"] = task.interactive
             metrics["crop_preview_full"] = task.crop_preview_full
+            metrics["config_override"] = task.config_override
 
             self.finished.emit(result, metrics)
             self.metrics_updated.emit(metrics)
@@ -756,9 +762,15 @@ class AssetDiscoveryWorker(QObject):
 
     @pyqtSlot(AssetDiscoveryTask)
     def process(self, task: AssetDiscoveryTask) -> None:
-        """
-        Scans paths for supported images and calculates hashes.
-        """
+        """Scans paths for supported images and calculates hashes. Emits `finished` or
+        `error`: either one releases the import lane."""
+        try:
+            self._discover(task)
+        except Exception as e:
+            logger.exception("Asset discovery failed")
+            self.error.emit(str(e))
+
+    def _discover(self, task: AssetDiscoveryTask) -> None:
         import os
 
         from negpy.infrastructure.loaders.constants import is_hidden_path, is_ir_sidecar_path
@@ -791,17 +803,14 @@ class AssetDiscoveryWorker(QObject):
             if digest is None:
                 continue
             f_hash, legacy = digest
-            if not f_hash.startswith("err_"):
-                # Stamped once here so sorting and date search never stat per row.
-                valid_assets.append(
-                    {
-                        "name": os.path.basename(path),
-                        "path": path,
-                        "hash": f_hash,
-                        "legacy_hash": legacy,
-                        "mtime": os.path.getmtime(path),
-                    }
-                )
+            if f_hash.startswith("err_"):
+                continue
+            # Stamped once here so sorting and date search never stat per row.
+            try:
+                mtime = os.path.getmtime(path)
+            except OSError:
+                continue  # Removed or renamed since it was hashed.
+            valid_assets.append({"name": os.path.basename(path), "path": path, "hash": f_hash, "legacy_hash": legacy, "mtime": mtime})
 
         blank_ambiguous_legacy_hashes(valid_assets)
 
@@ -1125,9 +1134,9 @@ class PreviewLoadWorker(QObject):
     Keeps the UI thread free during slow I/O and demosaicing.
     """
 
-    # (file_path, raw, dims, source_cs, ir_preview, detected_mode, (cam_xyz, camera_wb), detect_preview)
-    finished = pyqtSignal(str, object, object, str, object, str, object, object)
-    splash = pyqtSignal(str, object, object)  # (file_path, buffer, dims) — first paint
+    # (file_path, raw, dims, source_cs, ir_preview, detected_mode, (cam_xyz, camera_wb), detect_preview, generation)
+    finished = pyqtSignal(str, object, object, str, object, str, object, object, int)
+    splash = pyqtSignal(str, object, object, int)  # (file_path, buffer, dims, generation) — first paint
     error = pyqtSignal(str)
     # (file_path, applied long-edge cap px): an HQ load exceeded the GPU's VRAM budget
     # and was downsampled instead of crashing. Emitted alongside `finished`.
@@ -1240,6 +1249,7 @@ class PreviewLoadWorker(QObject):
                         lens_decode_token(task.lens_corrections, task.lens_flatfield),
                     ),
                     metadata.get("detect_preview"),
+                    task.generation,
                 )
                 return
             if hdr_active(task.hdr):
@@ -1284,6 +1294,7 @@ class PreviewLoadWorker(QObject):
                         lens_decode_token(task.lens_corrections, task.lens_flatfield),
                     ),
                     metadata.get("detect_preview"),
+                    task.generation,
                 )
                 return
             if is_rgb_triplet(task.rgbscan):
@@ -1326,6 +1337,7 @@ class PreviewLoadWorker(QObject):
                         lens_decode_token(task.lens_corrections, task.lens_flatfield),
                     ),
                     metadata.get("detect_preview"),
+                    task.generation,
                 )
                 return
             if task.use_splash and not task.full_resolution:
@@ -1350,7 +1362,7 @@ class PreviewLoadWorker(QObject):
                     return
                 if sp is not None:
                     sbuf, sdims = sp
-                    self.splash.emit(task.file_path, sbuf, sdims)
+                    self.splash.emit(task.file_path, sbuf, sdims, task.generation)
             else:
                 raw, dims, metadata = self._preview_service.load_linear_preview(
                     task.file_path,
@@ -1395,6 +1407,7 @@ class PreviewLoadWorker(QObject):
                     lens_decode_token(task.lens_corrections, task.lens_flatfield),
                 ),
                 metadata.get("detect_preview"),
+                task.generation,
             )
         except InterruptedError:
             return
@@ -1443,6 +1456,24 @@ def decode_asset_preview(
 ) -> np.ndarray:
     """Decode one asset the way the render path does. See `_decode_asset_preview_with_meta`."""
     return _decode_asset_preview_with_meta(preview_service, file_info, config, workspace_color_space)[0]
+
+
+def gain_slices_for_asset(file_info: dict) -> tuple:
+    """The slice_half cuts a thumbnail's buffer took, for run_pipeline's gain_slices."""
+    from negpy.services.assets.half_frame import asset_slice
+
+    args = asset_slice(file_info)
+    return () if args is None else (args,)
+
+
+def _slice_meta_planes(meta: dict, file_info: dict) -> dict:
+    """The IR and dust-detect planes cut like the buffer they ride with."""
+    from negpy.services.assets.half_frame import slice_for_asset
+
+    return {
+        k: np.ascontiguousarray(slice_for_asset(v, file_info)) if k in ("ir_preview", "detect_preview") and v is not None else v
+        for k, v in meta.items()
+    }
 
 
 def _decode_asset_preview_with_meta(
@@ -1502,7 +1533,7 @@ def _decode_asset_preview_with_meta(
             lens_flatfield=config.flatfield,
             **common,
         )
-    return slice_for_asset(raw, file_info), meta
+    return slice_for_asset(raw, file_info), _slice_meta_planes(meta, file_info)
 
 
 class BatchAutoCropWorker(QObject):
@@ -1736,7 +1767,7 @@ class ThumbnailRenderWorker(QObject):
         raw, _dims, meta = hit
         # The navigation cache still serves these arrays, so the pipeline gets its own.
         meta = {k: np.copy(v) if isinstance(v, np.ndarray) else v for k, v in meta.items()}
-        return slice_for_asset(np.copy(raw), frame.file_info), meta
+        return slice_for_asset(np.copy(raw), frame.file_info), _slice_meta_planes(meta, frame.file_info)
 
     def _decode(self, frame: ThumbnailRenderInput, workspace_color_space: str) -> tuple[np.ndarray, dict]:
         hit = self._peek_live_preview(frame, workspace_color_space)
@@ -1803,6 +1834,7 @@ class ThumbnailRenderWorker(QObject):
                             detect_buffer=meta.get("detect_preview"),
                             cam_xyz=cam_xyz,
                             camera_wb=meta.get("camera_wb"),
+                            gain_slices=gain_slices_for_asset(frame.file_info),
                         )
                         render_s = time.perf_counter() - started
                         if isinstance(result, np.ndarray) and not self._cancel_requested(generation):
@@ -1853,6 +1885,11 @@ class NormalizationWorker(QObject):
         """Requests the running analysis stop; no baseline is applied."""
         self._cancel.set()
 
+    def arm(self) -> None:
+        """Clears a Stop left from an earlier run. Called on the GUI thread before dispatch,
+        so a Stop pressed before the queued run starts is kept."""
+        self._cancel.clear()
+
     @pyqtSlot(NormalizationTask)
     def process(self, task: NormalizationTask) -> None:
         """
@@ -1876,7 +1913,6 @@ class NormalizationWorker(QObject):
         from negpy.features.process.models import ProcessMode
         from negpy.features.geometry.processor import GeometryProcessor
 
-        self._cancel.clear()
         total = len(task.frames)
         limit = max(1, APP_CONFIG.max_workers // 2)
         semaphore = asyncio.Semaphore(limit)
@@ -1911,6 +1947,15 @@ class NormalizationWorker(QObject):
                         params,
                         task.workspace_color_space,
                     )
+                    # The flat field the render applies, behind the same gate run_pipeline uses.
+                    if not params.stitch.stitch_enabled and not metadata_lens_corrections(params):
+                        from negpy.features.flatfield.logic import apply_flatfield
+                        from negpy.services.assets.half_frame import slice_chain
+
+                        cuts = gain_slices_for_asset(f_info)
+                        raw = await asyncio.to_thread(
+                            apply_flatfield, raw, params.flatfield, (lambda g: slice_chain(g, cuts)) if cuts else None
+                        )
                     # Bounds must be measured on the same channel mix the preview normalizes.
                     sensor_matrix = effective_sensor_matrix(params.process)
                     if sensor_matrix is not None and preview_takes_unmix(params):

@@ -596,17 +596,20 @@ def _detect_eject(opt) -> bool:
 
 
 def _detect_adapter_frame_capacity(opt) -> int | None:
-    """Return the adapter's advertised transport bound, not an exposure count."""
+    """Return the adapter's advertised transport bound, not an exposure count.
+
+    None for one frame: coolscan3 reports 1..1 for a mount adapter, which holds no strip.
+    """
     if "frame" not in opt:
         return None
     constraint = opt["frame"].constraint
     if isinstance(constraint, tuple) and len(constraint) >= 2:
         capacity = int(constraint[1])
-        return capacity if capacity > 0 else None
-    if isinstance(constraint, list) and constraint:
+    elif isinstance(constraint, list) and constraint:
         capacity = max(int(value) for value in constraint)
-        return capacity if capacity > 0 else None
-    return None
+    else:
+        return None
+    return capacity if capacity > 1 else None
 
 
 def _detect_adapter_frame_control(opt) -> bool:
@@ -1223,6 +1226,11 @@ class SaneBackend:
                     dev.frame = params.frame
                 except Exception as e:
                     raise RuntimeError(f"Could not set frame={params.frame}: {e}") from e
+                # coolscan3 clamps a frame past the loaded strip to its last one and reports only
+                # an inexact set, so read it back rather than rescan that frame under this number.
+                actual = getattr(dev, "frame", params.frame)
+                if int(actual) != int(params.frame):
+                    raise RuntimeError(f"Frame {params.frame} is past the end of the loaded film (the scanner stopped at frame {actual})")
 
             _apply_frame_offset(dev, offset_mm)
 
