@@ -189,7 +189,8 @@ class RetouchSidebar(BaseSidebar):
         self.pick_dust_btn.toggled.connect(self._on_pick_toggled)
         self.pick_scratch_btn.toggled.connect(self._on_scratch_toggled)
         self.pick_line_btn.toggled.connect(self._on_line_toggled)
-        self.manual_size_slider.valueChanged.connect(
+        self.manual_size_slider.valueChanged.connect(lambda v: self.update_config_section("retouch", render=False, manual_dust_size=int(v)))
+        self.manual_size_slider.valueCommitted.connect(
             lambda v: self.update_config_section("retouch", render=False, persist=True, manual_dust_size=int(v))
         )
         self.clone_btn.toggled.connect(self._on_clone_toggled)
@@ -198,9 +199,15 @@ class RetouchSidebar(BaseSidebar):
             lambda c: self.update_config_section("retouch", render=False, persist=True, clone_match_tone=c)
         )
         self.clone_strength_slider.valueChanged.connect(
+            lambda v: self.update_config_section("retouch", render=False, clone_strength=float(v) / 100.0)
+        )
+        self.clone_strength_slider.valueCommitted.connect(
             lambda v: self.update_config_section("retouch", render=False, persist=True, clone_strength=float(v) / 100.0)
         )
         self.clone_feather_slider.valueChanged.connect(
+            lambda v: self.update_config_section("retouch", render=False, clone_feather=float(v) / 100.0)
+        )
+        self.clone_feather_slider.valueCommitted.connect(
             lambda v: self.update_config_section("retouch", render=False, persist=True, clone_feather=float(v) / 100.0)
         )
         self.clone_undo_btn.clicked.connect(self.controller.undo_last_clone)

@@ -162,3 +162,14 @@ def test_detection_sliders_persist_on_commit(qapp):
         config = controller.apply_config.call_args.args[0]
         assert getattr(config.retouch, field) == 3
         assert controller.apply_config.call_args.kwargs["persist"] is True, field
+
+
+def test_brush_and_clone_sliders_persist_once_per_drag(qapp):
+    controller, sb = _sidebar()
+    update = controller.session.update_config
+    for slider in (sb.manual_size_slider, sb.clone_strength_slider, sb.clone_feather_slider):
+        update.reset_mock()
+        slider.valueChanged.emit(30.0)
+        assert update.call_args.kwargs["persist"] is False
+        slider.valueCommitted.emit(30.0)
+        assert update.call_args.kwargs["persist"] is True
