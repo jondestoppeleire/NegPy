@@ -209,6 +209,9 @@ CATALOG: list[tuple[str, tuple[SettingRow, ...]]] = [
         _row("Exposure Scale", "altproc", "cyano_scale"),
         _row("Bleach", "altproc", "cyano_bleach"),
         _row("Tannin", "altproc", "cyano_tannin"),
+        _row("Sabattier Strength", "altproc", "sabattier_strength"),
+        _row("Re-exposure", "altproc", "sabattier_reexposure"),
+        _row("Line Width", "altproc", "sabattier_line_width"),
     )),
     ("Toning", (
         _row("Selenium", "toning", "selenium_strength"),

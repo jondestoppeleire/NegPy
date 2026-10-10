@@ -15,9 +15,10 @@ _SENSITIZER_LABELS = {
 
 class AltProcessSidebar(BaseSidebar):
     """
-    Alternative printing processes. One at a time — a print is either lith-developed
-    or a cyanotype, never both. Lith's paper comes from the Exposure panel; the
-    cyanotype is on rag paper and takes its color from the sensitizer.
+    Alternative printing processes, one at a time: lith-developed, a cyanotype or a
+    Sabattier print, never two. Lith's paper comes from the Exposure panel; the
+    cyanotype is on rag paper and takes its color from the sensitizer; a Sabattier
+    print is plain silver.
     """
 
     def _init_ui(self) -> None:
@@ -46,6 +47,15 @@ class AltProcessSidebar(BaseSidebar):
                 "There is no silver in a cyanotype, so every chemical toner is disabled while "
                 "this is on; use Bleach and Tannin instead",
             ),
+            (
+                AltProcess.SABATTIER,
+                "fa5s.adjust",
+                "Sabattier",
+                "Re-expose the print to white light part-way through development: the light tones "
+                "reverse and fold back toward gray, the dense ones hold, and a light Mackie line runs "
+                "along every edge between dark and light.\n"
+                "The print stays neutral silver, so every toner acts on it as on a plain print",
+            ),
         )
         self.mode_btn = ChoiceButton(tuple((icon, label) for _m, icon, label, _t in self._modes), "Alternative printing process")
         for action, (*_rest, tip) in zip(self.mode_btn.choice_menu.actions(), self._modes):
@@ -56,8 +66,10 @@ class AltProcessSidebar(BaseSidebar):
 
         self.lith_block = self._build_lith(conf)
         self.cyano_block = self._build_cyanotype(conf)
+        self.sabattier_block = self._build_sabattier(conf)
         self.layout.addWidget(self.lith_block)
         self.layout.addWidget(self.cyano_block)
+        self.layout.addWidget(self.sabattier_block)
 
         self.layout.addStretch()
 
@@ -138,6 +150,33 @@ class AltProcessSidebar(BaseSidebar):
         col.addWidget(self.cyano_tannin_slider)
         return block
 
+    def _build_sabattier(self, conf) -> QWidget:
+        block = QWidget()
+        col = QVBoxLayout(block)
+        col.setContentsMargins(0, 0, 0, 0)
+
+        self.sabattier_strength_slider = CompactSlider("Strength", 0.0, 2.0, conf.sabattier_strength, step=0.05)
+        self.sabattier_strength_slider.setToolTip(
+            "The second exposure's length. Below 1 the light tones flatten toward the fold; at 1 they sit on it; "
+            "above 1 they reverse, the lighter the darker. Paper white comes back as this fraction of the "
+            "re-exposure density"
+        )
+        self.sabattier_reexposure_slider = CompactSlider("Re-exposure", 0.1, 0.9, conf.sabattier_reexposure, step=0.05)
+        self.sabattier_reexposure_slider.setToolTip(
+            "Where on the scale the fold sits, as a fraction of the paper's Dmax. Tones denser than it have "
+            "developed and hold; lighter ones reverse"
+        )
+        self.sabattier_line_width_slider = CompactSlider("Line Width", 0.0, 1.0, conf.sabattier_line_width, step=0.05, unit="%")
+        self.sabattier_line_width_slider.setToolTip(
+            "How far the bromide from the developing shadows reaches into the light tones, as a per-cent of "
+            "the frame's short side: the width of the Mackie lines. 0 draws none"
+        )
+
+        col.addWidget(self.sabattier_strength_slider)
+        col.addWidget(self.sabattier_reexposure_slider)
+        col.addWidget(SliderGroup(self.sabattier_line_width_slider))
+        return block
+
     def _select_sensitizer(self, sensitizer) -> None:
         """Items store the plain str; findData(StrEnum) misses and would snap the
         combo back to the first entry on every re-sync."""
@@ -158,6 +197,9 @@ class AltProcessSidebar(BaseSidebar):
             (self.cyano_scale_slider, "cyano_scale"),
             (self.cyano_bleach_slider, "cyano_bleach"),
             (self.cyano_tannin_slider, "cyano_tannin"),
+            (self.sabattier_strength_slider, "sabattier_strength"),
+            (self.sabattier_reexposure_slider, "sabattier_reexposure"),
+            (self.sabattier_line_width_slider, "sabattier_line_width"),
         ):
             slider.valueChanged.connect(
                 lambda v, f=field: self.update_config_section("altproc", persist=False, readback_metrics=False, **{f: v})
@@ -185,9 +227,13 @@ class AltProcessSidebar(BaseSidebar):
             self.cyano_scale_slider.setValue(conf.cyano_scale)
             self.cyano_bleach_slider.setValue(conf.cyano_bleach)
             self.cyano_tannin_slider.setValue(conf.cyano_tannin)
+            self.sabattier_strength_slider.setValue(conf.sabattier_strength)
+            self.sabattier_reexposure_slider.setValue(conf.sabattier_reexposure)
+            self.sabattier_line_width_slider.setValue(conf.sabattier_line_width)
 
             self.lith_block.setVisible(mode == AltProcess.LITH)
             self.cyano_block.setVisible(mode == AltProcess.CYANOTYPE)
+            self.sabattier_block.setVisible(mode == AltProcess.SABATTIER)
         finally:
             self.block_signals(False)
 
@@ -200,6 +246,9 @@ class AltProcessSidebar(BaseSidebar):
             self.cyano_scale_slider,
             self.cyano_bleach_slider,
             self.cyano_tannin_slider,
+            self.sabattier_strength_slider,
+            self.sabattier_reexposure_slider,
+            self.sabattier_line_width_slider,
         ]
 
     def block_signals(self, blocked: bool) -> None:
