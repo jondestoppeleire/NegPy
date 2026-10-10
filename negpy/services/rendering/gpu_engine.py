@@ -971,7 +971,7 @@ class GPUEngine:
                     analysis_key,
                     roi,
                     (h_rot, w_rot),
-                    settings.exposure.diffusion_radius,
+                    settings.exposure.diffuser_height,
                     (geo.rotation, geo.fine_rotation, geo.flip_horizontal, geo.flip_vertical, geo.converge_v, geo.converge_h, k1_eff),
                 )
                 # The blur is keyed without bounds, so a trim drag only re-normalizes the grid.
@@ -982,7 +982,7 @@ class GPUEngine:
                             img,
                             unmix_m,
                             roi_norm=normalized_roi(roi, (h_rot, w_rot)),
-                            radius=settings.exposure.diffusion_radius,
+                            height=settings.exposure.diffuser_height,
                             **geometry_kwargs(geo, k1_eff),
                         ),
                     )
@@ -2695,7 +2695,7 @@ class GPUEngine:
                 img,
                 unmix_m,
                 roi_norm=normalized_roi(roi, (h_rot, w_rot)),
-                radius=settings.exposure.diffusion_radius,
+                height=settings.exposure.diffuser_height,
                 **geometry_kwargs(settings.geometry, k1_eff),
             )
             plane = diffusion_plane(grid, trimmed, settings.process.process_mode == ProcessMode.BW)

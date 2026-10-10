@@ -22,9 +22,9 @@ _BLOCK_MEDIAN_PARALLEL_MIN_PIXELS = 2_000_000
 MASK_SPACER_DEFAULT = 4.0
 MASK_SPACER_MIN = 2.0
 MASK_SPACER_MAX = 6.0
-DIFFUSION_RADIUS_DEFAULT = 2.0
-DIFFUSION_RADIUS_MIN = 0.5
-DIFFUSION_RADIUS_MAX = 5.0
+DIFFUSER_HEIGHT_DEFAULT = 2.0
+DIFFUSER_HEIGHT_MIN = 0.5
+DIFFUSER_HEIGHT_MAX = 5.0
 
 
 @njit(cache=True, fastmath=True)
@@ -771,17 +771,17 @@ def diffusion_grid(
     converge_v: float = 0.0,
     converge_h: float = 0.0,
     roi_norm: Optional[Tuple[float, float, float, float]] = None,
-    radius: float = DIFFUSION_RADIUS_DEFAULT,
+    height: float = DIFFUSER_HEIGHT_DEFAULT,
 ) -> np.ndarray:
     """
     The light the paper sees through a diffuser, as log density on the analysis grid
     (`analysis_grid`): the unmixed light, blurred. The print's normalization is a per-channel
-    gain on that light, so the grid takes no bounds. `radius` is the blur sigma as a per-cent
-    of the grid's short side.
+    gain on that light, so the grid takes no bounds. `height` is the diffuser's height above
+    the paper, as the blur sigma in per-cent of the grid's short side.
     """
     image = analysis_grid(image, rotation, fine_rotation, flip_horizontal, flip_vertical, distortion_k1, converge_v, converge_h, roi_norm)
     light = np.ascontiguousarray(10.0 ** unmix_log_image(prefilter_log_grid(image, None, 0.0), unmix), dtype=np.float32)
-    sigma = min(max(radius, DIFFUSION_RADIUS_MIN), DIFFUSION_RADIUS_MAX) * 0.01 * min(light.shape[:2])
+    sigma = min(max(height, DIFFUSER_HEIGHT_MIN), DIFFUSER_HEIGHT_MAX) * 0.01 * min(light.shape[:2])
     return np.log10(cv2.GaussianBlur(light, (0, 0), sigma, borderType=cv2.BORDER_REPLICATE))
 
 

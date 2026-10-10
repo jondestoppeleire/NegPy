@@ -90,7 +90,7 @@ class TestGpuTiledParity(unittest.TestCase):
 
     def test_tiled_applies_diffusion(self):
         base = _base()
-        settings = replace(base, exposure=replace(base.exposure, diffusion=0.6, diffusion_radius=3.0))
+        settings = replace(base, exposure=replace(base.exposure, diffusion=0.6, diffuser_height=3.0))
         # Diffusion moves the print at its edges only, so its mean change on a smooth frame is small.
         self._assert_changes_export(settings, "Diffusion did nothing to the tiled export", tol=5e-4)
         self._assert_parity(settings, "Tiled export dropped the Diffusion")

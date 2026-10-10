@@ -35,8 +35,8 @@ def _normalized(lin: np.ndarray) -> np.ndarray:
     return np.ascontiguousarray(normalize_log_image(to_log_density(lin), BOUNDS), dtype=np.float32)
 
 
-def _plane(lin: np.ndarray, radius: float, panchromatic: bool = False) -> np.ndarray:
-    plane = diffusion_plane(diffusion_grid(lin, None, radius=radius), BOUNDS, panchromatic)
+def _plane(lin: np.ndarray, height: float, panchromatic: bool = False) -> np.ndarray:
+    plane = diffusion_plane(diffusion_grid(lin, None, height=height), BOUNDS, panchromatic)
     assert plane is not None
     return plane
 
@@ -81,7 +81,7 @@ class TestPlane(unittest.TestCase):
         lin = np.full((20, 30, 3), 0.3, dtype=np.float32)
         lin[:, :, 2] = 0.1
         unmix = np.array([[1.0, -0.2, 0.0], [-0.1, 1.0, -0.1], [0.0, -0.3, 1.0]], dtype=np.float32)
-        plane = diffusion_plane(diffusion_grid(lin, unmix, radius=3.0), BOUNDS)
+        plane = diffusion_plane(diffusion_grid(lin, unmix, height=3.0), BOUNDS)
         expected = normalize_log_image(unmix_log_image(to_log_density(lin), unmix), BOUNDS)
         np.testing.assert_allclose(plane, expected, atol=1e-5)
 
@@ -175,21 +175,21 @@ class TestDiffusionParity(unittest.TestCase):
         return cpu
 
     def test_cpu_gpu_match_and_the_diffusion_moves_the_print(self):
-        soft = self._assert_match(_settings(diffusion=0.7, diffusion_radius=3.0), "diffusion-parity")
+        soft = self._assert_match(_settings(diffusion=0.7, diffuser_height=3.0), "diffusion-parity")
         plain = self._render(_settings(), "diffusion-parity-plain", prefer_gpu=False)
         self.assertGreater(float(np.max(np.abs(soft - plain))), 0.02)
 
     def test_cpu_gpu_match_with_the_contrast_mask_on_the_same_texture(self):
-        self._assert_match(_settings(diffusion=0.5, diffusion_radius=2.0, contrast_mask=0.3, grade=80.0), "diffusion-mask-parity")
+        self._assert_match(_settings(diffusion=0.5, diffuser_height=2.0, contrast_mask=0.3, grade=80.0), "diffusion-mask-parity")
 
     def test_cpu_gpu_match_cropped(self):
-        s = _settings(diffusion=0.6, diffusion_radius=2.5)
+        s = _settings(diffusion=0.6, diffuser_height=2.5)
         self._assert_match(replace(s, geometry=replace(s.geometry, crop_rect=(0.2, 0.15, 0.65, 0.7))), "diffusion-parity-crop")
 
     def test_cpu_gpu_match_a_cast_frame_printed_as_bw(self):
         """A B&W print mixes a luma plane with its luma pixel, so a cast flat area holds."""
         self.img = np.ascontiguousarray(self.img * np.array([1.3, 1.0, 0.8], dtype=np.float32))
-        s = _settings(diffusion=0.8, diffusion_radius=3.0)
+        s = _settings(diffusion=0.8, diffuser_height=3.0)
         self._assert_match(replace(s, process=replace(s.process, process_mode="B&W")), "diffusion-parity-bw")
 
     def test_the_mix_slider_uploads_no_texture(self):

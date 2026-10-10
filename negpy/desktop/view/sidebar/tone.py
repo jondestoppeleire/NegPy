@@ -173,13 +173,14 @@ class ToneSidebar(BaseSidebar):
             "paper sees is mixed with a blurred copy of itself, so shadows bleed into highlights and "
             "edges soften; flat areas print as before. 0 is off."
         )
-        self.diffusion_radius_slider = CompactSlider("Diffusion Radius", 0.5, 5.0, conf.diffusion_radius, unit="%")
-        self.diffusion_radius_slider.setToolTip(
-            "Diffusion Radius: how far the light spreads, as a per-cent of the frame's short side. Inert with no diffusion."
+        self.diffuser_height_slider = CompactSlider("Diffuser Height", 0.5, 5.0, conf.diffuser_height, unit="%")
+        self.diffuser_height_slider.setToolTip(
+            "Diffuser Height: how high above the paper the diffuser sits. Higher spreads the light further, "
+            "as a per-cent of the frame's short side. Inert with no diffusion."
         )
         self.layout.addWidget(self.diffusion_slider)
-        self.diffusion_radius_rail = SliderGroup(self.diffusion_radius_slider)
-        self.layout.addWidget(self.diffusion_radius_rail)
+        self.diffuser_height_rail = SliderGroup(self.diffuser_height_slider)
+        self.layout.addWidget(self.diffuser_height_rail)
 
         # Density-domain saturation, composed into the same dye_mix slot as the paper's real dye
         # crosstalk, rather than a post-hoc Lab-space a*/b*
@@ -364,7 +365,7 @@ class ToneSidebar(BaseSidebar):
             (self.contrast_mask_slider, "contrast_mask"),
             (self.mask_spacer_slider, "mask_spacer"),
             (self.diffusion_slider, "diffusion"),
-            (self.diffusion_radius_slider, "diffusion_radius"),
+            (self.diffuser_height_slider, "diffuser_height"),
             (self.preflash_slider, "preflash"),
         ):
             slider.valueChanged.connect(
@@ -508,8 +509,8 @@ class ToneSidebar(BaseSidebar):
                 self.mask_spacer_slider,
                 self.mask_spacer_rail,
                 self.diffusion_slider,
-                self.diffusion_radius_slider,
-                self.diffusion_radius_rail,
+                self.diffuser_height_slider,
+                self.diffuser_height_rail,
                 self.preflash_slider,
             ):
                 w.setVisible(not transfer)
@@ -580,11 +581,11 @@ class ToneSidebar(BaseSidebar):
             self.contrast_mask_slider.setValue(conf.contrast_mask)
             self.mask_spacer_slider.setValue(conf.mask_spacer)
             self.diffusion_slider.setValue(conf.diffusion)
-            self.diffusion_radius_slider.setValue(conf.diffusion_radius)
+            self.diffuser_height_slider.setValue(conf.diffuser_height)
             self.preflash_slider.setValue(conf.preflash)
             # Out of _global_only: that tuple means enabled exactly when global.
             self.mask_spacer_slider.setEnabled(global_mode and conf.contrast_mask != 0.0)
-            self.diffusion_radius_slider.setEnabled(global_mode and conf.diffusion != 0.0)
+            self.diffuser_height_slider.setEnabled(global_mode and conf.diffusion != 0.0)
             # It redistributes Dye Separation's push and does nothing on its own, so at 1.0
             # separation on every channel it is dead — a per-channel trim also arms it,
             # not just the global value. Say so instead of letting it be dragged for no result.
@@ -627,7 +628,7 @@ class ToneSidebar(BaseSidebar):
             self.contrast_mask_slider,
             self.mask_spacer_slider,
             self.diffusion_slider,
-            self.diffusion_radius_slider,
+            self.diffuser_height_slider,
             self.preflash_slider,
             self.paper_dmin_btn,
             self.paper_black_btn,

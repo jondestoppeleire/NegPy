@@ -241,7 +241,7 @@ class DarkroomEngine:
                 calculate_config_hash(base_key),
                 diff_roi,
                 current_img.shape[:2],
-                settings.exposure.diffusion_radius,
+                settings.exposure.diffuser_height,
                 panchromatic,
             )
             # A None plane (an unmetered frame) is cached under its key like any other.
@@ -251,7 +251,7 @@ class DarkroomEngine:
                     img,
                     effective_crosstalk_matrix(settings.process, settings.process.process_mode),
                     roi_norm=normalized_roi(diff_roi, current_img.shape[:2]),
-                    radius=settings.exposure.diffusion_radius,
+                    height=settings.exposure.diffuser_height,
                     **geometry_kwargs(settings.geometry, distortion_k1),
                 )
                 plane = diffusion_plane(grid, diff_bounds, panchromatic)
