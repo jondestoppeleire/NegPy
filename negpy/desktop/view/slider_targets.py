@@ -29,7 +29,6 @@ SLIDER_ATTRS: dict[str, str] = {
     "contrast_mask": "tone_sidebar.contrast_mask_slider",
     "mask_spacer": "tone_sidebar.mask_spacer_slider",
     "diffusion": "tone_sidebar.diffusion_slider",
-    "diffuser_height": "tone_sidebar.diffuser_height_slider",
     "preflash": "tone_sidebar.preflash_slider",
     "offset": "autocrop_sidebar.offset_slider",
     "fine_rot": "geometry_sidebar.fine_rot_slider",

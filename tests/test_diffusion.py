@@ -35,8 +35,8 @@ def _normalized(lin: np.ndarray) -> np.ndarray:
     return np.ascontiguousarray(normalize_log_image(to_log_density(lin), BOUNDS), dtype=np.float32)
 
 
-def _plane(lin: np.ndarray, height: float, panchromatic: bool = False) -> np.ndarray:
-    plane = diffusion_plane(diffusion_grid(lin, None, height=height), BOUNDS, panchromatic)
+def _plane(lin: np.ndarray, panchromatic: bool = False) -> np.ndarray:
+    plane = diffusion_plane(diffusion_grid(lin, None), BOUNDS, panchromatic)
     assert plane is not None
     return plane
 
@@ -48,12 +48,12 @@ def _print(img: np.ndarray, **kw) -> np.ndarray:
 class TestPlane(unittest.TestCase):
     def test_a_flat_frame_diffuses_to_itself(self):
         lin = np.full((40, 60, 3), 0.3, dtype=np.float32)
-        plane = _plane(lin, 3.0)
+        plane = _plane(lin)
         np.testing.assert_allclose(plane, _normalized(lin), atol=1e-5)
 
     def test_the_plane_is_the_blurred_light_not_the_blurred_density(self):
         lin = _step_negative()
-        plane = _plane(lin, 5.0)
+        plane = _plane(lin)
         h, w = lin.shape[:2]
         # Far from the edge the plane is the frame; at the edge it is the mean of the two
         # lights (0.26), which in density sits nearer the thin side than the mean density does.
@@ -66,7 +66,7 @@ class TestPlane(unittest.TestCase):
     def test_a_panchromatic_plane_is_the_luma_of_a_cast_frame(self):
         lin = np.full((20, 30, 3), 0.3, dtype=np.float32)
         lin[:, :, 0] *= 1.4  # an orange-mask cast
-        plane = _plane(lin, 3.0, panchromatic=True)
+        plane = _plane(lin, panchromatic=True)
         norm = _normalized(lin)
         lum = 0.2126 * norm[:, :, 0] + 0.7152 * norm[:, :, 1] + 0.0722 * norm[:, :, 2]
         for ch in range(3):
@@ -81,7 +81,7 @@ class TestPlane(unittest.TestCase):
         lin = np.full((20, 30, 3), 0.3, dtype=np.float32)
         lin[:, :, 2] = 0.1
         unmix = np.array([[1.0, -0.2, 0.0], [-0.1, 1.0, -0.1], [0.0, -0.3, 1.0]], dtype=np.float32)
-        plane = diffusion_plane(diffusion_grid(lin, unmix, height=3.0), BOUNDS)
+        plane = diffusion_plane(diffusion_grid(lin, unmix), BOUNDS)
         expected = normalize_log_image(unmix_log_image(to_log_density(lin), unmix), BOUNDS)
         np.testing.assert_allclose(plane, expected, atol=1e-5)
 
@@ -89,19 +89,19 @@ class TestPlane(unittest.TestCase):
 class TestKernel(unittest.TestCase):
     def test_zero_diffusion_is_bit_identical(self):
         img = _normalized(_step_negative())
-        plane = _plane(_step_negative(), 3.0)
+        plane = _plane(_step_negative())
         np.testing.assert_array_equal(_print(img), _print(img, diffusion=0.0, diffusion_plane=plane))
 
     def test_a_flat_frame_prints_as_before_at_full_diffusion(self):
         lin = np.full((32, 48, 3), 0.3, dtype=np.float32)
         img = _normalized(lin)
-        plane = _plane(lin, 3.0)
+        plane = _plane(lin)
         np.testing.assert_allclose(_print(img, diffusion=1.0, diffusion_plane=plane), _print(img), atol=1e-4)
 
     def test_the_dense_side_spreads_into_the_thin_side_at_the_edge_only(self):
         lin = _step_negative()
         img = _normalized(lin)
-        plane = _plane(lin, 4.0)
+        plane = _plane(lin)
         plain = _print(img)
         soft = _print(img, diffusion=0.6, diffusion_plane=plane)
         h, w = img.shape[:2]
@@ -116,7 +116,7 @@ class TestKernel(unittest.TestCase):
     def test_the_full_slider_diffuses_half_the_light(self):
         lin = _step_negative()
         img = _normalized(lin)
-        plane = _plane(lin, 4.0)
+        plane = _plane(lin)
         r = np.array(channel_density_ranges(BOUNDS), dtype=np.float64)
         half = np.log10(0.5 * 10.0 ** (img * r) + 0.5 * 10.0 ** (plane * r)) / r
         np.testing.assert_allclose(_print(img, diffusion=1.0, diffusion_plane=plane), _print(half.astype(np.float32)), atol=1e-5)
@@ -124,7 +124,7 @@ class TestKernel(unittest.TestCase):
     def test_the_rect_places_the_plane_on_the_printed_frame(self):
         lin = _step_negative()
         img = _normalized(lin)
-        plane = _plane(lin, 4.0)
+        plane = _plane(lin)
         h, w = img.shape[:2]
         whole = _print(img, diffusion=0.6, diffusion_plane=plane, diffusion_rect=(0.0, 0.0, float(w), float(h)))
         np.testing.assert_array_equal(whole, _print(img, diffusion=0.6, diffusion_plane=plane))
@@ -175,21 +175,21 @@ class TestDiffusionParity(unittest.TestCase):
         return cpu
 
     def test_cpu_gpu_match_and_the_diffusion_moves_the_print(self):
-        soft = self._assert_match(_settings(diffusion=0.7, diffuser_height=3.0), "diffusion-parity")
+        soft = self._assert_match(_settings(diffusion=0.7), "diffusion-parity")
         plain = self._render(_settings(), "diffusion-parity-plain", prefer_gpu=False)
         self.assertGreater(float(np.max(np.abs(soft - plain))), 0.02)
 
     def test_cpu_gpu_match_with_the_contrast_mask_on_the_same_texture(self):
-        self._assert_match(_settings(diffusion=0.5, diffuser_height=2.0, contrast_mask=0.3, grade=80.0), "diffusion-mask-parity")
+        self._assert_match(_settings(diffusion=0.5, contrast_mask=0.3, grade=80.0), "diffusion-mask-parity")
 
     def test_cpu_gpu_match_cropped(self):
-        s = _settings(diffusion=0.6, diffuser_height=2.5)
+        s = _settings(diffusion=0.6)
         self._assert_match(replace(s, geometry=replace(s.geometry, crop_rect=(0.2, 0.15, 0.65, 0.7))), "diffusion-parity-crop")
 
     def test_cpu_gpu_match_a_cast_frame_printed_as_bw(self):
         """A B&W print mixes a luma plane with its luma pixel, so a cast flat area holds."""
         self.img = np.ascontiguousarray(self.img * np.array([1.3, 1.0, 0.8], dtype=np.float32))
-        s = _settings(diffusion=0.8, diffuser_height=3.0)
+        s = _settings(diffusion=0.8)
         self._assert_match(replace(s, process=replace(s.process, process_mode="B&W")), "diffusion-parity-bw")
 
     def test_the_mix_slider_uploads_no_texture(self):

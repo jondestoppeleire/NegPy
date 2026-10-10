@@ -436,9 +436,9 @@ Color timing, like enlarger dichroic filters. The **Global / Shadows / Highlight
 *   **Shadows Density** / **Highlights Density** (±1.0 ΔD): brighten or darken only the shadows or highlights, within paper black and white. With Auto Grade on, each shows its automatic share (Shadow Hold's lift, Highlight Hold's burn). They also work on slides.
 *   **Shadows Grade** / **Highlights Grade** (split grade, ±50 ISO-R): local contrast in the deep shadows or highlights.
 *   **Preflash** (0 to 1): an even flash over the sheet, as a fraction of the paper's threshold exposure. It pulls highlight detail off paper white and softens the print slightly; bare paper stays white. Hidden on slides.
+*   **Diffusion** (0 to 1, hidden in Transparency): a diffuser under the enlarger lens, a Softar or a stocking. The value is how much light it scatters: a stronger diffuser, or more of the exposure given through it. Shadows bleed into highlights and edges soften; flat areas print as before. Grays out in R/G/B mode.
 *   **Contrast Mask** (±0.5, hidden in Transparency): a blurred mask sandwiched with the negative; the value is its signed gamma. Positive compresses the range by (1 − gamma) so a harder grade fits, keeping fine detail. Negative expands the range by (1 + gamma) for a negative too flat for Grade; past about −0.4, highlights clip. Past about ±0.2, strong edges get a halo.
 *   **Mask Spacer** (2 to 6%, default 4%): the gap between mask and negative, as percent of the frame. Thicker masks only broad masses; thinner reaches into detail and hazes shadows next to bright areas. Both mask controls gray out in R/G/B mode.
-*   **Diffusion** (0 to 1, hidden in Transparency) with **Diffuser Height** (0.5 to 5% of the frame's short side, default 2%): a diffuser under the enlarger lens, a Softar or a stocking, held higher above the paper to spread the light further. Light spreads before it reaches the paper, so shadows bleed into highlights and edges soften; flat areas print as before. Both gray out in R/G/B mode.
 
 **Paper Response**:
 

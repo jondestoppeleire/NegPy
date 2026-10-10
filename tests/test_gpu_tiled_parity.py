@@ -90,10 +90,11 @@ class TestGpuTiledParity(unittest.TestCase):
 
     def test_tiled_applies_diffusion(self):
         base = _base()
-        settings = replace(base, exposure=replace(base.exposure, diffusion=0.6, diffuser_height=3.0))
-        # Diffusion moves the print at its edges only, so its mean change on a smooth frame is small.
-        self._assert_changes_export(settings, "Diffusion did nothing to the tiled export", tol=5e-4)
-        self._assert_parity(settings, "Tiled export dropped the Diffusion")
+        settings = replace(base, exposure=replace(base.exposure, diffusion=1.0))
+        # Diffusion moves the print at its edges only, so its mean change on a smooth frame is small;
+        # the parity tolerance sits well under it, so a dropped plane fails both.
+        self._assert_changes_export(settings, "Diffusion did nothing to the tiled export", tol=1e-4)
+        self._assert_parity(settings, "Tiled export dropped the Diffusion", tol=1e-5)
 
     def test_tiled_local_mask_follows_keystone(self):
         base = _base()
