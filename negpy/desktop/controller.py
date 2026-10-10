@@ -190,6 +190,7 @@ from negpy.features.process.models import (
 from negpy.desktop.settings_catalog import BOUNDS_INPUT_FIELDS, FRAME_CARD_FIELDS, frame_card_rows, section_of_field, selected_flat_dict
 from negpy.services.assets.thumbnails import asset_thumbnail_key
 from negpy.services.assets.thumbnail_fingerprint import (
+    NON_PIXEL_SECTIONS,
     QUICK as THUMB_QUICK,
     decode_comment,
     is_current as thumbnail_is_current,
@@ -335,6 +336,24 @@ class _DiscoveryRequest:
     half_frame_profile: Optional[dict] = None  # {crop_rect, split_x, gutter_thickness}
     half_frame_overrides: Optional[dict] = None  # {base_hash: {crop_rect, split_x, gutter_thickness}}
     hot_folder: bool = False
+
+
+# Sections a scan peek shows itself or that never reach the pixels; an edit to any other section ends the peek.
+_PEEK_SHOWN_SECTIONS = NON_PIXEL_SECTIONS | {"geometry"}
+
+
+def _peek_hidden_sections(config: WorkspaceConfig) -> tuple:
+    return tuple(getattr(config, f.name) for f in fields(config) if f.name not in _PEEK_SHOWN_SECTIONS)
+
+
+def _same_section(a: Any, b: Any) -> bool:
+    """Identity first: a section that holds an array has no truth value for ==."""
+    if a is b:
+        return True
+    try:
+        return bool(a == b)
+    except (ValueError, TypeError):
+        return False
 
 
 def baseline_compare_config(config: WorkspaceConfig) -> WorkspaceConfig:
@@ -736,6 +755,7 @@ class AppController(QObject):
         self._dispatched_render_state: Optional[tuple] = None  # _render_state() of the last plain render
 
         self._crop_bounds_dirty = False
+        self._peek_sections: Optional[tuple] = None  # _peek_hidden_sections() when a scan peek opened; a render of others ends it
         self._keystone_lines: Dict[str, Tuple[Tuple[float, float], Tuple[float, float]]] = {}
         self._zone_preview_shown = False
         self._pin_dragging = False
@@ -3053,9 +3073,11 @@ class AppController(QObject):
             self.clear_zone_pins()
         if leaving_crop and self._crop_bounds_dirty:
             # Recompute bounds once now the final crop is committed.
+            before = self.state.config
             new_proc = replace(self.state.config.process, **invalidate_local_bounds(self.state.config.process))
             self.session.update_config(replace(self.state.config, process=new_proc), render=False)
             self._crop_bounds_dirty = False
+            self._carry_peek(before)
         if preview_mode_changed:
             if leaving_crop:
                 # Same spinner treatment as an initial file load: the bounds recompute and
@@ -3536,7 +3558,7 @@ class AppController(QObject):
         self._render_debounce.stop()
         self.session.update_config(replace(self.state.config, geometry=new_geo), persist=persist, render=persist)
         if persist:
-            self._reset_all_peeks()
+            self.reset_all_peeks()
             self.request_render()
 
     def handle_crop_rotation_changed(self, angle: float, persist: bool) -> None:
@@ -3552,6 +3574,7 @@ class AppController(QObject):
         self.session.update_config(replace(self.state.config, geometry=new_geo), persist=persist)
         self.rotation_guide_requested.emit()
         if persist:
+            self.reset_all_peeks()
             self.request_render()
         else:
             self._render_debounce.start()
@@ -3569,7 +3592,7 @@ class AppController(QObject):
         self.session.update_config(replace(self.state.config, geometry=new_geo), persist=True)
         self.rotation_guide_requested.emit()
         self.set_active_tool(ToolMode.NONE)
-        self._reset_all_peeks()
+        self.reset_all_peeks()
         self.request_render()
 
     def auto_skew_frame(self) -> None:
@@ -3662,10 +3685,10 @@ class AppController(QObject):
         self._keystone_lines = {}
         self.keystone_lines_cleared.emit()
         self.rotation_guide_requested.emit()
-        self._reset_all_peeks()
+        self.reset_all_peeks()
         self.request_render()
 
-    def _reset_all_peeks(self) -> None:
+    def reset_all_peeks(self) -> None:
         if self.state.flat_peek:
             self.state.flat_peek = False
             self.flat_peek_changed.emit(False)
@@ -3761,6 +3784,7 @@ class AppController(QObject):
 
     def reset_crop(self) -> None:
         self._crop_bounds_dirty = False
+        before = self.state.config
         new_proc = replace(self.state.config.process, **invalidate_local_bounds(self.state.config.process))
         self.session.update_config(
             replace(
@@ -3770,6 +3794,7 @@ class AppController(QObject):
             ),
             persist=True,
         )
+        self._carry_peek(before)
         self._render_crop_change()
 
     def _render_crop_change(self) -> None:
@@ -3789,6 +3814,7 @@ class AppController(QObject):
             self.state.active_tool = ToolMode.NONE
             self.tool_sync_requested.emit()
         self._crop_bounds_dirty = False
+        before = self.state.config
         new_proc = replace(self.state.config.process, **invalidate_local_bounds(self.state.config.process))
         self.session.update_config(
             replace(
@@ -3802,6 +3828,7 @@ class AppController(QObject):
             ),
             persist=True,
         )
+        self._carry_peek(before)
         self._render_crop_change()
 
     def _config_for_batch_asset(self, asset: dict) -> WorkspaceConfig:
@@ -3904,7 +3931,9 @@ class AppController(QObject):
                     new_process = replace(latest.process, **invalidate_local_bounds(latest.process))
                     updated = replace(latest, geometry=new_geometry, process=new_process)
                     if asset.get("hash") == self.state.current_file_hash:
+                        before = self.state.config
                         self.session.persist_active_batch_config(updated)
+                        self._carry_peek(before)
                         active_changed = True
                     else:
                         self.session.repo.save_file_settings(asset["hash"], updated, file_path=asset["path"])
@@ -4229,6 +4258,7 @@ class AppController(QObject):
         if new_ratio == geom.autocrop_ratio:
             return
 
+        before = self.state.config
         new_proc = replace(self.state.config.process, **invalidate_local_bounds(self.state.config.process))
         self.session.update_config(
             replace(
@@ -4239,6 +4269,7 @@ class AppController(QObject):
             persist=True,
             render=False,
         )
+        self._carry_peek(before)
         self._lock_roll_card("autocrop")
         # Emit manually so UI syncs (combo dropdown updates), but without triggering
         # a render via the state_changed debounce.
@@ -6453,11 +6484,13 @@ class AppController(QObject):
             self.load_file(self.state.current_file_path, preserve_zoom=True)
             return
 
-        # A plain render paints the edit over the flat peek, so it ends the peek. The other
-        # peeks repaint over a render; edits drop them through _reset_all_peeks.
+        # A plain render paints the edit over the flat peek, so it ends the peek. The scan
+        # peeks repaint over a render, so only an edit since they opened ends them.
         if config_override is None and self.state.flat_peek:
             self.state.flat_peek = False
             self.flat_peek_changed.emit(False)
+        if config_override is None and (self.state.negative_peek or self.state.embedded_peek) and not self._peek_shows(self.state.config):
+            self.reset_all_peeks()
 
         # The strip's patches were printed from the config as it stood, so once the edit
         # moves they prove something else. Drop them, which also cancels a strip still
@@ -6613,17 +6646,15 @@ class AppController(QObject):
             self._request_compare_baseline()
 
     def rerender_active_view(self) -> None:
-        """Re-render the canvas keeping whatever comparison overlay is active.
+        """Re-render the canvas after a rotate or flip, keeping the flat peek and the compare split.
 
-        Geometry ops (rotate/flip) change the config but shouldn't kick the user
-        out of flat-peek; a plain request_render() would exit it. The compare split
-        survives a plain render, and its baseline half re-captures on the key change.
+        A plain request_render() would exit the flat peek. The compare split survives a plain
+        render, and its baseline half re-captures on the key change. A scan peek ends here, as
+        on every committed rotation.
         """
-        if self.state.negative_peek:
-            self._paint_negative_peek()
-        elif self.state.embedded_peek:
-            self._paint_embedded_peek()
-        elif self.state.flatfield_peek:
+        if self.state.negative_peek or self.state.embedded_peek:
+            self.reset_all_peeks()
+        if self.state.flatfield_peek:
             self._paint_flatfield_peek()
         elif self.state.flat_peek:
             self.request_render(readback_metrics=False, config_override=flat_master_config(self.state.config))
@@ -6781,6 +6812,7 @@ class AppController(QObject):
             self._clear_test_strip()
 
         self.state.negative_peek = target
+        self._peek_sections = _peek_hidden_sections(self.state.config)
         self.negative_peek_changed.emit(target)
 
         if target:
@@ -6884,6 +6916,7 @@ class AppController(QObject):
             self._clear_test_strip()
 
         self.state.embedded_peek = target
+        self._peek_sections = _peek_hidden_sections(self.state.config)
         self.embedded_peek_changed.emit(target)
 
         if target:
@@ -7967,6 +8000,16 @@ class AppController(QObject):
             identity = self.state.last_metrics.get("render_identity")
             if isinstance(identity, tuple) and identity[0] == self.state.current_file_hash and identity[1] is before:
                 self.state.last_metrics["render_identity"] = (identity[0], self.state.config)
+        self._carry_peek(before)
+
+    def _peek_shows(self, config: WorkspaceConfig) -> bool:
+        shown = self._peek_sections
+        return shown is not None and all(_same_section(a, b) for a, b in zip(shown, _peek_hidden_sections(config)))
+
+    def _carry_peek(self, before: WorkspaceConfig) -> None:
+        """Call after a write that is not an edit of its own, so a scan peek open on `before` stays up."""
+        if self._peek_shows(before):
+            self._peek_sections = _peek_hidden_sections(self.state.config)
 
     def _dispatch_pending_render(self) -> None:
         """Start the render queued while the last one was running, if any."""

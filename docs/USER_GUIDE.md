@@ -38,11 +38,11 @@ Drag a panel by its top edge (the strip above Session, or the margin around the 
 
 ### Peek Negative
 
-The toolbar's film button (or `N`) shows the scan as loaded: not inverted, not metered, no edits; crop, rotation and flip still apply. Use it to check density, mask color and scanner clipping. It is scaled to its brightest tone, so read density from the density histogram, not the brightness. It stays up while you edit. A frame change closes it, and so does a crop, straighten or keystone when you commit it.
+The toolbar's film button (or `N`) shows the scan as loaded: not inverted, not metered, no edits; crop, rotation and flip still apply. Use it to check density, mask color and scanner clipping. It is scaled to its brightest tone, so read density from the density histogram, not the brightness. It stays up while you drag a crop or rotation handle or the Fine Rotation slider, and through Export and Metadata settings. Releasing the handle or slider closes it, and so do a rotate, flip, straighten or keystone, any other edit and a frame change.
 
 ### Peek Embedded Preview
 
-**Peek Embedded Preview** (**⋯** menu, or `P`) shows the camera's own JPEG at your crop and rotation. NegPy uses nothing from it. Files without one (scanner TIFFs, most converter DNGs) disable the item.
+**Peek Embedded Preview** (**⋯** menu, or `P`) shows the camera's own JPEG at your crop and rotation. NegPy uses nothing from it. Files without one (scanner TIFFs, most converter DNGs) disable the item. It closes the same way as Peek Negative.
 
 A peek shows a **NEGATIVE**, **EMBEDDED** or **FLAT SCAN** badge. `Esc` closes any peek, the split or a test strip.
 
