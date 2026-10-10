@@ -88,6 +88,13 @@ class TestGpuTiledParity(unittest.TestCase):
         self._assert_changes_export(settings, "Contrast Mask did nothing to the tiled export")
         self._assert_parity(settings, "Tiled export dropped the Contrast Mask")
 
+    def test_tiled_applies_diffusion(self):
+        base = _base()
+        settings = replace(base, exposure=replace(base.exposure, diffusion=0.6, diffusion_radius=3.0))
+        # Diffusion moves the print at its edges only, so its mean change on a smooth frame is small.
+        self._assert_changes_export(settings, "Diffusion did nothing to the tiled export", tol=5e-4)
+        self._assert_parity(settings, "Tiled export dropped the Diffusion")
+
     def test_tiled_local_mask_follows_keystone(self):
         base = _base()
         settings = replace(

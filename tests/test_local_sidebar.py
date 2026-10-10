@@ -60,6 +60,37 @@ def test_moving_the_grade_slider_edits_only_that_mask(qapp):
     controller.update_selected_local_mask.assert_called_with(grade=-25.0)
 
 
+def test_moving_the_flash_slider_edits_only_that_mask(qapp):
+    controller, sidebar = _sidebar(LocalMask(vertices=SQUARE, stops=1.0), selected=0)
+    sidebar.sync_ui()
+
+    sidebar.flash_slider.adjust_by(0.3)
+
+    controller.update_selected_local_mask.assert_called_with(flash=0.3)
+
+
+def test_flash_slider_is_off_on_a_tone_limited_mask(qapp):
+    _, sidebar = _sidebar(LocalMask(vertices=SQUARE, stops=1.0, flash=0.4, key=MaskKey.HIGHLIGHTS), selected=0)
+    sidebar.sync_ui()
+
+    assert not sidebar.flash_slider.isEnabled()
+    assert sidebar.flash_slider.value() == 0.4  # the value is kept for when the limit comes off
+
+
+def test_a_tone_limited_masks_flash_is_not_listed(qapp):
+    _, sidebar = _sidebar(LocalMask(vertices=SQUARE, stops=1.0, flash=0.4, key=MaskKey.HIGHLIGHTS))
+    sidebar.sync_ui()
+
+    assert "flash" not in _row_text(sidebar)
+
+
+def test_a_flash_only_mask_is_labelled_flash(qapp):
+    _, sidebar = _sidebar(LocalMask(vertices=SQUARE, stops=0.0, flash=0.25))
+    sidebar.sync_ui()
+
+    assert "Flash" in _row_text(sidebar) and "flash 0.25" in _row_text(sidebar)
+
+
 def test_a_grade_only_mask_is_labelled_grade(qapp):
     """Strength 0 with a grade is neither dodge nor burn, and an EV of +0.00 would
     read as a dodge that does nothing."""

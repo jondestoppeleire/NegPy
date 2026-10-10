@@ -438,6 +438,7 @@ Color timing, like enlarger dichroic filters. The **Global / Shadows / Highlight
 *   **Preflash** (0 to 1): an even flash over the sheet, as a fraction of the paper's threshold exposure. It pulls highlight detail off paper white and softens the print slightly; bare paper stays white. Hidden on slides.
 *   **Contrast Mask** (±0.5, hidden in Transparency): a blurred mask sandwiched with the negative; the value is its signed gamma. Positive compresses the range by (1 − gamma) so a harder grade fits, keeping fine detail. Negative expands the range by (1 + gamma) for a negative too flat for Grade; past about −0.4, highlights clip. Past about ±0.2, strong edges get a halo.
 *   **Mask Spacer** (2 to 6%, default 4%): the gap between mask and negative, as percent of the frame. Thicker masks only broad masses; thinner reaches into detail and hazes shadows next to bright areas. Both mask controls gray out in R/G/B mode.
+*   **Diffusion** (0 to 1, hidden in Transparency) with **Diffusion Radius** (0.5 to 5% of the frame's short side, default 2%): a diffuser under the enlarger lens, a Softar or a stocking. Light spreads before it reaches the paper, so shadows bleed into highlights and edges soften; flat areas print as before. Both gray out in R/G/B mode.
 
 **Paper Response**:
 
@@ -463,12 +464,13 @@ Draw masks and lighten or darken only those areas. On a **Slide** the panel gray
 
 Handles can go into the gray area outside the frame. A tilted Card Edge usually must start past the corner it burns.
 
-*   **Mask list**: shape icon, Dodge, Burn or Grade, and values. The shape icon enables or disables the mask; the yin-yang inverts it (it acts outside its shape); the eye toggles the outline (shown only on the Exposure tab); the trash deletes it.
-*   The canvas tint of the current mask, and of masks that intersect it, hides while you drag **Burn**, **Feather**, **Grade** or a vertex.
+*   **Mask list**: shape icon, Dodge, Burn, Grade or Flash, and values. The shape icon enables or disables the mask; the yin-yang inverts it (it acts outside its shape); the eye toggles the outline (shown only on the Exposure tab); the trash deletes it.
+*   The canvas tint of the current mask, and of masks that intersect it, hides while you drag **Burn**, **Feather**, **Grade**, **Flash** or a vertex.
 *   **SELECTED MASK**: the controls below act on the mask selected in the list, and gray out with none selected.
 *   **Burn** (-2 to 2 stops, default 0): **positive burns** (darker), **negative dodges** (brighter), like Print Density and the Finishing edge burn.
 *   **Feather** (0.0 to 0.15): edge softness, as a fraction of the frame's short side.
 *   **Grade** (-40 to 40 R): the mask's own contrast, in ISO-R points off the frame's Grade, negative harder (burn a sky at −20 R). It pivots on the region's midtone; overlapping grades add, within R50…R180.
+*   **Flash** (0 to 1, default 0): pre-exposes the paper under the mask, as a fraction of the threshold exposure like the Tone card's Preflash: the region's highlights compress without the density a burn adds (flash a sky through a card). Overlapping flashes add. Off on a tone-limited mask.
 *   **Tone Limit** (*All*, *Highlights*, *Shadows*) with **Tone Zone** (0 to 10, in thirds, default 6) and **Tone Softness** (⅓ to 3 zones): limits the mask to tones lighter or darker than a print zone, so a sky burn on *Highlights* at VI stops at the skyline. The tint shows the tones it selects. Up to four tone-limited masks per frame.
 
 **Printing Notes** (Export tab, or **Shift+N**) makes a marked-up work print: each mask outlined with its number and value in stops, and a corner card with the paper, exposure, grade, filtration, curve and dodge/burn list.

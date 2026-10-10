@@ -175,6 +175,8 @@ CATALOG: list[tuple[str, tuple[SettingRow, ...]]] = [
         _row("Separation Damping", "exposure", "separation_damping"),
         _row("Contrast Mask", "exposure", "contrast_mask"),
         _row("Mask Spacer", "exposure", "mask_spacer"),
+        _row("Diffusion", "exposure", "diffusion"),
+        _row("Diffusion Radius", "exposure", "diffusion_radius"),
         _row("Preflash", "exposure", "preflash"),
         _row("Auto Density", "exposure", "auto_exposure", sticky=True),
         _row("Auto Grade", "exposure", "auto_normalize_contrast", sticky=True),
@@ -432,6 +434,8 @@ TONE_FIELDS = (
     "separation_damping",
     "contrast_mask",
     "mask_spacer",
+    "diffusion",
+    "diffusion_radius",
     "preflash",
 )
 
