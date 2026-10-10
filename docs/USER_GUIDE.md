@@ -129,7 +129,7 @@ Below it are the toolbar, the search box and two sections: **Library** (imported
 *   **Discovery Filters…**: folder names that importing and **↻** skip, with everything inside them, one per line (default `export`). A line matches any part of a name, ignoring case; a line with `*` must match the whole name (`raw_*`). Saving runs **↻**: rolls a filter now catches leave the list, and come back when the filter goes.
 *   **Sort**: Name or Date, ascending or descending.
 
-Each row shows name and count ("36 photos"); a roll whose folder is gone shows **folder missing** in amber. Importing only records the folder; nothing is decoded until you open the roll.
+Each row shows name and count ("36 photos"), where an assembled Trichrome triplet, stitch or HDR merge is one photo; a roll whose folder is gone shows **folder missing** in amber. Importing only records the folder; nothing is decoded until you open the roll.
 
 #### Importing
 
