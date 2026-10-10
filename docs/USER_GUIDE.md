@@ -115,7 +115,7 @@ Full screen is the green window button. Menus show only `⌘` keys; plain-key sh
 <!-- panel:frames -->
 ## 2. Film strip (left panel)
 
-A green **⬇ Update Available** line tops the panel when a newer release is out ([§16](#16-updating-negpy)). **About NegPy…** in the **⋯** menu shows the version.
+A green **Update Available** line tops the panel when a newer release is out ([§16](#16-updating-negpy)). **About NegPy…** in the **⋯** menu shows the version.
 
 Below it are the toolbar, the search box and two sections: **Library** (imported rolls) and **Film Strip** (open frames). Click a heading to fold it; drag the handle between them to resize.
 
