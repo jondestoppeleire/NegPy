@@ -163,7 +163,14 @@ class ToneSidebar(BaseSidebar):
         )
         # Light given to the paper, not the shape of its curve, so it sits with the exposure controls.
         self.preflash_slider = CompactSlider("Preflash", 0.0, 1.0, conf.preflash)
+        self.diffusion_slider = CompactSlider("Diffusion", 0.0, 1.0, conf.diffusion)
+        self.diffusion_slider.setToolTip(
+            "Diffusion: a diffuser under the enlarger lens, a Softar or a stocking. The value is how much "
+            "light it scatters: a stronger diffuser, or more of the exposure given through it. Shadows "
+            "bleed into highlights and edges soften; flat areas print as before. 0 is off."
+        )
         self.layout.addWidget(self.preflash_slider)
+        self.layout.addWidget(self.diffusion_slider)
         self.layout.addWidget(self.contrast_mask_slider)
         self.mask_spacer_rail = SliderGroup(self.mask_spacer_slider)
         self.layout.addWidget(self.mask_spacer_rail)
@@ -251,6 +258,8 @@ class ToneSidebar(BaseSidebar):
             # A pan masking film is neutral: the mask is one plane subtracted as equal
             # density from every layer, so it has no per-channel form to trim.
             self.contrast_mask_slider,
+            # A diffuser spreads every layer's light alike.
+            self.diffusion_slider,
         )
 
     def _open_targets_dialog(self) -> None:
@@ -348,6 +357,7 @@ class ToneSidebar(BaseSidebar):
             (self.separation_damping_slider, "separation_damping"),
             (self.contrast_mask_slider, "contrast_mask"),
             (self.mask_spacer_slider, "mask_spacer"),
+            (self.diffusion_slider, "diffusion"),
             (self.preflash_slider, "preflash"),
         ):
             slider.valueChanged.connect(
@@ -485,10 +495,12 @@ class ToneSidebar(BaseSidebar):
                 self.shadow_grade_slider,
                 self.highlight_grade_slider,
                 self.split_grade_rail,
-                # The transfer curve takes no dodge/burn map, and the mask rides it.
+                # The transfer curve takes no dodge/burn map, and the mask rides it; it takes
+                # no diffusion plane either.
                 self.contrast_mask_slider,
                 self.mask_spacer_slider,
                 self.mask_spacer_rail,
+                self.diffusion_slider,
                 self.preflash_slider,
             ):
                 w.setVisible(not transfer)
@@ -558,6 +570,7 @@ class ToneSidebar(BaseSidebar):
             self.separation_damping_slider.setValue(conf.separation_damping)
             self.contrast_mask_slider.setValue(conf.contrast_mask)
             self.mask_spacer_slider.setValue(conf.mask_spacer)
+            self.diffusion_slider.setValue(conf.diffusion)
             self.preflash_slider.setValue(conf.preflash)
             # Out of _global_only: that tuple means enabled exactly when global.
             self.mask_spacer_slider.setEnabled(global_mode and conf.contrast_mask != 0.0)
@@ -602,6 +615,7 @@ class ToneSidebar(BaseSidebar):
             self.highlight_grade_slider,
             self.contrast_mask_slider,
             self.mask_spacer_slider,
+            self.diffusion_slider,
             self.preflash_slider,
             self.paper_dmin_btn,
             self.paper_black_btn,
