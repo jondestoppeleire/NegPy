@@ -1925,7 +1925,20 @@ class TestTriageMarks(unittest.TestCase):
         self.session.toggle_mark("keeper")
         self.session.select_file.assert_not_called()
 
+    def test_advance_counts_from_the_marked_frame_not_the_active_one(self):
+        self._advance(True)
+        self.session.state.selected_indices = [1]  # active frame 0 deselected, frame 1 still selected
+        self.session.toggle_mark("keeper")
+        self.assertTrue(self.session.state.uploaded_files[1]["keeper"])
+        self.session.select_file.assert_called_once_with(2)
+
+    def test_home_on_the_first_frame_reloads_nothing(self):
+        self.session.select_file = MagicMock()
+        self.session.first_file()
+        self.session.select_file.assert_not_called()
+
     def test_home_and_end_reach_the_first_and_last_visible_frame(self):
+        self.session.state.selected_file_idx = 1
         self.session.select_file = MagicMock()
         self.session.first_file()
         self.session.last_file()

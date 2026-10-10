@@ -586,7 +586,7 @@ class AppController(QObject):
         self._first_render_t0: Optional[float] = None
         self._export_start_time = 0.0
         self._export_errors: list[str] = []
-        # (roll id, pushing frame, roll defaults before, that frame's card locks before)
+        # (roll id, pushing frame, pushed cards, their roll fields before the push)
         self._roll_push_undo: Optional[tuple] = None
         self._frame_merge_trash = True
         self._discovery_running = False
@@ -5246,8 +5246,11 @@ class AppController(QObject):
             return 0
         repo = self.session.repo
         frame_hash = rolls.unforked_hash(self.state.current_file_hash)
-        locked = rolls.frame_override_cards(repo, roll_id, frame_hash)
-        self._roll_push_undo = (roll_id, frame_hash, rolls.roll_defaults(repo, roll_id), {k: k in locked for k in pushed})
+        # Only the fields this push writes, so an undo leaves every later roll default alone.
+        names = {name for card in pushed for name in rolls.card_fields(card)}
+        if "film" in pushed:
+            names.add("cast_removal_strength")
+        self._roll_push_undo = (roll_id, frame_hash, tuple(pushed), rolls.roll_fields_snapshot(repo, roll_id, names))
         if "film" in pushed and "cast_removal" not in pushed:
             self._carry_roll_cast_removal(roll_id, self.state.config.process.process_mode)
         for card_key in pushed:
@@ -5257,23 +5260,27 @@ class AppController(QObject):
         self.set_status(f"Applied to the roll: {self._roll_card_names(pushed)}", 3000)
         return len(set(pushed))
 
-    def can_undo_roll_push(self) -> bool:
+    def can_undo_roll_push(self, cards=None) -> bool:
         """Only on the frame that pushed, while the roll is open: elsewhere the live config
-        holds the pushed values, and the undo would leave it stale."""
+        holds the pushed values, and the undo would leave it stale. With *cards*, only when
+        the last push included one of them."""
         undo = self._roll_push_undo
-        return bool(undo) and undo[0] == self.state.active_roll_id and undo[1] == rolls.unforked_hash(self.state.current_file_hash or "")
+        if not undo or undo[0] != self.state.active_roll_id or undo[1] != rolls.unforked_hash(self.state.current_file_hash or ""):
+            return False
+        return cards is None or bool(set(cards) & set(undo[2]))
 
     def undo_roll_push(self) -> None:
         if not self.can_undo_roll_push():
             self.set_status("Nothing to undo — no Apply to Roll from this frame", 2500)
             return
-        roll_id, frame_hash, defaults, locks = self._roll_push_undo
+        roll_id, frame_hash, pushed, snapshot = self._roll_push_undo
         self._roll_push_undo = None
-        rolls.restore_roll_defaults(self.session.repo, roll_id, defaults)
-        for card_key, was_locked in locks.items():
-            rolls.set_frame_override(self.session.repo, roll_id, frame_hash, card_key, was_locked)
-        self._roll_defaults_changed(roll_id, set(locks))
-        self.set_status(f"Undid Apply to Roll: {self._roll_card_names(locks)}", 3000)
+        rolls.restore_roll_fields(self.session.repo, roll_id, snapshot)
+        # A push only ever moves cards this frame had locked.
+        for card_key in pushed:
+            rolls.set_frame_override(self.session.repo, roll_id, frame_hash, card_key, True)
+        self._roll_defaults_changed(roll_id, set(pushed))
+        self.set_status(f"Undid Apply to Roll: {self._roll_card_names(pushed)}", 3000)
 
     def _roll_card_names(self, cards) -> str:
         return ", ".join(dict.fromkeys(self._ROLL_CARD_LABELS[k] for k in self._ROLL_CARDS if k in cards))

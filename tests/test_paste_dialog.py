@@ -17,8 +17,36 @@ def test_an_empty_clipboard_says_so():
     controller.session.apply_pasted_fields.assert_not_called()
 
 
-def test_a_card_copy_pastes_its_rows_with_no_picker():
-    rows = [object()]
+def test_a_card_copy_opens_the_picker_on_that_card_alone(monkeypatch):
+    from types import SimpleNamespace as NS
+
+    from negpy.desktop.view.widgets import granular_settings_dialog as gsd
+
+    made = []
+
+    class FakeDialog:
+        def __init__(self, *_a, **kw):
+            self.kw, self.limited = kw, None
+            made.append(self)
+
+        def limit_to_rows(self, ids):
+            self.limited = list(ids)
+
+        def exec(self):
+            return gsd.QDialog.DialogCode.Accepted
+
+        def selected(self):
+            return ["picked"]
+
+        def paste_bounds(self):
+            return False
+
+    monkeypatch.setattr(gsd, "GranularSettingsDialog", FakeDialog)
+    rows = [NS(id="lab.saturation"), NS(id="lab.skin_protection")]
     controller = _controller(WorkspaceConfig(), rows)
+
     open_paste_dialog(None, controller)
-    controller.session.apply_pasted_fields.assert_called_once_with(rows, include_bounds=False)
+
+    assert made[0].limited == ["lab.saturation", "lab.skin_protection"]
+    assert made[0].kw["bounds_mode"] == ""
+    controller.session.apply_pasted_fields.assert_called_once_with(["picked"], include_bounds=False)

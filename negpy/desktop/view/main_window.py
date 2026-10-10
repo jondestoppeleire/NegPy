@@ -381,7 +381,8 @@ class MainWindow(QMainWindow):
             self.canvas.fit_to_window()
 
     def _show_scan_tab(self) -> None:
-        self.drawer.setVisible(True)
+        if not self.drawer.isVisible():
+            self.toggle_controls_dock()
         self.right_panel.show_tab_by_key("scan")
 
     def show_tutorial(self) -> None:
@@ -507,6 +508,10 @@ class MainWindow(QMainWindow):
     def light_table_active(self) -> bool:
         return self.central_stack.currentIndex() == 1
 
+    def _leave_empty_light_table(self, *_args) -> None:
+        if self.light_table_active() and self.controller.session.asset_model.rowCount() == 0:
+            self.set_light_table(False)
+
     def set_light_table(self, on: bool) -> None:
         """Both side panels hide while the grid shows, so it has the whole window; their saved
         visibility is untouched. Esc, Shift+G or opening a frame leaves it."""
@@ -602,6 +607,9 @@ class MainWindow(QMainWindow):
         self.controller.session.settings_copied.connect(lambda: self.canvas.hud.showMessage("Settings copied", timeout=1500))
         self.controller.session.settings_pasted.connect(lambda: self.canvas.hud.showMessage("Settings pasted", timeout=1500))
         self.controller.session.color_vision_changed.connect(self.canvas.overlay.update)
+        model = self.controller.session.asset_model
+        for signal in (model.layoutChanged, model.modelReset, model.rowsRemoved):
+            signal.connect(self._leave_empty_light_table)
         self.controller.session.settings_synced.connect(lambda msg: self.canvas.hud.showMessage(msg, timeout=2500))
         self.controller.tool_sync_requested.connect(self._sync_tool_buttons)
         self.controller.config_updated.connect(self.canvas.overlay.update)

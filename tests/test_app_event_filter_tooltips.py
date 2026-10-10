@@ -1,12 +1,12 @@
 from PyQt6.QtWidgets import QLabel, QPushButton
 
-from negpy.desktop.main import TooltipPass
+from negpy.desktop.main import AppEventFilter
 from negpy.desktop.view.shortcut_registry import tooltip_with_shortcut
 from negpy.desktop.view.styles.templates import wrap_tooltip
 
 
 def _installed(qapp):
-    guard = TooltipPass(qapp)
+    guard = AppEventFilter(qapp)
     qapp.installEventFilter(guard)
     return guard
 

@@ -168,7 +168,8 @@ def header_button(icon: QIcon, tooltip: str) -> QPushButton:
     btn.setIconSize(QSize(HEADER_ICON_SIZE, HEADER_ICON_SIZE))
     btn.setCursor(Qt.CursorShape.PointingHandCursor)
     btn.setObjectName("collapsible_reset_btn")
-    btn.setToolTip(wrap_tooltip(tooltip))
+    if tooltip:
+        btn.setToolTip(wrap_tooltip(tooltip))
     return btn
 
 

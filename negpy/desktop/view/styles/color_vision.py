@@ -17,12 +17,13 @@ class VisionPalette:
 
 
 # Standard's pair is neon: a mark has to read over any film. The color-blind colors are
-# Okabe–Ito (Color Universal Design) colors on an axis that vision keeps.
+# Okabe–Ito (Color Universal Design) colors on an axis that vision keeps. A pair keeps clear of
+# the amber exclusion band on the same overlay, and every color reads as text on the dark panel.
 PALETTES: tuple[VisionPalette, ...] = (
     VisionPalette("standard", "Standard", ("#39FF14", "#FF00FF"), (THEME.dodge, THEME.burn)),
-    VisionPalette("protan_deutan", "Protanopia / deuteranopia (red-green)", ("#56B4E9", "#E69F00"), ("#E69F00", "#56B4E9")),
+    VisionPalette("protan_deutan", "Protanopia / deuteranopia (red-green)", ("#56B4E9", "#D55E00"), ("#E69F00", "#56B4E9")),
     VisionPalette("tritan", "Tritanopia (blue-yellow)", ("#D55E00", "#009E73"), ("#D55E00", "#009E73")),
-    VisionPalette("achromat", "Achromatopsia (no color)", ("#FFFFFF", "#000000"), ("#FFFFFF", "#000000")),
+    VisionPalette("achromat", "Achromatopsia (no color)", ("#FFFFFF", "#8C8C8C"), ("#FFFFFF", "#8C8C8C")),
 )
 
 

@@ -601,14 +601,31 @@ def set_roll_defaults(repo: Any, roll_id: str, **fields: Any) -> None:
     _write(repo, store)
 
 
-def restore_roll_defaults(repo: Any, roll_id: str, defaults: Dict[str, Any]) -> None:
-    """Put back a roll_defaults() snapshot whole, dropping any field set after it."""
+# A snapshot value for a field the roll had no default for.
+_ABSENT = object()
+
+
+def restore_roll_fields(repo: Any, roll_id: str, snapshot: Dict[str, Any]) -> None:
+    """Put back the named roll-default fields from a roll_defaults() reading: a field the
+    reading lacked is dropped, every other field is left as it is now."""
     store = _read(repo)
     entry = store.get(roll_id)
     if entry is None:
         return
-    entry["defaults"] = dict(defaults)
+    defaults = dict(entry.get("defaults", {}))
+    for name, value in snapshot.items():
+        if value is _ABSENT:
+            defaults.pop(name, None)
+        else:
+            defaults[name] = value
+    entry["defaults"] = defaults
     _write(repo, store)
+
+
+def roll_fields_snapshot(repo: Any, roll_id: str, names) -> Dict[str, Any]:
+    """The roll's current value for each named field, or a marker where it has none."""
+    defaults = roll_defaults(repo, roll_id)
+    return {name: defaults.get(name, _ABSENT) for name in names}
 
 
 def frame_override_cards(repo: Any, roll_id: str, file_hash: str) -> set:

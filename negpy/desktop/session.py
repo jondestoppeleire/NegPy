@@ -1418,7 +1418,7 @@ class DesktopSessionManager(QObject):
         other = "excluded" if mark == "keeper" else "keeper"
         set_all = not all(state.uploaded_files[i].get(mark) for i in targets)
         # Read before the refresh: under a mark filter the marked frame leaves the view.
-        row = self.asset_model.actual_to_display(state.selected_file_idx)
+        row = self.asset_model.actual_to_display(targets[0])
         advance_to = None
         if (
             set_all
@@ -1687,12 +1687,16 @@ class DesktopSessionManager(QObject):
             self.select_file(self.asset_model.display_to_actual(display_idx + 1))
 
     def first_file(self) -> None:
-        if self.asset_model.rowCount():
-            self.select_file(self.asset_model.display_to_actual(0))
+        self._select_display_row(0)
 
     def last_file(self) -> None:
-        if self.asset_model.rowCount():
-            self.select_file(self.asset_model.display_to_actual(self.asset_model.rowCount() - 1))
+        self._select_display_row(self.asset_model.rowCount() - 1)
+
+    def _select_display_row(self, row: int) -> None:
+        if 0 <= row < self.asset_model.rowCount():
+            target = self.asset_model.display_to_actual(row)
+            if target != self.state.selected_file_idx:
+                self.select_file(target)
 
     def prev_file(self) -> None:
         display_idx = self.asset_model.actual_to_display(self.state.selected_file_idx)

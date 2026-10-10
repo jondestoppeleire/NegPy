@@ -77,3 +77,13 @@ def test_overlay_stays_centred_on_its_parent(overlay, host):
     host.resize(1200, 500)
     QApplication.processEvents()
     assert overlay.geometry().center().x() == host.rect().center().x()
+
+
+def test_scan_opens_the_scan_tab_through_the_saved_panel_toggle():
+    from negpy.desktop.view.main_window import MainWindow
+
+    win = MagicMock()
+    win.drawer.isVisible.return_value = False
+    MainWindow._show_scan_tab(win)
+    win.toggle_controls_dock.assert_called_once_with()
+    win.right_panel.show_tab_by_key.assert_called_once_with("scan")

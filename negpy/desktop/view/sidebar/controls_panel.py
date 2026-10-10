@@ -491,11 +491,11 @@ class ControlsPanel(QWidget):
         if key in dict(self._roll_sections()):
             undo = menu.addAction(label_with_shortcut("Undo Apply to Roll", "undo_roll_push"))
             undo.setToolTip("Give the roll back the values it had before the last Roll push from this frame")
-            undo.setEnabled(self.controller.can_undo_roll_push())
+            undo.setEnabled(self.controller.can_undo_roll_push(_SECTION_CARDS.get(key, (key,))))
             undo.triggered.connect(self.controller.undo_roll_push)
         else:
             copy = menu.addAction("Copy Card Settings")
-            copy.setToolTip("Copy this card alone; Paste then writes it with no picker")
+            copy.setToolTip("Copy this card alone; Paste then offers only its settings")
             copy.triggered.connect(lambda: self.controller.session.copy_card_settings(frame_card_rows(key)))
         menu.exec(section.toggle_button.mapToGlobal(pos))
 

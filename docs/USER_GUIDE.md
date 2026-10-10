@@ -90,9 +90,9 @@ An edited frame keeps its look; only export and metadata settings reach it. **Re
 
 Each section header has **Frame** (picture, amber) and **Roll** (film roll, red) beside its reset arrow, which resets that card alone; **· 2** after the card name counts its non-default settings. The lit one shows where the card's values live; click the other to move them. A card with non-default values has a stripe in that color. Frames that are not one roll (search results, several folders) show only **Frame** until **Save as Roll…**.
 
-On a **Roll tab** or **Metadata** card the pair is a latch: on Roll, the card follows the roll and new frames inherit it; an edit flips it to Frame. **Roll** pushes this frame's value to the roll; **Frame** pins it to this frame. Right-click a Roll tab card's header for **Undo Apply to Roll**, which gives the roll back the values it had before the last push from this frame.
+On a **Roll tab** or **Metadata** card the pair is a latch: on Roll, the card follows the roll and new frames inherit it; an edit flips it to Frame. **Roll** pushes this frame's value to the roll; **Frame** pins it to this frame. Right-click a Roll tab card's header for **Undo Apply to Roll**, which gives the roll back that card's values from before the last push from this frame.
 
-On a **frame** card (Geometry, Filtration, Tone, Lab, Alternative Processes, Toning, Retouch, Finishing), **Roll** opens the clone picker for that section, to apply your changes to the selection or the whole roll. After a whole-roll apply the card reads Roll until you touch a pushed setting. Right-click its header for **Copy Card Settings**: Paste (`Ctrl+V`) then writes that card alone, with no picker.
+On a **frame** card (Geometry, Filtration, Tone, Lab, Alternative Processes, Toning, Retouch, Finishing), **Roll** opens the clone picker for that section, to apply your changes to the selection or the whole roll. After a whole-roll apply the card reads Roll until you touch a pushed setting. Right-click its header for **Copy Card Settings**: Paste (`Ctrl+V`) then offers that card's settings alone.
 
 **Reset to Roll**, beside the reset arrow, appears once a card differs from the roll. It puts the roll's values back on that card as one undo step; a setting the roll never carried keeps this frame's value.
 
@@ -1148,7 +1148,7 @@ Application-wide settings: canvas **⋯** menu → **Preferences…**, `Ctrl + ,
 
 ### Accessibility
 
-*   **Color vision** (default **Standard**): colors for marks told apart by color alone. The Retouch dust overlay is green and magenta under *Standard*, Dodge & Burn masks and Printing Notes amber (dodge) and blue (burn). *Protanopia / deuteranopia* uses orange and sky blue, *Tritanopia* vermilion and bluish green, *Achromatopsia* white and black. The color-blind colors come from the Okabe–Ito palette.
+*   **Color vision** (default **Standard**): colors for marks told apart by color alone. The Retouch dust overlay is green and magenta under *Standard*, Dodge & Burn masks and Printing Notes amber (dodge) and blue (burn). *Protanopia / deuteranopia* uses sky blue and vermilion for dust, orange and sky blue for masks; *Tritanopia* vermilion and bluish green; *Achromatopsia* white and gray. The color-blind colors come from the Okabe–Ito palette.
 
 ### Performance
 

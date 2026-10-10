@@ -86,7 +86,7 @@ _SHAPE_FOR_TOOL = {
 }
 _LOCAL_TOOLS = (ToolMode.NONE, *_SHAPE_FOR_TOOL)
 
-_IR_CORRECTED_ALPHA = 55  # dim magenta wash over IR-division-corrected regions
+_IR_CORRECTED_ALPHA = 55  # dim wash over repaired regions
 
 _ZONE_LINE_ALPHA = 150
 _ZONE_LINE_SHADOW_ALPHA = 110  # dark underlay so the white edges hold over blown highlights
@@ -1951,8 +1951,8 @@ class CanvasOverlay(QWidget):
 
     def _draw_dust_overlay(self, painter: QPainter) -> None:
         """Display-only visualization of the auto/IR dust-detection set. Modes:
-        'marked' (neon markers over the image), 'ir' (the geometry-aligned raw IR
-        channel, no markers)."""
+        'marked' (washes over the image), 'ir' (the geometry-aligned raw IR channel, no
+        markers)."""
         mode = self.state.dust_overlay_mode
         if mode == "ir":
             img = self._ir_layer_qimage()
@@ -1960,9 +1960,8 @@ class CanvasOverlay(QWidget):
                 painter.drawImage(self._content_view_rect(), img)
             return
 
-        # Dim wash over every repaired region. No source emits capsules any more, since they are
-        # all masks by the time they reach the render, so color tells them apart: green for
-        # optically detected specks, magenta for IR and inpainted defects.
+        # Dim wash over every repaired region. Every source reaches the render as a mask, so the
+        # Color vision pair tells them apart: optically detected specks, then IR and inpainted defects.
         for mask, color in self._corrected_masks():
             wash = self._mask_wash_qimage(mask, color)
             if wash is not None:

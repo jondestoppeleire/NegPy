@@ -74,6 +74,19 @@ def test_the_light_table_will_not_open_on_an_empty_grid(qapp):
     win.controller.set_status.assert_called_once_with("No frames match the filter", 3000)
 
 
+def test_the_light_table_closes_when_its_grid_empties(qapp):
+    win = _window()
+    MainWindow.set_light_table(win, True)
+    win.set_light_table = lambda on: MainWindow.set_light_table(win, on)
+    win.controller.session.asset_model.rowCount.return_value = 0
+    win.state.uploaded_files = [{"name": "a.tif"}]
+
+    MainWindow._leave_empty_light_table(win)
+
+    assert win.central_stack.currentIndex() == 0
+    assert win.drawer.visible and win.session_dock.visible
+
+
 def test_leaving_the_light_table_keeps_a_hidden_controls_panel_hidden(qapp):
     win = _window()
     win.drawer.visible = False
