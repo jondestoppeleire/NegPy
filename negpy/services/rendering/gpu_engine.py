@@ -1051,7 +1051,7 @@ class GPUEngine:
             # A tile is a slice of the export, so its lines take the whole frame's width.
             sabattier_sigma=sabattier_sigma_override
             if sabattier_sigma_override is not None
-            else line_sigma_px(settings.altproc.sabattier_line_width, (h_rot, w_rot)),
+            else line_sigma_px(settings.altproc.sabattier_agitation, (h_rot, w_rot)),
             plane_rect=plane_rect,
             diffusion_mix=diffusion_mix(settings.exposure.diffusion) if diff_plane is not None else 0.0,
         )
@@ -2791,7 +2791,7 @@ class GPUEngine:
         # frame's short side, so every tile draws the frame's line.
         sabattier_sigma = None
         if settings.altproc.alt_process == AltProcess.SABATTIER and settings.process.process_mode == ProcessMode.BW:
-            sabattier_sigma = line_sigma_px(settings.altproc.sabattier_line_width, (h_rot, w_rot))
+            sabattier_sigma = line_sigma_px(settings.altproc.sabattier_agitation, (h_rot, w_rot))
             if sabattier_sigma > 0.0:
                 halo = max(halo, len(gaussian_kernel_1d(sabattier_sigma)) // 2 + 1)
         halo = min(halo, 512)

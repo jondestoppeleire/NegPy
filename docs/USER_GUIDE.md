@@ -540,7 +540,7 @@ The print is flashed with white light part-way through development: the light to
 
 *   **Strength** (0 to 2, default 1.3): the second exposure's length. Below 1 the light tones flatten toward the fold; above 1 they reverse, the lighter the darker.
 *   **Re-exposure** (0.1 to 0.9, default 0.45): where the fold sits, as a fraction of the paper's Dmax. Tones denser than it hold.
-*   **Line Width** (0 to 1% of the frame's short side, default 0.3%): how far the shadows' bromide reaches into the light tones, the width of the Mackie lines. 0 draws none.
+*   **Agitation** (0 to 1, default 0.7): rocking the tray after the flash. In a still bath (0) the shadows' bromide creeps into the light tones and draws wide Mackie lines; constant agitation (1) washes it away and draws none.
 
 ---
 

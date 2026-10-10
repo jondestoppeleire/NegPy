@@ -21,5 +21,5 @@ class SabattierProcessor:
             enabled=self.config.alt_process == AltProcess.SABATTIER,
             strength=self.config.sabattier_strength,
             reexposure=self.config.sabattier_reexposure,
-            line_sigma_px=line_sigma_px(self.config.sabattier_line_width, image.shape[:2]),
+            line_sigma_px=line_sigma_px(self.config.sabattier_agitation, image.shape[:2]),
         )

@@ -96,7 +96,7 @@ class TestGpuTiledParity(unittest.TestCase):
         settings = replace(
             base,
             process=replace(base.process, process_mode="B&W"),
-            altproc=replace(base.altproc, alt_process=AltProcess.SABATTIER, sabattier_line_width=1.0),
+            altproc=replace(base.altproc, alt_process=AltProcess.SABATTIER, sabattier_agitation=0.0),
         )
         self._assert_changes_export(settings, "Sabattier did nothing to the tiled export")
         self._assert_parity(settings, "Tiled export seamed the Mackie lines")

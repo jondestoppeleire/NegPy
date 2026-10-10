@@ -91,7 +91,7 @@ class TestStageSkipParity(unittest.TestCase):
             ("cyanotype.scale", _sub(bw, "altproc", alt_process=AltProcess.CYANOTYPE, cyano_scale=2.4)),
             ("sabattier on", _sub(bw, "altproc", alt_process=AltProcess.SABATTIER)),
             ("sabattier.strength", _sub(bw, "altproc", alt_process=AltProcess.SABATTIER, sabattier_strength=1.2)),
-            ("sabattier no lines", _sub(bw, "altproc", alt_process=AltProcess.SABATTIER, sabattier_line_width=0.0)),
+            ("sabattier no lines", _sub(bw, "altproc", alt_process=AltProcess.SABATTIER, sabattier_agitation=1.0)),
             ("altproc off", bw),
             ("toning.sepia", _sub(lit, "toning", sepia_strength=0.4)),
             ("finish.border", _sub(lit, "finish", border_size=4.0)),

@@ -14,6 +14,9 @@ SABATTIER_CONSTANTS: Dict[str, Any] = {
     # Width of the dense/light boundary the bromide mask is cut at, in D: the silver that
     # counts as developed, and so as a bromide source, when the re-exposure comes.
     "edge_width": 0.10,
+    # The bromide's reach in a still bath, in per-cent of the frame's short side. Agitation
+    # sweeps the bromide off the edges and shortens it to nothing.
+    "still_reach": 1.0,
 }
 
 
@@ -61,7 +64,8 @@ def apply_sabattier(
     return ensure_image(np.clip(np.dstack([grey, grey, grey]), 0.0, 1.0))
 
 
-def line_sigma_px(line_width: float, shape: tuple) -> float:
-    """The Mackie line's blur sigma in render pixels: `line_width` per-cent of the short side,
-    so preview and export draw the same line."""
-    return max(float(line_width), 0.0) * 0.01 * float(min(shape[0], shape[1]))
+def line_sigma_px(agitation: float, shape: tuple) -> float:
+    """The Mackie line's blur sigma in render pixels, a fraction of the short side so preview
+    and export draw the same line: the still-bath reach at agitation 0, none at 1."""
+    reach = SABATTIER_CONSTANTS["still_reach"] * min(max(1.0 - float(agitation), 0.0), 1.0)
+    return reach * 0.01 * float(min(shape[0], shape[1]))

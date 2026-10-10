@@ -68,10 +68,11 @@ def test_the_mackie_line_is_a_light_band_on_the_light_side_of_an_edge():
     np.testing.assert_allclose(lined[mid, -8:], flat[mid, -8:], atol=1e-3)
 
 
-def test_the_line_width_scales_with_the_short_side():
+def test_agitation_shortens_the_line_on_the_short_side():
+    assert line_sigma_px(0.0, (1000, 2000)) == 10.0
     assert line_sigma_px(0.5, (1000, 2000)) == 5.0
     assert line_sigma_px(0.5, (250, 2000)) == 1.25
-    assert line_sigma_px(0.0, (1000, 2000)) == 0.0
+    assert line_sigma_px(1.0, (1000, 2000)) == 0.0
 
 
 def test_the_output_is_neutral_silver():

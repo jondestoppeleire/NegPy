@@ -39,8 +39,8 @@ class AltProcessConfig:
     cyano_bleach: float = 0.0
     cyano_tannin: float = 0.0
     # Sabattier: how far the light tones reverse (1 flattens them to the fold, above 1 they
-    # reverse), where the fold sits (a fraction of the paper's Dmax) and the Mackie lines'
-    # width as a per-cent of the frame's short side.
+    # reverse), where the fold sits (a fraction of the paper's Dmax) and the tray's agitation
+    # after the flash (0 still, wide Mackie lines; 1 constant, none).
     sabattier_strength: float = 1.3
     sabattier_reexposure: float = 0.45
-    sabattier_line_width: float = 0.3
+    sabattier_agitation: float = 0.7
