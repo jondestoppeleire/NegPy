@@ -450,3 +450,18 @@ def test_the_calibration_reset_clears_the_unmix_matrices():
     after = panel.controller.apply_config.call_args[0][0].process
     for field in ("sensor_profile", "sensor_matrix", "crosstalk_matrix", "crosstalk_process"):
         assert getattr(after, field) == getattr(DEFAULT_WORKSPACE_CONFIG.process, field), field
+
+
+def test_the_metering_header_follows_the_print_histogram():
+    import numpy as np
+
+    from negpy.desktop.view.sidebar.controls_panel import ControlsPanel
+
+    panel = MagicMock()
+    panel._last_histogram_buf = None
+    bins = np.zeros((4, 256))
+    panel.controller.state.last_metrics = {"histogram_raw": bins}
+
+    ControlsPanel._update_histogram(panel)
+
+    panel.metering_histogram.update_data.assert_called_once_with(bins)
