@@ -421,6 +421,62 @@ def test_reset_magnifier_clears_state():
     assert not w._magnifier_on
 
 
+def test_the_body_changing_its_magnifier_restarts_the_focus_peak(tmp_path, monkeypatch):
+    # MF Assist zooms in when the ring turns and the body's timeout zooms back out, with no
+    # click here. Each switch changes the sharpness scale, so the peak restarts and the click
+    # toggle follows the body.
+    import json
+
+    import numpy as np
+
+    import negpy.desktop.view.sidebar.scanlight as sl
+
+    p = tmp_path / "settings.json"
+    monkeypatch.setattr(sl, "default_settings_path", lambda: str(p))
+    w = _sidebar()
+    frame = np.random.default_rng(1).integers(0, 255, (48, 64)).astype(np.uint8)
+
+    def publish(on: bool) -> None:
+        p.write_text(json.dumps({"magnifier": {"on": on}}))
+        w._refresh_camera_settings()
+
+    publish(False)  # the stream's first publish is no change
+    assert w._focus_meter.update(frame) is not None
+    w.lv_window.set_focus(w._focus_meter.update(frame))
+    publish(False)  # unchanged: the peak stands
+    assert w.lv_window.focus_label.text() == "Focus meter: at peak"
+    publish(True)  # the body zoomed in by itself
+    assert w._magnifier_on
+    assert w.lv_window.focus_label.text() == "Focus meter: no reading"
+    assert w._focus_meter.update(frame) is not None
+    publish(False)  # and timed out
+    assert not w._magnifier_on
+    assert w.lv_window.focus_label.text() == "Focus meter: no reading"
+
+
+def test_a_clicks_own_echo_does_not_restart_the_focus_peak(tmp_path, monkeypatch):
+    import json
+
+    import numpy as np
+
+    import negpy.desktop.view.sidebar.scanlight as sl
+
+    p = tmp_path / "settings.json"
+    monkeypatch.setattr(sl, "default_settings_path", lambda: str(p))
+    w = _sidebar()
+    w.lv_btn.blockSignals(True)
+    w.lv_btn.setChecked(True)
+    w.lv_btn.blockSignals(False)
+    frame = np.random.default_rng(1).integers(0, 255, (48, 64)).astype(np.uint8)
+
+    w._on_magnifier_click(0.5, 0.5)
+    w.lv_window.set_focus(w._focus_meter.update(frame))
+    p.write_text(json.dumps({"magnifier": {"on": True}}))  # the body echoes the click
+    w._refresh_camera_settings()
+
+    assert w.lv_window.focus_label.text() == "Focus meter: at peak"
+
+
 def test_camera_settings_populate_and_set(tmp_path, monkeypatch):
     import json
 
