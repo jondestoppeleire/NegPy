@@ -122,6 +122,7 @@ class ScanlightSidebar(QWidget):
         self._status_pinned = False  # a pinned status (calibration outcome) outranks the light echo
         self._exposure_popup = None  # the over/under pop-up (kept referenced; replaced per calibration)
         self._magnifier_on = False  # camera focus magnifier state (driven by clicks on the live image)
+        self._magnifier_seen = False  # the state the stream last published, or a click's own
         self._magnifier_available = True
         self._focus_meter = FocusMeter()
         # Full and magnified views do not share a sharpness scale: reset the peak once the body has switched.
@@ -1027,7 +1028,17 @@ class ScanlightSidebar(QWidget):
     def _reset_magnifier(self) -> None:
         """Forget the magnifier state when the stream stops (the camera resets it too)."""
         self._magnifier_on = False
+        self._magnifier_seen = False
         self._focus_settle_timer.stop()
+
+    def _track_magnifier(self, on: bool) -> None:
+        """Follow the body's published magnifier state. A change from any cause restarts the
+        focus peak and realigns the click toggle; a click's own echo is no change."""
+        if on == self._magnifier_seen:
+            return
+        self._magnifier_seen = on
+        self._magnifier_on = on
+        self._reset_focus_meter()
 
     def _reset_focus_meter(self) -> None:
         self._focus_meter.reset()
@@ -1055,13 +1066,13 @@ class ScanlightSidebar(QWidget):
         x = max(0, min(639, round(fx * 640)))  # 640×480 grid → valid indices 0..639 / 0..479
         y = max(0, min(479, round(fy * 480)))
         self.controller.set_focus_magnifier_pos(x, y)
-        self._magnifier_on = True
+        self._magnifier_on = self._magnifier_seen = True
 
     def _on_magnifier_off(self) -> None:
         """Back to the full frame."""
         if self._magnifier_on:
             self.controller.set_focus_magnifier(False)
-            self._magnifier_on = False
+            self._magnifier_on = self._magnifier_seen = False
             self._set_status("Full frame — click the image to magnify")
 
     # ── live camera settings (ISO / shutter / aperture) ──────────
@@ -1089,6 +1100,9 @@ class ScanlightSidebar(QWidget):
                 data = json.load(f)
         except (OSError, ValueError):
             return
+        magnifier = data.get("magnifier")
+        if isinstance(magnifier, dict):
+            self._track_magnifier(bool(magnifier.get("on")))
         steppers = {
             "iso": [self.lv_window.iso_stepper],
             "shutter": [self.lv_window.shutter_stepper],
