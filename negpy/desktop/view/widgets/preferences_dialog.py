@@ -282,8 +282,8 @@ class PreferencesDialog(QDialog):
         for palette in PALETTES:
             swatch = QPixmap(16, 16)
             painter = QPainter(swatch)
-            painter.fillRect(0, 0, 8, 16, QColor(palette.pair[0]))
-            painter.fillRect(8, 0, 8, 16, QColor(palette.pair[1]))
+            for x, y, color in zip((0, 8, 0, 8), (0, 0, 8, 8), (*palette.pair, *palette.dodge_burn)):
+                painter.fillRect(x, y, 8, 8, QColor(color))
             painter.setPen(QColor(THEME.border_color))
             painter.drawRect(0, 0, 15, 15)
             painter.end()
@@ -293,7 +293,10 @@ class PreferencesDialog(QDialog):
         self.vision_combo.currentIndexChanged.connect(lambda i: self.session.set_color_vision(self.vision_combo.itemData(i)))
         grid.addWidget(self.vision_combo, 0, 1)
         grid.addWidget(
-            hint_label("Sets the colors of the Retouch dust overlay. The color-blind choices use the Okabe–Ito palette."),
+            hint_label(
+                "Sets the colors of the Retouch dust overlay, the Dodge & Burn masks and Printing Notes. "
+                "The color-blind choices use the Okabe–Ito palette."
+            ),
             1,
             0,
             1,

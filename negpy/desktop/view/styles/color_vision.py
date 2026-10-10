@@ -5,21 +5,24 @@ A palette names roles, not hues, so a view asks for its role and gets colors tha
 
 from dataclasses import dataclass
 
+from negpy.desktop.view.styles.theme import THEME
+
 
 @dataclass(frozen=True)
 class VisionPalette:
     key: str
     label: str
     pair: tuple[str, str]  # two kinds of mark that must read apart over any image
+    dodge_burn: tuple[str, str]  # Dodge & Burn masks: warm for dodge, cool for burn
 
 
-# Standard is neon: a mark has to read over any film. The color-blind pairs are Okabe–Ito
-# (Color Universal Design) colors on an axis that vision keeps.
+# Standard's pair is neon: a mark has to read over any film. The color-blind colors are
+# Okabe–Ito (Color Universal Design) colors on an axis that vision keeps.
 PALETTES: tuple[VisionPalette, ...] = (
-    VisionPalette("standard", "Standard", ("#39FF14", "#FF00FF")),
-    VisionPalette("protan_deutan", "Protanopia / deuteranopia (red-green)", ("#56B4E9", "#E69F00")),
-    VisionPalette("tritan", "Tritanopia (blue-yellow)", ("#D55E00", "#009E73")),
-    VisionPalette("achromat", "Achromatopsia (no color)", ("#FFFFFF", "#000000")),
+    VisionPalette("standard", "Standard", ("#39FF14", "#FF00FF"), (THEME.dodge, THEME.burn)),
+    VisionPalette("protan_deutan", "Protanopia / deuteranopia (red-green)", ("#56B4E9", "#E69F00"), ("#E69F00", "#56B4E9")),
+    VisionPalette("tritan", "Tritanopia (blue-yellow)", ("#D55E00", "#009E73"), ("#D55E00", "#009E73")),
+    VisionPalette("achromat", "Achromatopsia (no color)", ("#FFFFFF", "#000000"), ("#FFFFFF", "#000000")),
 )
 
 

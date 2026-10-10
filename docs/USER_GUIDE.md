@@ -1148,7 +1148,7 @@ Application-wide settings: canvas **⋯** menu → **Preferences…**, `Ctrl + ,
 
 ### Accessibility
 
-*   **Color vision** (default **Standard**): colors for marks told apart by color alone (the Retouch dust overlay). *Standard* is green and magenta; *Protanopia / deuteranopia* blue and orange; *Tritanopia* vermilion and bluish green; *Achromatopsia* white and black. The color-blind pairs come from the Okabe–Ito palette.
+*   **Color vision** (default **Standard**): colors for marks told apart by color alone. The Retouch dust overlay is green and magenta under *Standard*, Dodge & Burn masks and Printing Notes amber (dodge) and blue (burn). *Protanopia / deuteranopia* uses orange and sky blue, *Tritanopia* vermilion and bluish green, *Achromatopsia* white and black. The color-blind colors come from the Okabe–Ito palette.
 
 ### Performance
 
