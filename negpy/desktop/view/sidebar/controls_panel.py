@@ -243,11 +243,13 @@ class ControlsPanel(QWidget):
         metering_layout.setSpacing(4)
         metering_layout.addWidget(self.process_sidebar)
         metering_layout.addWidget(self.process_sidebar.analysis_bar)
+        self.metering_histogram = MiniHistogramWidget(clip_strips=False)  # the Clipping line below is the card's one clip readout
         self.process_section = self._make_section(
             "Metering",
             "process",
             metering_body,
             icon_name="fa5s.tachometer-alt",
+            background_widget=self.metering_histogram,
         )
 
         self.sensor_sidebar = SensorSidebar(self.controller)
@@ -1045,6 +1047,7 @@ class ControlsPanel(QWidget):
         self._last_histogram_buf = buf
         self.tone_histogram.update_data(buf)
         self.color_histogram.update_data(buf)
+        self.metering_histogram.update_data(buf)
 
     def _reset_sensor_fields(self) -> None:
         self._reset_process_fields(_SENSOR_FIELDS)
