@@ -176,6 +176,7 @@ class RightPanel(QWidget):
         self.curve_widget = PhotometricCurveWidget()
         self.step_wedge = StepWedgeWidget()
         self.zone_strip = ZoneStripWidget()
+        self._refresh_zone_strip_hint()
         self.probe_row = DensitometerRow()
         self.zone_placement = ZonePlacementRows()
         self.stats_widget = NegativeStatsWidget()
@@ -475,10 +476,14 @@ class RightPanel(QWidget):
             btn.setToolTip(tooltip_with_shortcut(base, f"tab_{key}"))
         for btn, key, base in zip(self._group_buttons, self._group_keys, self._group_tooltips):
             btn.setToolTip(tooltip_with_shortcut(base, f"tab_{key}"))
+        self._refresh_zone_strip_hint()
         self.metadata_sidebar.apply_shortcut_tooltips()
         self.export_sidebar.apply_shortcut_tooltips()
         self.gear_panel.apply_shortcut_tooltips()
         self.scanlight_sidebar.lv_window.apply_shortcut_tooltips()
+
+    def _refresh_zone_strip_hint(self) -> None:
+        self.zone_strip.set_overlay_hint(tooltip_with_shortcut("Double-click: Zone Overlay on or off", "toggle_zones"))
 
     def _connect_signals(self) -> None:
         self.controller.image_updated.connect(self._update_analysis)
@@ -487,6 +492,7 @@ class RightPanel(QWidget):
         self.controller.zone_pins_changed.connect(self._refresh_zone_placement)
         self.zone_strip.zone_clicked.connect(lambda zone: self.controller.arm_zone_target(float(zone)))
         self.controller.zone_arm_changed.connect(lambda zone: self.zone_strip.set_armed(None if zone is None else int(zone)))
+        self.zone_strip.zone_double_clicked.connect(self.controller.toggle_zones_overlay)
         self.zone_placement.target_changed.connect(self.controller.set_zone_pin_target)
         self.zone_placement.apply_clicked.connect(self.controller.apply_zone_placement)
         self.zone_placement.remove_clicked.connect(self.controller.remove_zone_pin)
@@ -685,6 +691,7 @@ class RightPanel(QWidget):
 
     def _update_analysis(self) -> None:
         metrics = self.controller.session.state.last_metrics
+        self.zone_strip.set_placement_enabled(self.controller.zone_placement_available())
         # Mid-gesture frames carry no metrics; the settle frame refreshes all of this.
         if self.controller.session.state.canvas_value("interactive"):
             return
