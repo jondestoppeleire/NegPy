@@ -286,7 +286,7 @@ class ActionToolbar(QWidget):
         )
         self.btn_paste = self._action_button(
             qta.icon("fa5s.paste", color=icon_color),
-            "Paste the copied settings onto this image",
+            "Paste the copied settings onto this frame, or every selected frame",
             "paste",
             lambda: open_paste_dialog(self, self.controller),
         )

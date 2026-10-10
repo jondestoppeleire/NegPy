@@ -1267,6 +1267,52 @@ class TestAppController(unittest.TestCase):
         self.assertEqual(rolls.roll_defaults(self.controller.session.repo, roll_id)["hue_trim"], 2.5)
         self.assertEqual(rolls.frame_override_cards(self.controller.session.repo, roll_id, "h1"), {"autocrop"})
 
+    def test_undo_apply_to_roll_restores_the_roll_and_the_lock(self):
+        from negpy.services.assets import rolls
+
+        self._wire_repo_store()
+        repo = self.controller.session.repo
+        roll_id = rolls.create_virtual_roll(repo, "Portra", [])
+        rolls.set_roll_defaults(repo, roll_id, hue_trim=1.0)
+        rolls.set_frame_override(repo, roll_id, "h1", "sensor", locked=True)
+        state = self.mock_session_manager.state
+        state.active_roll_id = roll_id
+        state.uploaded_files = [{"name": f"{h}.dng", "path": f"/{h}.dng", "hash": h} for h in ("h1", "h2")]
+        state.current_file_hash = "h1"
+        state.stale_thumbnails = set()
+        state.config = replace(state.config, process=replace(state.config.process, hue_trim=2.5))
+        before = rolls.roll_defaults(repo, roll_id)
+
+        self.controller.apply_roll_card("sensor")
+        self.assertTrue(self.controller.can_undo_roll_push())
+        state.stale_thumbnails.clear()
+        self.controller.undo_roll_push()
+
+        self.assertEqual(rolls.roll_defaults(repo, roll_id), before)
+        self.assertEqual(rolls.frame_override_cards(repo, roll_id, "h1"), {"sensor"})
+        self.assertEqual(state.stale_thumbnails, {asset_thumbnail_key(state.uploaded_files[1])})
+        self.assertFalse(self.controller.can_undo_roll_push(), "one step only")
+
+    def test_undo_apply_to_roll_is_offered_only_on_the_pushing_frame(self):
+        from negpy.services.assets import rolls
+
+        self._wire_repo_store()
+        repo = self.controller.session.repo
+        roll_id = rolls.create_virtual_roll(repo, "Portra", [])
+        rolls.set_frame_override(repo, roll_id, "h1", "sensor", locked=True)
+        state = self.mock_session_manager.state
+        state.active_roll_id = roll_id
+        state.uploaded_files = [{"name": "a.dng", "path": "/a.dng", "hash": "h1"}]
+        state.current_file_hash = "h1"
+
+        self.controller.apply_roll_card("sensor")
+        state.current_file_hash = "h2"
+
+        self.assertFalse(self.controller.can_undo_roll_push())
+        pushed = rolls.roll_defaults(repo, roll_id)
+        self.controller.undo_roll_push()
+        self.assertEqual(rolls.roll_defaults(repo, roll_id), pushed)
+
     def test_cast_removal_is_its_own_roll_card(self):
         from negpy.services.assets import rolls
 

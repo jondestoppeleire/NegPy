@@ -85,10 +85,15 @@ _SHAPE_FOR_TOOL = {
 }
 _LOCAL_TOOLS = (ToolMode.NONE, *_SHAPE_FOR_TOOL)
 
-# Dust-overlay marker colors: bright, and distinct from the muted accent of manual heals, so
-# auto-detected and IR spots are told apart at a glance.
-_DUST_MARK_LUMA = QColor(57, 255, 20)  # neon: a mark has to read over any film, so it is not a palette colour
-_DUST_MARK_IR = QColor(255, 0, 255)  # neon magenta — IR detection
+# Dust-overlay marker colors (auto-detected, IR), one pair per kind of color vision, picked in
+# Preferences. Standard is neon, not a palette colour: a mark has to read over any film. The
+# color-blind pairs are Okabe–Ito (Color Universal Design) colors on an axis that vision keeps.
+DUST_MARK_COLORS = (
+    ("Standard", QColor(57, 255, 20), QColor(255, 0, 255)),
+    ("Protanopia / deuteranopia (red-green)", QColor(86, 180, 233), QColor(230, 159, 0)),
+    ("Tritanopia (blue-yellow)", QColor(213, 94, 0), QColor(0, 158, 115)),
+    ("Achromatopsia (no color)", QColor(255, 255, 255), QColor(0, 0, 0)),
+)
 _IR_CORRECTED_ALPHA = 55  # dim magenta wash over IR-division-corrected regions
 
 _ZONE_LINE_ALPHA = 150
@@ -2002,16 +2007,17 @@ class CanvasOverlay(QWidget):
     def _corrected_masks(self) -> List[Tuple[np.ndarray, QColor]]:
         """Repaired-region masks to wash, with the color that names their source."""
         with self.state.metrics_lock:
+            _, luma_color, ir_color = DUST_MARK_COLORS[self.state.dust_mark_index % len(DUST_MARK_COLORS)]
             masks: List[Tuple[np.ndarray, QColor]] = []
             luma = self.state.last_metrics.get("detected_dust_mask")
             if luma is not None:
-                masks.append((luma, _DUST_MARK_LUMA))
+                masks.append((luma, luma_color))
             corr = self.state.last_metrics.get("ir_corrected_mask")
             if corr is not None:
-                masks.append((corr, _DUST_MARK_IR))
+                masks.append((corr, ir_color))
             hairs = self.state.last_metrics.get("hair_inpaint_masks")
             if hairs:
-                masks.extend((h, _DUST_MARK_IR) for h in hairs)
+                masks.extend((h, ir_color) for h in hairs)
         return masks
 
     def _mask_wash_qimage(self, mask: np.ndarray, color: QColor) -> Optional[QImage]:

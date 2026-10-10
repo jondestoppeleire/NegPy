@@ -114,8 +114,9 @@ def test_ir_layer_none_without_ir_or_uv():
 def test_repaired_masks_wash_in_their_source_color():
     """Every defect source arrives as a mask now, so color is what tells them apart:
     green for optically detected specks, magenta for IR and inpainted defects."""
-    from negpy.desktop.view.canvas.overlay import _DUST_MARK_IR, _DUST_MARK_LUMA
+    from negpy.desktop.view.canvas.overlay import DUST_MARK_COLORS
 
+    _, luma_color, ir_color = DUST_MARK_COLORS[0]
     overlay = CanvasOverlay(AppState())
     h, w = 12, 16
     luma = np.zeros((h, w), np.uint8)
@@ -128,7 +129,7 @@ def test_repaired_masks_wash_in_their_source_color():
         overlay.state.last_metrics["ir_corrected_mask"] = ir.astype(bool)
 
     masks = overlay._corrected_masks()
-    assert [c.rgb() for _m, c in masks] == [_DUST_MARK_LUMA.rgb(), _DUST_MARK_IR.rgb()]
+    assert [c.rgb() for _m, c in masks] == [luma_color.rgb(), ir_color.rgb()]
 
     img = overlay._mask_wash_qimage(*masks[0])
     assert img is not None
@@ -169,3 +170,17 @@ def test_line_tool_hover_traces_a_guide():
     overlay._map_to_image_coords = lambda _pos: (0.5, 0.1)
     overlay._trace_line_hover()
     assert overlay._line_hover is None
+
+
+def test_the_chosen_color_pair_washes_the_marks():
+    from negpy.desktop.view.canvas.overlay import DUST_MARK_COLORS
+
+    overlay = CanvasOverlay(AppState())
+    overlay.state.dust_mark_index = 1
+    mask = np.ones((4, 4), bool)
+    with overlay.state.metrics_lock:
+        overlay.state.last_metrics["detected_dust_mask"] = mask
+        overlay.state.last_metrics["ir_corrected_mask"] = mask
+
+    _, luma_color, ir_color = DUST_MARK_COLORS[1]
+    assert [c.rgb() for _m, c in overlay._corrected_masks()] == [luma_color.rgb(), ir_color.rgb()]

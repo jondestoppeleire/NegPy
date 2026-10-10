@@ -601,6 +601,16 @@ def set_roll_defaults(repo: Any, roll_id: str, **fields: Any) -> None:
     _write(repo, store)
 
 
+def restore_roll_defaults(repo: Any, roll_id: str, defaults: Dict[str, Any]) -> None:
+    """Put back a roll_defaults() snapshot whole, dropping any field set after it."""
+    store = _read(repo)
+    entry = store.get(roll_id)
+    if entry is None:
+        return
+    entry["defaults"] = dict(defaults)
+    _write(repo, store)
+
+
 def frame_override_cards(repo: Any, roll_id: str, file_hash: str) -> set:
     """Which of ROLL_DEFAULT_FIELDS' card keys this frame has locked to its own value,
     away from the roll's defaults, within this roll."""

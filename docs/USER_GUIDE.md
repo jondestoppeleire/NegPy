@@ -28,7 +28,7 @@ Drag a panel by its top edge (the strip above Session, or the margin around the 
 
 ### Find
 
-**Ctrl+K** (or **Find Control or Action…** in the **⋯** menu) searches every slider, card and action, by name or by another editor's word: *contrast* finds **ISO-R Grade**, *white balance* **Filtration**, *exposure* **Print Density**. Enter opens the row on its tab; a slider row is the live control.
+**Ctrl+K** (or **Find Control or Action…** in the **⋯** menu) searches every slider, card and action, by name or by another editor's word: *contrast* finds **ISO-R Grade**, *white balance* **Filtration**, *exposure* **Print Density**. Enter opens the row on its tab; a slider row is the live control. Presets are listed by name; Enter opens **Apply Preset**.
 
 ### Before / After
 
@@ -90,9 +90,9 @@ An edited frame keeps its look; only export and metadata settings reach it. **Re
 
 Each section header has **Frame** (picture, amber) and **Roll** (film roll, red) beside its reset arrow, which resets that card alone; **· 2** after the card name counts its non-default settings. The lit one shows where the card's values live; click the other to move them. A card with non-default values has a stripe in that color. Frames that are not one roll (search results, several folders) show only **Frame** until **Save as Roll…**.
 
-On a **Roll tab** or **Metadata** card the pair is a latch: on Roll, the card follows the roll and new frames inherit it; an edit flips it to Frame. **Roll** pushes this frame's value to the roll; **Frame** pins it to this frame.
+On a **Roll tab** or **Metadata** card the pair is a latch: on Roll, the card follows the roll and new frames inherit it; an edit flips it to Frame. **Roll** pushes this frame's value to the roll; **Frame** pins it to this frame. Right-click a Roll tab card's header for **Undo Apply to Roll**, which gives the roll back the values it had before the last push from this frame.
 
-On a **frame** card (Geometry, Filtration, Tone, Lab, Alternative Processes, Toning, Retouch, Finishing), **Roll** opens the clone picker for that section, to apply your changes to the selection or the whole roll. After a whole-roll apply the card reads Roll until you touch a pushed setting.
+On a **frame** card (Geometry, Filtration, Tone, Lab, Alternative Processes, Toning, Retouch, Finishing), **Roll** opens the clone picker for that section, to apply your changes to the selection or the whole roll. After a whole-roll apply the card reads Roll until you touch a pushed setting. Right-click its header for **Copy Card Settings**: Paste (`Ctrl+V`) then writes that card alone, with no picker.
 
 **Reset to Roll**, beside the reset arrow, appears once a card differs from the roll. It puts the roll's values back on that card as one undo step; a setting the roll never carried keeps this frame's value.
 
@@ -180,7 +180,7 @@ The Film Strip button row:
 *   **Unload…**: drops the active frame or selection. For the whole roll, use **Close Roll…**.
 *   **Show Scenes** (layers icon): edges each frame in its scene's color. See [Scenes](#scenes).
 *   **Sort** (arrows): Name or Date, or **Scene** once the loaded roll has one ([Scenes](#scenes)), ascending or descending.
-*   **Sheet filter** (funnel): *All Frames*, *Keepers Only* or *Hide Rejected*.
+*   **Sheet filter** (funnel): *All Frames*, *Keepers Only*, *Hide Rejected* or *Unmarked Only*. **Advance After Marking** in the same menu moves to the next frame after a Keeper or Reject mark. `Home` and `End` jump to the first and last frame.
 
 Above both sections sit the **filter box**, a **`.*`** regex toggle, a **search-library** button and, once enabled in Preferences, a **search-by-meaning** toggle. The Film Strip has a **tally** ("Portra 400 — 36 frames · 12 keepers · 3 rejected", or **Collection** for frames that are not one roll) and a **thumbnail size** slider. With a filter active the tally names it; if it hides everything, **Show all frames** clears it.
 
@@ -276,8 +276,8 @@ The tooltip names it (*HDR merge of 5 exposures*).
 
 The right-click menu also has:
 
-*   **Copy/Paste Settings**, with or without normalization bounds (untick **Normalization bounds** in the paste picker to keep the frame's own).
-*   **Reset Settings**; with several frames selected, **Reset N Frames**, confirmed first.
+*   **Copy/Paste Settings**, with or without normalization bounds (untick **Normalization bounds** in the paste picker to keep the frame's own). With several frames selected, Paste writes every one of them.
+*   **Reset Settings**; with several frames selected, **Reset N Frames…**, confirmed first.
 *   **Reset to Roll Settings**: **Reset to Roll** on every card that differs from the roll, as one undo step; the rest of the edit stays.
 *   **Apply Settings…**.
 *   **Sync Bounds…**: pushes only this frame's measured bounds (**Tonal span**, **Color balance**) to the selection or roll.
@@ -374,7 +374,7 @@ Rows that measure the scan, not your edit; hover for details. A row with nothing
 **Crop:**
 
 *   **Auto** (magic wand on the CROP header): detect the frame edge and crop to it. Its settings and the whole-roll run are on the Roll tab's **Crop** card ([§10.4](#104-crop)).
-*   **Ratio**: the roll's crop ratio, the same field as on the Crop card; the crop tool snaps to it.
+*   **Ratio**: the roll's crop ratio, the same field as on the Crop card; the crop tool snaps to it. **1:1.4142** is the ISO A paper shape (A4, A6).
 *   **Crop** tool (crop icon on the CROP header): draw a crop rectangle; with **Ratio** at **Free**, an edge midpoint resizes one axis. It opens on the current crop; a manual change stops auto-detection. Drag past the viewport edge to pan. **Reset** (undo icon on the CROP header) clears the crop and turns auto-crop off.
 *   **Guide**: *Thirds*, *Phi Grid*, *Diagonals*, *Golden Triangles*, *Golden Spiral*, *Armature*, *Diagonal Method*, *Grid* or *Off*. The redo button rotates guides with orientations (spiral 8, triangles 2).
 
@@ -560,7 +560,7 @@ Chemical toners (B&W Negative only) and a split tint (any mode). On a lith print
 
 Spotting, as with a brush on a finished print. Marks are found by local contrast, by the scanner's IR channel or by hand, and the three stack. Each mark is rebuilt from the clean film around it, grain included.
 
-**Overlay** (Off / Marked / IR, at the top): shows detections, green for Optical Removal, magenta for IR. IR needs an IR plane.
+**Overlay** (Off / Marked / IR, at the top): shows detections, green for Optical Removal, magenta for IR (**Dust marks** in Preferences picks other colors). IR needs an IR plane.
 
 **Optical Removal** finds specks and hairs on the visible scan, with no IR needed:
 
@@ -1141,6 +1141,7 @@ Application-wide settings: canvas **⋯** menu → **Preferences…**, `Ctrl + ,
 
 *   **UI scale** (80% to 120%): after a restart.
 *   **Canvas background**: black, dark gray, mid gray (neutral for judging) or white (a print on a light table).
+*   **Dust marks** (default **Standard**): the Retouch overlay's two colors, one pair per kind of color vision: *Standard* (green, magenta), *Protanopia / deuteranopia* (blue, orange), *Tritanopia* (vermilion, bluish green) or *Achromatopsia* (white, black). The color-blind pairs come from the Okabe–Ito palette.
 *   **Immersive canvas**: toolbar floats over the image.
 *   **Sticky zoom**: keep the zoom when you switch frames.
 *   **Reverse scroll zoom**: scroll up zooms out.

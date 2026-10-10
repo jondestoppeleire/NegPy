@@ -449,7 +449,7 @@ class AppController(QObject):
     # pooled texture directly and must drop it first.
     gpu_textures_released = pyqtSignal()
     export_progress = pyqtSignal(int, int, str)
-    export_finished = pyqtSignal(float, int)
+    export_finished = pyqtSignal(float, list)  # elapsed seconds, the failed files' messages
     render_requested = pyqtSignal(RenderTask)
     preview_load_requested = pyqtSignal(PreviewLoadTask)
     prefetch_load_requested = pyqtSignal(PreviewLoadTask)
@@ -585,7 +585,9 @@ class AppController(QObject):
         self._measured_half_rows: set[str] = set()
         self._first_render_t0: Optional[float] = None
         self._export_start_time = 0.0
-        self._export_failures = 0
+        self._export_errors: list[str] = []
+        # (roll id, pushing frame, roll defaults before, that frame's card locks before)
+        self._roll_push_undo: Optional[tuple] = None
         self._frame_merge_trash = True
         self._discovery_running = False
         self._auto_open_after_discovery = False
@@ -5239,23 +5241,49 @@ class AppController(QObject):
 
     def _push_cards_to_roll(self, pushed: List[str]) -> int:
         roll_id = self.state.active_roll_id
-        if roll_id is None:
+        if roll_id is None or not pushed:
             self.set_status(_NOTHING_TO_APPLY, 2500)
             return 0
-        active_hash = self.state.current_file_hash
+        repo = self.session.repo
+        frame_hash = rolls.unforked_hash(self.state.current_file_hash)
+        locked = rolls.frame_override_cards(repo, roll_id, frame_hash)
+        self._roll_push_undo = (roll_id, frame_hash, rolls.roll_defaults(repo, roll_id), {k: k in locked for k in pushed})
         if "film" in pushed and "cast_removal" not in pushed:
             self._carry_roll_cast_removal(roll_id, self.state.config.process.process_mode)
         for card_key in pushed:
-            rolls.set_roll_defaults(self.session.repo, roll_id, **self._card_values(self.state.config, card_key))
-            rolls.set_frame_override(self.session.repo, roll_id, rolls.unforked_hash(active_hash), card_key, False)
+            rolls.set_roll_defaults(repo, roll_id, **self._card_values(self.state.config, card_key))
+            rolls.set_frame_override(repo, roll_id, frame_hash, card_key, False)
+        self._roll_defaults_changed(roll_id, set(pushed))
+        self.set_status(f"Applied to the roll: {self._roll_card_names(pushed)}", 3000)
+        return len(set(pushed))
 
-        touched = set(pushed)
-        if not touched:
-            self.set_status(_NOTHING_TO_APPLY, 2500)
-            return 0
+    def can_undo_roll_push(self) -> bool:
+        """Only on the frame that pushed, while the roll is open: elsewhere the live config
+        holds the pushed values, and the undo would leave it stale."""
+        undo = self._roll_push_undo
+        return bool(undo) and undo[0] == self.state.active_roll_id and undo[1] == rolls.unforked_hash(self.state.current_file_hash or "")
+
+    def undo_roll_push(self) -> None:
+        if not self.can_undo_roll_push():
+            self.set_status("Nothing to undo — no Apply to Roll from this frame", 2500)
+            return
+        roll_id, frame_hash, defaults, locks = self._roll_push_undo
+        self._roll_push_undo = None
+        rolls.restore_roll_defaults(self.session.repo, roll_id, defaults)
+        for card_key, was_locked in locks.items():
+            rolls.set_frame_override(self.session.repo, roll_id, frame_hash, card_key, was_locked)
+        self._roll_defaults_changed(roll_id, set(locks))
+        self.set_status(f"Undid Apply to Roll: {self._roll_card_names(locks)}", 3000)
+
+    def _roll_card_names(self, cards) -> str:
+        return ", ".join(dict.fromkeys(self._ROLL_CARD_LABELS[k] for k in self._ROLL_CARDS if k in cards))
+
+    def _roll_defaults_changed(self, roll_id: str, touched: set) -> None:
+        """Every other frame that follows the roll on a touched card shows a new look."""
         # Metadata cards do not reach the pixels. A frame locked on every other touched
         # card keeps its own values, so its thumbnail holds.
         rendered = {k for k in touched if rolls.ROLL_DEFAULT_FIELDS[k][0] != "metadata"}
+        active_hash = self.state.current_file_hash
         changed_hashes = []
         for f in self.state.uploaded_files:
             file_hash = f.get("hash")
@@ -5269,9 +5297,6 @@ class AppController(QObject):
         self.config_updated.emit()
         if changed_hashes:
             self.session.frames_edited_offscreen.emit(changed_hashes)
-        names = ", ".join(dict.fromkeys(self._ROLL_CARD_LABELS[k] for k in self._ROLL_CARDS if k in touched))
-        self.set_status(f"Applied to the roll: {names}", 3000)
-        return len(touched)
 
     def _carry_roll_cast_removal(self, roll_id: str, mode: str) -> None:
         """A Film Mode pushed to the roll moves the roll's Cast Removal the way
@@ -7222,7 +7247,7 @@ class AppController(QObject):
         tasks = self._linear_output_tasks(supported, export_path)
 
         self._export_start_time = time.time()
-        self._export_failures = 0
+        self._export_errors = []
         if self._begin_batch("export", "Exporting Linear Output", abortable=True) is None:
             return
         QMetaObject.invokeMethod(
@@ -7687,7 +7712,7 @@ class AppController(QObject):
             breaks=dialog.breaks(),
         )
         self._export_start_time = time.time()
-        self._export_failures = 0
+        self._export_errors = []
         self._contact_sheet_folder = ""
         if self._begin_batch("contact_sheet", "Contact sheet", abortable=True) is None:
             return
@@ -7765,7 +7790,7 @@ class AppController(QObject):
             return
 
         self._export_start_time = time.time()
-        self._export_failures = 0
+        self._export_errors = []
         if self._begin_batch("export", "Exporting", abortable=True) is None:
             return
         QMetaObject.invokeMethod(
@@ -8125,7 +8150,7 @@ class AppController(QObject):
         self.set_status(message, 6000, kind="warning")
 
     def _on_export_task_error(self, message: str) -> None:
-        self._export_failures += 1
+        self._export_errors.append(message)
         self._report_worker_error("Export", message)
 
     def _report_worker_error(self, source: str, message: str) -> None:
@@ -8145,9 +8170,9 @@ class AppController(QObject):
         elapsed = time.time() - self._export_start_time
         owner = self._active_batch if self._active_batch in ("export", "contact_sheet") else "export"
         self._end_batch(owner)
-        self.export_finished.emit(elapsed, self._export_failures)
+        self.export_finished.emit(elapsed, list(self._export_errors))
         if owner == "contact_sheet" and self._contact_sheet_folder:
-            failed = f" — {count_of(self._export_failures, 'frame')} failed" if self._export_failures else ""
+            failed = f" — {count_of(len(self._export_errors), 'frame')} failed" if self._export_errors else ""
             self.set_status(f"Contact sheet saved to {self._contact_sheet_folder}{failed}", 6000, kind="warning" if failed else "info")
             self._contact_sheet_folder = ""
         self._update_thumbnail_from_state()

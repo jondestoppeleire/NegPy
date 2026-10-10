@@ -2,6 +2,7 @@ import os
 from dataclasses import dataclass, fields
 
 import qtawesome as qta
+from PyQt6.QtGui import QColor, QIcon, QPainter, QPixmap
 from PyQt6.QtWidgets import (
     QButtonGroup,
     QCheckBox,
@@ -244,6 +245,26 @@ class PreferencesDialog(QDialog):
         grid.addLayout(pills, row, 1)
         row += 1
 
+        grid.addWidget(field_label("Dust marks"), row, 0)
+        self.dust_combo = QComboBox()
+        for label, luma, ir in _dust_mark_colors():
+            swatch = QPixmap(16, 16)
+            painter = QPainter(swatch)
+            painter.fillRect(0, 0, 8, 16, luma)
+            painter.fillRect(8, 0, 8, 16, ir)
+            painter.setPen(QColor(THEME.border_color))
+            painter.drawRect(0, 0, 15, 15)
+            painter.end()
+            self.dust_combo.addItem(QIcon(swatch), label)
+        self.dust_combo.setCurrentIndex(state.dust_mark_index)
+        self.dust_combo.setToolTip(
+            "Colors of the dust overlay: detected dust, then IR repairs. Pick the pair for your color vision; "
+            "the color-blind pairs come from the Okabe–Ito palette"
+        )
+        self.dust_combo.currentIndexChanged.connect(self._on_dust_marks_changed)
+        grid.addWidget(self.dust_combo, row, 1)
+        row += 1
+
         self.immersive_box = self._add_checkbox(
             grid, row, "Immersive canvas", state.immersive_canvas, "Toolbar overlaps the image, instead of sitting below it"
         )
@@ -444,6 +465,12 @@ class PreferencesDialog(QDialog):
         self.session.set_sticky_settings_enabled(checked)
         self._persistent_settings_button.setEnabled(checked)
 
+    def _on_dust_marks_changed(self, index: int) -> None:
+        self.session.set_dust_mark_colors(index)
+        canvas = getattr(self.controller, "canvas", None)
+        if canvas is not None:
+            canvas.overlay.update()
+
     def _on_canvas_bg_changed(self, index: int) -> None:
         self.session.set_canvas_bg(index)
         canvas = getattr(self.controller, "canvas", None)
@@ -539,6 +566,12 @@ def _pinned_keys() -> set[str]:
     if cfg.low_vram_export_tiling is not None:
         pinned = pinned | {"low_vram_export_tiling"}
     return pinned
+
+
+def _dust_mark_colors():
+    from negpy.desktop.view.canvas.overlay import DUST_MARK_COLORS
+
+    return DUST_MARK_COLORS
 
 
 def _canvas_colors():

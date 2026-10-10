@@ -552,15 +552,22 @@ def open_apply_dialog(parent, session, rows=None, title: str = "") -> tuple[list
 
 
 def open_paste_dialog(parent, controller) -> None:
-    """Open the granular picker on the clipboard config and apply the chosen
-    settings to the active frame. No-op when the clipboard is empty."""
-    state = controller.session.state
-    if state.clipboard is None or not state.current_file_hash:
+    """Paste the clipboard onto the active frame, or every selected frame. A card copy
+    pastes its own rows at once; a whole copy opens the picker."""
+    session = controller.session
+    state = session.state
+    if not state.current_file_hash:
+        return
+    if state.clipboard is None:
+        controller.set_status("Nothing to paste", 2000)
+        return
+    if state.clipboard_rows is not None:
+        session.apply_pasted_fields(state.clipboard_rows, include_bounds=False)
         return
     bounds_mode = "local" if state.clipboard.process.is_local_initialized else ""
-    dlg = GranularSettingsDialog(parent, state.clipboard, "clipboard", bounds_mode=bounds_mode, repo=controller.session.repo)
+    dlg = GranularSettingsDialog(parent, state.clipboard, "clipboard", bounds_mode=bounds_mode, repo=session.repo)
     if dlg.exec() == QDialog.DialogCode.Accepted:
-        controller.session.apply_pasted_fields(dlg.selected(), include_bounds=dlg.paste_bounds())
+        session.apply_pasted_fields(dlg.selected(), include_bounds=dlg.paste_bounds())
 
 
 def open_sticky_dialog(parent, controller) -> None:

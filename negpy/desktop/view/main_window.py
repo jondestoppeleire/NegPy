@@ -764,12 +764,18 @@ class MainWindow(QMainWindow):
         self.canvas.hud.set_progress(current, total)
         self.canvas.hud.showMessage(f"Exporting {filename} ({current}/{total})…")
 
-    def _on_export_finished(self, elapsed: float, failed: int) -> None:
+    def _on_export_finished(self, elapsed: float, errors: list) -> None:
         self.canvas.hud.hide_progress()
         msg = f"Export complete in {elapsed:.2f}s"
-        if failed:
-            msg += f" — {failed} failed"
-        self.canvas.hud.showMessage(msg, timeout=6000 if failed else 3000, kind="warning" if failed else "info")
+        if errors:
+            msg += f" — {len(errors)} failed"
+        self.canvas.hud.showMessage(msg, timeout=6000 if errors else 3000, kind="warning" if errors else "info")
+        if errors:
+            # A toast holds one line and the next one replaces it; the box keeps every file.
+            box = QMessageBox(QMessageBox.Icon.Warning, "Export", f"{count_of(len(errors), 'file')} could not be exported.", parent=self)
+            box.setDetailedText("\n".join(errors))
+            box.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
+            box.open()
 
     def resizeEvent(self, event) -> None:
         super().resizeEvent(event)

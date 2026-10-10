@@ -897,12 +897,21 @@ class FileBrowser(QWidget):
         self.act_sheet_all = sheet_menu.addAction("All Frames")
         self.act_sheet_keepers = sheet_menu.addAction("Keepers Only")
         self.act_sheet_unrejected = sheet_menu.addAction("Hide Rejected")
-        for act in (self.act_sheet_all, self.act_sheet_keepers, self.act_sheet_unrejected):
+        self.act_sheet_unmarked = sheet_menu.addAction("Unmarked Only")
+        for act in (self.act_sheet_all, self.act_sheet_keepers, self.act_sheet_unrejected, self.act_sheet_unmarked):
             act.setCheckable(True)
             self._sheet_group.addAction(act)
         self.act_sheet_all.triggered.connect(lambda: self._apply_sheet_filter("all"))
         self.act_sheet_keepers.triggered.connect(lambda: self._apply_sheet_filter("keepers"))
         self.act_sheet_unrejected.triggered.connect(lambda: self._apply_sheet_filter("unrejected"))
+        self.act_sheet_unmarked.triggered.connect(lambda: self._apply_sheet_filter("unmarked"))
+        sheet_menu.addSeparator()
+        self.act_advance_after_mark = sheet_menu.addAction("Advance After Marking")
+        self.act_advance_after_mark.setCheckable(True)
+        self.act_advance_after_mark.setChecked(bool(self.session.repo.get_global_setting("advance_after_mark", False)))
+        self.act_advance_after_mark.setToolTip("Marking a frame Keeper or Reject moves on to the next frame")
+        self.act_advance_after_mark.toggled.connect(lambda on: self.session.repo.save_global_setting("advance_after_mark", on))
+        sheet_menu.setToolTipsVisible(True)
         self.sheet_btn.setMenu(sheet_menu)
 
         # The frames' own order; the Library's roll list has a Sort of its own.
@@ -1456,6 +1465,7 @@ class FileBrowser(QWidget):
         self.act_sheet_all.setChecked(mode == "all")
         self.act_sheet_keepers.setChecked(mode == "keepers")
         self.act_sheet_unrejected.setChecked(mode == "unrejected")
+        self.act_sheet_unmarked.setChecked(mode == "unmarked")
         icon_color = "white" if mode != "all" else THEME.text_primary
         self.sheet_btn.setIcon(qta.icon("fa5s.filter", color=icon_color))
         self.session.asset_model.set_sheet_filter(mode)
@@ -1474,6 +1484,8 @@ class FileBrowser(QWidget):
             names.append("Keepers")
         elif model.sheet_filter == "unrejected":
             names.append("Hide Rejected")
+        elif model.sheet_filter == "unmarked":
+            names.append("Unmarked Only")
         return names
 
     def _on_thumbnail_refresh_progress(self, text: str) -> None:

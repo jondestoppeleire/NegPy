@@ -48,6 +48,15 @@ class TestPreferencesDialog(unittest.TestCase):
         self.assertTrue(dlg.canvas_pills[2].isChecked())
         self.assertFalse(dlg.canvas_pills[0].isChecked())
 
+    def test_dust_mark_choice_offers_every_vision_preset_and_sets_it(self):
+        from negpy.desktop.view.canvas.overlay import DUST_MARK_COLORS
+
+        dlg = _dlg()
+        self.assertEqual([dlg.dust_combo.itemText(i) for i in range(dlg.dust_combo.count())], [n for n, _, _ in DUST_MARK_COLORS])
+        self.assertEqual(dlg.dust_combo.currentIndex(), 0)
+        dlg.dust_combo.setCurrentIndex(1)
+        dlg.session.set_dust_mark_colors.assert_called_once_with(1)
+
     def test_view_toggles_go_through_the_session(self):
         dlg = _dlg()
         dlg.immersive_box.setChecked(not dlg.immersive_box.isChecked())
