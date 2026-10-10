@@ -182,7 +182,7 @@ The Film Strip button row:
 *   **Sort** (arrows): Name or Date, or **Scene** once the loaded roll has one ([Scenes](#scenes)), ascending or descending.
 *   **Sheet filter** (funnel): *All Frames*, *Keepers Only*, *Hide Rejected* or *Unmarked Only*. **Advance After Marking** in the same menu moves to the next frame after a Keeper or Reject mark. `Home` and `End` jump to the first and last frame.
 
-Above both sections sit the **filter box**, a **`.*`** regex toggle, a **search-library** button and, once enabled in Preferences, a **search-by-meaning** toggle. The Film Strip has a **tally** ("Portra 400 — 36 frames · 12 keepers · 3 rejected", or **Collection** for frames that are not one roll) and a **thumbnail size** slider. With a filter active the tally names it; if it hides everything, **Show all frames** clears it.
+Above both sections sit the **filter box**, a **`.*`** regex toggle, a **search-library** button and, once enabled in Preferences, a **search-by-meaning** toggle. The Film Strip has a **tally** ("Ektacolor Pro 400 — 36 frames · 12 keepers · 3 rejected", or **Collection** for frames that are not one roll) and a **thumbnail size** slider. With a filter active the tally names it; if it hides everything, **Show all frames** clears it.
 
 Right-click empty space for **Add Files**, **Add Folder** and **Close Roll…**. Buttons that do not fit move into a **»** menu.
 
