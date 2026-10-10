@@ -333,7 +333,9 @@ A 21-step gray wedge printed through the current curve. Patches that merge into 
 
 Ten cells on the Adams scale (**0** paper black, **V** 18% mid-gray); opacity shows how much of the frame lands in each. The end cells turn **red** when shadows block up or highlights blow.
 
-Click a cell, then a spot on the photo, to place that tone (see Zone placement); Esc cancels.
+Click a cell, then a spot on the photo, to place that tone (see Zone placement); Esc cancels. On a slide or a Positive frame the strip reads **Disabled for Slides/Reversal Film**.
+
+Double-click the strip to turn the canvas **Zone Overlay** on or off (also `Shift+Z` and the canvas toolbar's grid icon): every region of the print is outlined and labeled with its zone.
 
 #### Probe
 
