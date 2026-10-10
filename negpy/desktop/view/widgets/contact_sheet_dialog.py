@@ -430,6 +430,14 @@ class ContactSheetDialog(QDialog):
         self.proof_label.setWordWrap(True)
         col.addWidget(self.proof_label)
 
+        self.pick_btn = tool_toggle(
+            "fa5s.times-circle",
+            "Pick Frames",
+            "Show every frame; click one to leave it out or put it back. Rejected frames start left out",
+        )
+        self.pick_btn.toggled.connect(lambda _checked: self._schedule_render())
+        col.addWidget(self.pick_btn)
+
         toggles = QHBoxLayout()
         toggles.setSpacing(THEME.space_md)
         self.edge_btn = labeled_toggle(
@@ -450,18 +458,6 @@ class ContactSheetDialog(QDialog):
             "fa5s.print", " White Paper", settings.white_paper, "Print on white paper with dark labels, to save ink on a home printer"
         )
         self.white_btn.toggled.connect(lambda _checked: self._schedule_render())
-        second = QHBoxLayout()
-        second.setSpacing(THEME.space_md)
-        second.addWidget(self.white_btn, 1)
-
-        self.pick_btn = tool_toggle(
-            "fa5s.times-circle",
-            "Pick Frames",
-            "Show every frame; click one to leave it out or put it back. Rejected frames start left out",
-        )
-        self.pick_btn.toggled.connect(lambda _checked: self._schedule_render())
-        second.addWidget(self.pick_btn, 1)
-        col.addLayout(second)
         self.film_base_btn = labeled_toggle(
             "fa5s.film",
             " Film Base",
@@ -473,11 +469,11 @@ class ContactSheetDialog(QDialog):
         self.film_base_btn.setEnabled(self.white_btn.isChecked())
         self.white_btn.toggled.connect(self.film_base_btn.setEnabled)
         self.film_base_btn.toggled.connect(lambda _checked: self._schedule_render())
-        third = QHBoxLayout()  # the rail takes White Paper's half of the row above
-        third.setSpacing(THEME.space_md)
-        third.addWidget(SliderGroup(self.film_base_btn), 1)
-        third.addStretch(1)
-        col.addLayout(third)
+        second = QHBoxLayout()
+        second.setSpacing(THEME.space_md)
+        second.addWidget(self.white_btn, 1)
+        second.addWidget(self.film_base_btn, 1)
+        col.addLayout(second)
 
         self.summary_label = hint_label()
         self.summary_label.setWordWrap(True)
