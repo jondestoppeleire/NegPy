@@ -567,7 +567,7 @@ class ScanlightSidebar(QWidget):
             if not self._camera_verified:
                 # Defensive: the dropdown item is greyed without a camera, but refuse here too.
                 # A manual preset's steppers need the body's own ISO/shutter/aperture choices.
-                self._set_status("Connect the camera first — a manual preset uses the camera's ISO / shutter / aperture choices.")
+                self._set_status("Connect the camera first — a manual preset uses the camera's ISO / shutter / aperture choices")
                 self.preset_combo.setCurrentIndex(0)
                 return
             self._set_manual_mode(True)
@@ -616,7 +616,7 @@ class ScanlightSidebar(QWidget):
     def _on_preset_save(self) -> None:
         if not self._manual_mode:
             return  # Save only stores a hand-built preset — the button is greyed out otherwise
-        name, ok = QInputDialog.getText(self, "Save manual preset", "Film stock name:")
+        name, ok = QInputDialog.getText(self, "Save Manual Preset", "Film stock name:")
         name = name.strip()
         if not ok or not name or name in _BUILTIN_WHITE_PRESETS:
             return
@@ -628,7 +628,7 @@ class ScanlightSidebar(QWidget):
             self._apply_preset(saved)  # show it read-only (lone steppers, disabled sliders)
         self._push_light()
         self._apply_gating()
-        self._set_status(f"Saved preset “{name}”.")
+        self._set_status(f"Saved preset “{name}”")
 
     def _save_current_as_preset(self, name: str, sensor_profile: str = "") -> None:
         self._update_settings_from_ui()
@@ -659,7 +659,7 @@ class ScanlightSidebar(QWidget):
             return
         self._presets.delete(name)
         self._reload_presets()
-        self._set_status(f"Deleted preset “{name}”.")
+        self._set_status(f"Deleted preset “{name}”")
 
     # ── new preset via calibration (dedicated pop-up) ─────────────────
 
@@ -678,7 +678,7 @@ class ScanlightSidebar(QWidget):
         # an arbitrary grey. Pushed DIRECTLY, leaving the shared sliders on the selected preset,
         # so cancelling restores the preset's own light. Calibration overwrites R/G/B on success.
         self.controller.set_scanlight_color(*REFERENCE_LEVELS, 0, self._settings.port)
-        self._set_status("Calibrating a new preset — see the pop-up.")
+        self._set_status("Calibrating a new preset — see the pop-up")
 
     def _settings_json(self) -> dict:
         """The live-view settings JSON the stream publishes (ISO/shutter/aperture options + current),
@@ -758,15 +758,15 @@ class ScanlightSidebar(QWidget):
 
     def _on_calibrate_new_preset(self, name: str) -> None:
         if self._scanning:
-            self.calib_window.set_status("A scan is running — wait for it to finish.")
+            self.calib_window.set_status("A scan is running — wait for it to finish")
             return
         name = name.strip()
         if not name:
-            self.calib_window.set_status("Enter a film-stock name first.")
+            self.calib_window.set_status("Enter a film-stock name first")
             return
         roi = self.calib_window.image.roi()
         if roi is None:
-            self.calib_window.set_status("Click the clear film base (crosshair) first.")
+            self.calib_window.set_status("Click the clear film base (crosshair) first")
             return
         candidates = self._available_shutters()
         if not candidates:
@@ -872,7 +872,7 @@ class ScanlightSidebar(QWidget):
             self._reset_magnifier()
             self.lv_window.hide()
             self._push_light()  # back to the capture light (RGB unless white mode)
-            self._set_status("")  # clear the "Live view running." line once the stream stops
+            self._set_status("")  # clear the "Live view running" line once the stream stops
 
     def _start_live_view_worker(self) -> None:
         """Spawn the live-view stream subprocess (shared by toggle-on and resume)."""
@@ -907,7 +907,7 @@ class ScanlightSidebar(QWidget):
         self._magnifier_available = True
         self._reset_focus_meter()
         self._lv_timer.start()
-        self._set_status("Live view running.")
+        self._set_status("Live view running")
 
     def _on_live_view_window_closed(self) -> None:
         if self.lv_btn.isChecked():
@@ -1200,7 +1200,7 @@ class ScanlightSidebar(QWidget):
             # Pinned: the slider writes above armed the light debounce, whose light_set echo lands
             # right after this line. Without the pin it replaced this outcome before anyone could
             # read it.
-            self._set_status(f"Saved preset “{name}”{profile_note}.", pinned=True)
+            self._set_status(f"Saved preset “{name}”{profile_note}", pinned=True)
         self._stop_calibration_live_view()  # calibration ran inside live view → tear it down
 
     @pyqtSlot(str)
@@ -1215,7 +1215,7 @@ class ScanlightSidebar(QWidget):
         self._calibrating_preset = ""
         label, _cause, fix = _EXPOSURE_WARNINGS.get(status, _EXPOSURE_WARNINGS["over"])
         self.calib_window.set_inputs_locked(False)  # re-enable name / ROI / ISO / aperture for the retry
-        self.calib_window.set_status(f"⚠ {label} — {fix}.")
+        self.calib_window.set_status(f"⚠ {label} — {fix}")
         self.calib_window.progress.setVisible(False)
         self._apply_gating()  # re-enable Scan — the capture thread is free again
         self.controller.set_scanlight_color(*REFERENCE_LEVELS, 0, self._settings.port)  # re-light for framing
@@ -1270,7 +1270,7 @@ class ScanlightSidebar(QWidget):
         if self._calibrating_preset:
             # Both ride one worker thread, so this would only queue, then fire with the exposure
             # the calibration is replacing.
-            self._set_status("A calibration is running — wait for it to finish.")
+            self._set_status("A calibration is running — wait for it to finish")
             return
         if self._scanning:
             return  # already capturing; a second click must not queue another frame
@@ -1369,10 +1369,10 @@ class ScanlightSidebar(QWidget):
         self.set_scanning(False)
         self.lv_window.clear_progress()
         if self._calibrating_preset:
-            self._finish_calibration_terminal("Calibration cancelled.")
-            self._set_status("Calibration cancelled.")
+            self._finish_calibration_terminal("Calibration canceled")
+            self._set_status("Calibration canceled")
             return
-        self._set_status("Capture cancelled.")
+        self._set_status("Capture canceled")
         self._after_capture_live_view()
 
     def _finish_calibration_terminal(self, status: str) -> None:
@@ -1458,7 +1458,7 @@ class ScanlightSidebar(QWidget):
             # The body went away mid-stream, so close the preview instead of leaving the last
             # frame on screen looking live.
             self.lv_btn.setChecked(False)  # → _on_live_view_toggled(False) tears it down
-            self._set_status("Camera disconnected.")
+            self._set_status("Camera disconnected")
         self._apply_gating()
 
     @pyqtSlot(object)

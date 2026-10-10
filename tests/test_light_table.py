@@ -61,6 +61,19 @@ def test_the_light_table_takes_the_canvas_place_and_gives_it_back(qapp):
     assert win.drawer.visible and win.session_dock.visible
 
 
+def test_the_light_table_will_not_open_on_an_empty_grid(qapp):
+    win = _window()
+    win.controller.session.asset_model.rowCount.return_value = 0
+    win.state.uploaded_files = [{"name": "a.tif"}]
+
+    MainWindow.set_light_table(win, True)
+
+    assert win.central_stack.currentIndex() == 0
+    assert not win.session_panel.file_browser.light_table_btn.isChecked()
+    assert win.drawer.visible and win.session_dock.visible
+    win.controller.set_status.assert_called_once_with("No frames match the filter", 3000)
+
+
 def test_leaving_the_light_table_keeps_a_hidden_controls_panel_hidden(qapp):
     win = _window()
     win.drawer.visible = False

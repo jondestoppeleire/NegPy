@@ -18,6 +18,8 @@ If Windows blocks the default data folder, NegPy suggests `%LOCALAPPDATA%\NegPy\
 *   **Center, the canvas**: the live preview, where most tools act. Scroll or pinch to zoom, drag to pan. The bottom toolbar holds Fit/**1:1** zoom (one scan pixel per screen pixel; with **HQ** off, a **preview res · HQ off** pill marks a scaled-up preview), undo/redo, rotate/flip (on every selected frame) and more. The **⋯** menu holds every action, including **Preferences…** (§15), **Edit Toolbar…** (put any menu item on the toolbar) and **Persistent Settings…**. Right-click the image for **Reset View**, **Sticky Zoom**, the pickers, copy/paste settings, **Reset Settings**, **Reset to Roll Settings** and **Unload** (drop the frame from the session; its edit stays).
 *   **Right, the controls**: tabs **Roll** / **Frame** / **Metadata** / **Gear** / **Export** / **Scan**. **Frame** has a pinned **Analysis** readout and its own row of tabs below it. Roll and Frame change the render; the other tabs do not.
 
+With nothing open, the canvas offers **Load Scans…** (import a folder as a roll, add files, or open the Scan tab) and **Take the Tour**.
+
 Drag a panel by its top edge (the strip above Session, or the margin around the **Find** box) to float it; its pin button docks it again. **Shift+H** hides and shows both panels. NegPy remembers the layout and each dialog's size and position; **Reset Panel Layout** (**⋯** menu) restores the default.
 
 ### The tour
@@ -165,7 +167,7 @@ The **⋮** menu on the Film Strip header, beside its ⓘ guide:
 *   **Close Roll…**: empties the film strip and returns to the Library; **Unload All…** when the frames are not a roll. Asks first; edits stay saved.
 *   **Reset Roll to Defaults…**: **Reset Settings** on every visible frame. Asks first; each reset is an undo step.
 
-The grid button on the same header opens the **Light Table** (`Shift+G`): the roll as a full-window grid for culling, with the same selection, marks and menus. Double-click or **Enter** opens a frame; **Esc** or `Shift+G` goes back.
+The grid button on the same header opens the **Light Table** (`Shift+G`): the roll as a full-window grid for culling, with the same selection, marks and menus. Double-click or **Enter** opens a frame; **Esc** or `Shift+G` goes back. It does not open while the strip shows no frames.
 
 The Film Strip button row:
 
@@ -565,7 +567,7 @@ Spotting, as with a brush on a finished print. Marks are found by local contrast
 *   **Spot Threshold** (0.01 to 1.0): the bar for specks, measured against the film's grain. Lower catches more, with more false positives; 1.0 turns speck detection off. Dust in busy detail may need a lower value, IR or Heal.
 *   **Hair Threshold** (0.01 to 1.0): the same for hairs and long thin marks; it rises along tonal edges, so a bright rim is not taken for a hair. Lower it if a hair across busy detail is missed; 1.0 turns hair detection off.
 *   **Size** (2 to 8 px): max spot radius. A mark covers the whole speck or hair.
-*   To protect detail, right-drag on the canvas to paint an exclusion band (Brush Size wide, amber with the overlay on), or right-click → **Exclude From Optical Removal** for one spot. Toggling **Optical Removal** clears every band.
+*   To protect detail, right-drag on the canvas to paint an exclusion band (Brush Size wide, amber with the overlay on), or right-click → **Exclude from Optical Removal** for one spot. Toggling **Optical Removal** clears every band.
 *   The cursor button beside **Optical Removal** makes a plain right-click exclude the spot, with no menu; the canvas menu is then out of reach while removal is on.
 
 **IR Removal** uses the scanner's infrared channel; it is enabled only when the scan has one.

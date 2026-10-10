@@ -1287,7 +1287,7 @@ class AppController(QObject):
             return  # a keyword search's own walk landed here; nothing to index
         if self._library_index_cancelled:
             self._end_batch("library_index")
-            self.set_status("Indexing cancelled", 3000)
+            self.set_status("Indexing canceled", 3000)
             return
         hashes = [f["hash"] for f in files]
         cached = self.session.repo.load_embeddings_for(hashes, semantic_model.MODEL_VERSION)
@@ -3874,7 +3874,7 @@ class AppController(QObject):
         self._autocrop_dispatched = len(frames)
         self._autocrop_preflight_skipped = preflight_skipped
         self._autocrop_cancel_requested = False
-        self.set_status(f"Auto cropping {count_of(len(frames), 'frame')}...")
+        self.set_status(f"Auto cropping {count_of(len(frames), 'frame')}…")
         self.batch_autocrop_requested.emit(
             BatchAutoCropTask(
                 frames=frames,
@@ -4138,7 +4138,7 @@ class AppController(QObject):
         self._thumbnail_render_timing = [0.0, 0.0, 0]
         self._thumbnail_render_pending = {f.file_info.get("hash") for f in frames}
         self.thumbnail_refresh_state_changed.emit(True)
-        self.set_status(f"Updating {count_of(len(frames), 'thumbnail')}...")
+        self.set_status(f"Updating {count_of(len(frames), 'thumbnail')}…")
         self.status_progress_requested.emit(0, len(frames))
         self.thumbnail_render_requested.emit(
             ThumbnailRenderTask(
@@ -4202,7 +4202,7 @@ class AppController(QObject):
             # routine path's resume, and say so — this one the user did ask for.
             self._thumbnail_render_user_cancelled = False
             self._thumbnail_render_resume.clear()
-            self.set_status("Thumbnail update cancelled", 3000)
+            self.set_status("Thumbnail update canceled", 3000)
             self._finish_thumbnail_render_generation()
             return
         # Fires whenever real batch work pre-empts a running refresh, which is routine
@@ -4867,7 +4867,7 @@ class AppController(QObject):
         Updates UI status during Roll or Scene Analysis.
         """
         marker = "cropped" if has_crop else "full frame"
-        self.set_status(f"Analyzing {current}/{total}: {name} [{marker}]...")
+        self.set_status(f"Analyzing {current}/{total}: {name} [{marker}]…")
         self.status_progress_requested.emit(current, total)
         self.batch_progress.emit(current, total, f"{name} [{marker}]")
 
@@ -7528,7 +7528,7 @@ class AppController(QObject):
 
         presets = self._enabled_presets()
         if not presets:
-            QMessageBox.information(None, "No Presets Enabled", "Enable at least one export preset in the Export panel.")
+            QMessageBox.information(None, "Export", "Enable at least one export preset in the Export panel.")
             return
 
         if not self._validate_preset_paths(presets):

@@ -1,13 +1,15 @@
 import os
+import re
 import sys
 
 from PyQt6.QtCore import QEvent, QObject, Qt, qInstallMessageHandler
-from PyQt6.QtGui import QIcon
-from PyQt6.QtWidgets import QAbstractSpinBox, QApplication, QComboBox, QProxyStyle, QStyle
+from PyQt6.QtGui import QIcon, QTextDocumentFragment
+from PyQt6.QtWidgets import QAbstractButton, QAbstractSpinBox, QApplication, QComboBox, QProxyStyle, QStyle, QWidget
 
 from negpy.desktop.controller import AppController
 from negpy.desktop.session import DesktopSessionManager
 from negpy.desktop.view.main_window import MainWindow
+from negpy.desktop.view.styles.templates import wrap_tooltip
 from negpy.features.flatfield.logic import set_gain_provider
 from negpy.infrastructure.storage.repository import StorageRepository
 from negpy.services.assets.migrations.cast_removal import migrate_legacy_slide_cast_removal
@@ -64,6 +66,22 @@ class WheelScrollsPanel(QObject):
         if event.type() == QEvent.Type.Wheel and isinstance(obj, (QComboBox, QAbstractSpinBox)):
             event.ignore()
             return True
+        return False
+
+
+class TooltipPass(QObject):
+    """Every widget tooltip wraps (plain text never does in Qt), and an icon-only button takes its
+    tooltip's first clause as its accessible name, the one name a screen reader has for it."""
+
+    def eventFilter(self, obj, event) -> bool:  # noqa: N802
+        if event.type() == QEvent.Type.ToolTipChange and isinstance(obj, QWidget):
+            tip = obj.toolTip()
+            if tip and not tip.startswith("<qt>"):
+                obj.setToolTip(wrap_tooltip(tip))
+            elif tip and isinstance(obj, QAbstractButton) and not obj.text():
+                # A shortcut chip is a table cell, so it lands on a line of its own.
+                plain = QTextDocumentFragment.fromHtml(tip).toPlainText()
+                obj.setAccessibleName(re.split(r" — |\n", plain, maxsplit=1)[0].strip())
         return False
 
 
@@ -300,6 +318,7 @@ def main() -> None:
         app.setApplicationName("NegPy")
         app.setStyle(_AppStyle("Fusion"))
         app.installEventFilter(WheelScrollsPanel(app))
+        app.installEventFilter(TooltipPass(app))
 
         icon_path = get_resource_path("media/icons/icon.png")
         if os.path.exists(icon_path):

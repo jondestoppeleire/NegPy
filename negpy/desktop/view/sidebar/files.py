@@ -71,6 +71,7 @@ from negpy.desktop.view.styles.templates import (
     ICON_BUTTON_WIDTH,
     TOOLBAR_BUTTON_HEIGHT,
     TOOLBAR_ICON_SIZE,
+    icon_button,
     tool_toggle,
     wrap_tooltip,
 )
@@ -974,11 +975,9 @@ class FileBrowser(QWidget):
 
         # Same query text, wider net: the box above filters what is loaded, and this runs it
         # against every library folder and opens what it finds.
-        self.library_search_btn = QToolButton()
-        self.library_search_btn.setIcon(qta.icon("mdi.folder-search-outline", color=THEME.text_primary))
-        self.library_search_btn.setFixedSize(28, 28)
-        self.library_search_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.library_search_btn.setToolTip("Search the whole library — runs this search across your library folders and loads the matches")
+        self.library_search_btn = icon_button(
+            "mdi.folder-search-outline", "Search the whole library — runs this search across your library folders and loads the matches"
+        )
 
         # Opt-in (Preferences); hidden until then. Mutually exclusive with regex/the
         # structured query language -- ranks this session's frames by meaning instead.
@@ -1791,7 +1790,7 @@ class FileBrowser(QWidget):
         targets = [i for i in (state.selected_indices or [state.selected_file_idx]) if 0 <= i < len(state.uploaded_files)]
         n = len(targets)
         if multi:
-            menu.addAction(f"Reset {count_of(n, 'frame')}").triggered.connect(lambda: _reset_selected(self, self.controller))
+            menu.addAction(f"Reset {count_of(n, 'frame').title()}…").triggered.connect(lambda: _reset_selected(self, self.controller))
         else:
             menu.addAction("Reset Settings").triggered.connect(self.session.reset_settings)
             act_roll = menu.addAction(label_with_shortcut("Reset to Roll Settings", "reset_to_roll"))
@@ -1839,7 +1838,7 @@ class FileBrowser(QWidget):
                 self._add_hdr_anchor_menu(menu, active)
                 menu.addAction("Unmerge Exposures").triggered.connect(lambda: self.controller.request_unmerge_hdr())
             if active.get("diptych"):
-                menu.addAction("Unsplit Diptych").triggered.connect(self.prompt_undiptych)
+                menu.addAction("Unsplit Diptych…").triggered.connect(self.prompt_undiptych)
             if active.get("half"):
                 from negpy.services.assets.half_frame import base_hash
 

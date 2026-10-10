@@ -205,7 +205,7 @@ def test_cancelled_scan_returns_sidebar_to_a_terminal_idle_state():
 
     assert not w._scanning
     assert w.status_strip.showing() != "progress"
-    assert "cancelled" in w.status_strip.message().lower()
+    assert "canceled" in w.status_strip.message().lower()
     assert w.lv_btn.isChecked()  # capture cancellation preserves the live-view session
     assert w.controller.set_scanlight_color.called  # restore the framing light
 
@@ -226,7 +226,7 @@ def test_cancelled_calibration_restores_scan_target_and_gates():
     assert w._calibrating_preset == ""
     assert w._lv_target is w.lv_image
     assert w.calib_window.progress.isHidden()
-    assert "cancelled" in w.calib_window.status.text().lower()
+    assert "canceled" in w.calib_window.status.text().lower()
     assert not w._lv_timer.isActive()
     w.controller.stop_live_view.assert_called_once_with()
     assert w.preset_new_btn.isEnabled()
@@ -512,7 +512,7 @@ def test_scan_button_reads_scan_then_stop():
 def test_poll_clears_stale_searching_status_on_connect():
     w = _sidebar()  # USB mode
     w._camera_verified = False
-    w._set_status("Camera disconnected.")
+    w._set_status("Camera disconnected")
     w._on_poll_status(_poll(usb_ok=True, usb_model="ZV-E1"))  # USB body appears → connected
     assert w._camera_verified
     assert w.status_strip.message() == ""  # the stale failure line is dropped on connect
@@ -914,7 +914,7 @@ def test_calibration_outcome_survives_the_light_echo(monkeypatch):
     assert "Saved preset" in w.status_strip.message(), "the light echo must not clobber the calibration outcome"
     # The pin is not forever: the next user-driven status (a new flow) replaces it, and the ambient
     # light echo works again afterwards.
-    w._set_status("Calibrating a new preset — see the pop-up.")
+    w._set_status("Calibrating a new preset — see the pop-up")
     w._on_light_set(10, 20, 30, 0)
     assert w.status_strip.message() == "Light: R10 G20 B30"
 

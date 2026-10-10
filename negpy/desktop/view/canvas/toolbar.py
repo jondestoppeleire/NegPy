@@ -67,7 +67,7 @@ TOOLBAR_ITEMS: tuple[ToolbarItem, ...] = (
     ToolbarItem("unload", "Settings", "Unload…"),
     ToolbarItem("palette", "App", "Find Control or Action…"),
     ToolbarItem("preferences", "App", "Preferences…"),
-    ToolbarItem("shortcuts", "App", "Keyboard Shortcuts"),
+    ToolbarItem("shortcuts", "App", "Keyboard Shortcuts…"),
 )
 
 TOOLBAR_ITEM_BY_ID = {item.id: item for item in TOOLBAR_ITEMS}
@@ -353,7 +353,7 @@ class ActionToolbar(QWidget):
         find_action.setToolTip("Find any slider, card or action by name, and open it")
         overflow_menu.addSeparator()
 
-        self._ov_hq_action = overflow_menu.addAction("Toggle HQ Preview")
+        self._ov_hq_action = overflow_menu.addAction("HQ Preview")
         self._ov_hq_action.setCheckable(True)
         self._tip(self._ov_hq_action, "Toggle high-quality (full-resolution) preview", "toggle_hq")
         overflow_menu.addSeparator()
@@ -477,8 +477,8 @@ class ActionToolbar(QWidget):
         tour_action = overflow_menu.addAction(qta.icon("fa5s.map-signs", color=icon_color), "Take the Tour", self._show_tour)
         self._label(tour_action, "Take the Tour", "show_tour")
         tour_action.setToolTip("Replay the guided feature tour")
-        shortcuts_action = overflow_menu.addAction(qta.icon("fa5s.keyboard", color=icon_color), "Keyboard Shortcuts", self._show_shortcuts)
-        self._label(shortcuts_action, "Keyboard Shortcuts", "show_shortcuts")
+        shortcuts_action = overflow_menu.addAction(qta.icon("fa5s.keyboard", color=icon_color), "Keyboard Shortcuts…", self._show_shortcuts)
+        self._label(shortcuts_action, "Keyboard Shortcuts…", "show_shortcuts")
         shortcuts_action.setToolTip("Show the full keyboard shortcuts reference")
         self.btn_overflow.setMenu(overflow_menu)
 
