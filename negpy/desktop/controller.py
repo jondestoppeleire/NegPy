@@ -3174,10 +3174,14 @@ class AppController(QObject):
             counter += 1
         return path
 
+    def zone_placement_available(self) -> bool:
+        """Placement inverts the print curve, so it needs a loaded frame on the print path."""
+        return self.state.preview_raw is not None and not self._on_transfer_path()
+
     def arm_zone_target(self, zone: float) -> None:
         """Zone picked on the strip: the next canvas click prints that spot there.
         Picking the armed zone again disarms."""
-        if self.state.preview_raw is None or self._on_transfer_path():
+        if not self.zone_placement_available():
             return
         if self.state.zone_arm_target == float(zone):
             self._disarm_zone_target()

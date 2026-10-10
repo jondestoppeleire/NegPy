@@ -19,6 +19,9 @@ from negpy.features.exposure.normalization import (
     analyze_log_exposure_bounds_from_log,
     blend_neutral_axis,
     contrast_mask_plane,
+    diffusion_grid,
+    diffusion_plane,
+    geometry_kwargs,
     luma_source_bounds,
     normalized_roi,
     luminance_density_range,
@@ -53,6 +56,7 @@ from negpy.features.altprocess.models import AltProcess
 from negpy.features.cyanotype.logic import CYANOTYPE_CONSTANTS, sensitizer_constants
 from negpy.features.lith.logic import LITH_CONSTANTS
 from negpy.features.sabattier.logic import SABATTIER_CONSTANTS, line_sigma_px
+from negpy.features.exposure.logic import diffusion_mix
 from negpy.features.exposure.placement import limited_mask_params
 from negpy.features.local.logic import compute_local_maps, limited_masks
 from negpy.features.local.models import MAX_KEYED_MASKS
@@ -338,7 +342,7 @@ class GPUEngine:
         self._uniform_sizes = {
             "geometry": 64,
             "normalization": 160,
-            "exposure": 416,
+            "exposure": 432,
             "transfer": 224,
             "clahe_u": 32,
             "lab": 96,
@@ -392,6 +396,8 @@ class GPUEngine:
         # (key, maps): mask raster, keyed without grade; grade only rescales plane 1 at upload.
         self._local_maps_cache: Optional[Tuple[Tuple, Optional[np.ndarray]]] = None
         self._mask_plane: Optional[Tuple[Tuple, np.ndarray, float]] = None
+        self._diffusion_grid: Optional[Tuple[Tuple, np.ndarray]] = None
+        self._diffusion_plane: Optional[Tuple[Tuple, Optional[np.ndarray]]] = None
         # Identity of the plane currently sitting in the contrast_mask texture.
         self._mask_tex_key: Optional[Tuple] = None
 
@@ -617,6 +623,7 @@ class GPUEngine:
         camera_wb: Optional[list] = None,
         contrast_mask_override: Optional[Tuple[np.ndarray, float, Tuple[int, int, int, int]]] = None,
         sabattier_sigma_override: Optional[float] = None,
+        diffusion_override: Optional[Tuple[np.ndarray, Tuple[int, int, int, int]]] = None,
         # Crop tool preview: toning and finish span the whole rotated frame, with no border or
         # carrier; the meter, contrast mask and active_roi stay on the crop, as in the CPU engine.
         full_frame: bool = False,
@@ -899,8 +906,12 @@ class GPUEngine:
         mask_plane = None
         mask_centre = 0.5
         mask_key = None
-        # The printed frame in rotated pixels; the shader maps the plane onto it and
-        # clamps outside, which is expand_mask_plane's edge padding.
+        # The printed frame in rotated pixels; the shader maps a plane onto it and clamps
+        # outside, which is expand_mask_plane's edge padding.
+        y1_f, y2_f, x1_f, x2_f = roi if roi is not None else (0, h_rot, 0, w_rot)
+        y1_f, x1_f = max(0, y1_f), max(0, x1_f)
+        y2_f, x2_f = min(h_rot, y2_f), min(w_rot, x2_f)
+        frame_rect = (x1_f, y1_f, x2_f - x1_f, y2_f - y1_f)
         mask_rect = None
         if settings.exposure.contrast_mask != 0.0:
             if tiling_mode:
@@ -927,23 +938,14 @@ class GPUEngine:
                             img,
                             bounds,
                             unmix_m,
-                            rotation=settings.geometry.rotation,
-                            fine_rotation=settings.geometry.fine_rotation,
-                            flip_horizontal=settings.geometry.flip_horizontal,
-                            flip_vertical=settings.geometry.flip_vertical,
-                            converge_v=settings.geometry.converge_v,
-                            converge_h=settings.geometry.converge_h,
-                            distortion_k1=k1_eff,
                             roi_norm=normalized_roi(roi, (h_rot, w_rot)),
                             spacer=settings.exposure.mask_spacer,
+                            **geometry_kwargs(settings.geometry, k1_eff),
                         ),
                     )
                 mask_plane = self._mask_plane[1]
                 mask_centre = self._mask_plane[2]
-                y1_m, y2_m, x1_m, x2_m = roi if roi is not None else (0, h_rot, 0, w_rot)
-                y1_m, x1_m = max(0, y1_m), max(0, x1_m)
-                y2_m, x2_m = min(h_rot, y2_m), min(w_rot, x2_m)
-                mask_rect = (x1_m, y1_m, x2_m - x1_m, y2_m - y1_m)
+                mask_rect = frame_rect
 
         mask_uniform = None
         if mask_plane is not None and mask_rect is not None:
@@ -959,6 +961,55 @@ class GPUEngine:
                     float(mask_rect[2]),
                     float(mask_rect[3]),
                 )
+
+        # The Diffusion plane shares the mask texture (its gba lanes) and the mask rect. Built
+        # in the print's own normalization, trims included, so the shader mixes it with the
+        # pixel as light. Print path only: the transfer pass binds no plane.
+        diff_plane = None
+        diff_key = None
+        diff_rect = None
+        if settings.exposure.diffusion > 0.0 and render_path(settings.process) is RenderPath.PRINT:
+            if tiling_mode:
+                if diffusion_override is not None:
+                    diff_plane, frame = diffusion_override
+                    diff_key = ("tiled",)
+                    diff_rect = (frame[0] - global_offset[0], frame[1] - global_offset[1], frame[2], frame[3])
+            else:
+                geo = settings.geometry
+                wp3, bp3 = per_channel_point_offsets(settings.process)
+                diff_bounds = LogNegativeBounds(
+                    tuple(bounds.floors[ch] + wp3[ch] for ch in range(3)), tuple(bounds.ceils[ch] + bp3[ch] for ch in range(3))
+                )
+                panchromatic = settings.process.process_mode == ProcessMode.BW
+                grid_key = (
+                    analysis_key,
+                    roi,
+                    (h_rot, w_rot),
+                    (geo.rotation, geo.fine_rotation, geo.flip_horizontal, geo.flip_vertical, geo.converge_v, geo.converge_h, k1_eff),
+                )
+                # The blur is keyed without bounds, so a trim drag only re-normalizes the grid.
+                if self._diffusion_grid is None or self._diffusion_grid[0] != grid_key:
+                    self._diffusion_grid = (
+                        grid_key,
+                        diffusion_grid(
+                            img,
+                            unmix_m,
+                            roi_norm=normalized_roi(roi, (h_rot, w_rot)),
+                            **geometry_kwargs(geo, k1_eff),
+                        ),
+                    )
+                diff_key = (grid_key, tuple(diff_bounds.floors), tuple(diff_bounds.ceils), panchromatic)
+                # A None plane (an unmetered frame) is cached under its key like any other.
+                cached = self._diffusion_plane
+                if cached is None or cached[0] != diff_key:
+                    cached = (diff_key, diffusion_plane(self._diffusion_grid[1], diff_bounds, panchromatic))
+                    self._diffusion_plane = cached
+                diff_plane = cached[1]
+                diff_rect = frame_rect
+            if diff_rect is not None and (diff_rect[2] < 1 or diff_rect[3] < 1):
+                diff_plane = None
+        plane_rect = mask_rect if mask_plane is not None else diff_rect
+        plane_tex_key = (mask_key if mask_plane is not None else None, diff_key if diff_plane is not None else None)
 
         # CPU meter cost, logged once per source (skips creative-slider re-renders).
         if analysis_source is not None and analysis_source_hash is not None and analysis_source_hash != self._analysis_timing_hash:
@@ -1001,6 +1052,8 @@ class GPUEngine:
             sabattier_sigma=sabattier_sigma_override
             if sabattier_sigma_override is not None
             else line_sigma_px(settings.altproc.sabattier_line_width, (h_rot, w_rot)),
+            plane_rect=plane_rect,
+            diffusion_mix=diffusion_mix(settings.exposure.diffusion) if diff_plane is not None else 0.0,
         )
         if clahe_cdf_override is not None:
             self._buffers["clahe_c"].upload(clahe_cdf_override)
@@ -1039,16 +1092,21 @@ class GPUEngine:
         # The Contrast Mask plane rides its own analysis-grid texture, uploaded only when the
         # plane itself moves. A 1x1 dummy keeps the bind group valid when it is off (mask.x
         # gates it).
-        if mask_plane is not None:
+        if mask_plane is not None or diff_plane is not None:
+            grid = mask_plane if mask_plane is not None else diff_plane
             tex_mask = self._get_intermediate_texture(
-                mask_plane.shape[1],
-                mask_plane.shape[0],
+                grid.shape[1],
+                grid.shape[0],
                 wgpu.TextureUsage.TEXTURE_BINDING | wgpu.TextureUsage.COPY_DST,
                 "contrast_mask",
             )
-            if self._mask_tex_key != mask_key:
-                tex_mask.upload(np.dstack([mask_plane] * 3))
-                self._mask_tex_key = mask_key
+            if self._mask_tex_key != plane_tex_key:
+                # r = the Contrast Mask plane, gba = the Diffusion plane's channels; both come
+                # off the same analysis grid, so they share one texture and one rect.
+                r_plane = mask_plane if mask_plane is not None else np.zeros(grid.shape[:2], dtype=np.float32)
+                gba = diff_plane if diff_plane is not None else np.zeros((*grid.shape[:2], 3), dtype=np.float32)
+                tex_mask.upload(np.dstack([r_plane, gba]))
+                self._mask_tex_key = plane_tex_key
         else:
             tex_mask = self._get_intermediate_texture(
                 1,
@@ -1152,15 +1210,15 @@ class GPUEngine:
                             )
                             self._local_maps_cache = (raster_key, local_maps)
                     if local_maps is None:
-                        local_maps = np.zeros((h_rot, w_rot, 2), dtype=np.float32)
+                        local_maps = np.zeros((h_rot, w_rot, 3), dtype=np.float32)
                     ev_plane = local_maps[:, :, 0]
-                    # r = dodge/burn EV, b = local grade ISO-R deltas, which tone-limited masks
-                    # add their grade to; g is unused. One texture, so the local-grade map
-                    # costs no bind slot.
-                    tex_local_ev.upload(np.dstack([ev_plane, np.zeros_like(ev_plane), local_maps[:, :, 1]]))
-                    if local_maps.shape[2] > 2:
+                    # r = dodge/burn EV, g = the masks' flash, b = local grade ISO-R deltas, which
+                    # tone-limited masks add their grade to. One texture, so neither map costs a
+                    # bind slot.
+                    tex_local_ev.upload(np.dstack([ev_plane, local_maps[:, :, 2], local_maps[:, :, 1]]))
+                    if local_maps.shape[2] > 3:
                         planes = np.zeros((*ev_plane.shape, MAX_KEYED_MASKS), dtype=np.float32)
-                        planes[:, :, : local_maps.shape[2] - 2] = local_maps[:, :, 2:]
+                        planes[:, :, : local_maps.shape[2] - 3] = local_maps[:, :, 3:]
                         tex_local_key.upload(planes)
                     # A tiled export passes a per-tile slice, which is not reusable.
                     self._local_ev_key = None if tiled_maps else raster_key
@@ -1567,6 +1625,8 @@ class GPUEngine:
         camera_wb: Optional[list] = None,
         contrast_mask: Optional[Tuple[float, float, float, float, float]] = None,
         sabattier_sigma: float = 0.0,
+        plane_rect: Optional[Tuple[float, float, float, float]] = None,
+        diffusion_mix: float = 0.0,
     ) -> None:
         """Packs and uploads all pipeline parameters to the unified UBO."""
         # scale_s uses the post-rotation dims the geometry pass emits. Zeroed for tiled
@@ -1648,6 +1708,7 @@ class GPUEngine:
             per_channel_dye_separation,
             per_channel_toe_shoulder,
             grade_coupled_shape,
+            channel_density_ranges,
             local_ev_scale,
             paper_dmin_rgb,
             highlight_hold_offset,
@@ -1878,6 +1939,12 @@ class GPUEngine:
         key_rows = np.zeros((MAX_KEYED_MASKS, 4), dtype=np.float32)
         if key_params is not None:
             key_rows[: len(key_params)] = key_params
+        contrast_mask_scale_v = float(contrast_mask[0]) if contrast_mask else 0.0
+        plane_rect_v = (
+            tuple(float(v) for v in contrast_mask[1:])
+            if contrast_mask
+            else (tuple(float(v) for v in plane_rect) if plane_rect is not None else (0.0, 0.0, 1.0, 1.0))
+        )
         r_min, r_max = float(EXPOSURE_CONSTANTS["iso_r_min"]), float(EXPOSURE_CONSTANTS["iso_r_max"])
         key_meta = struct.pack(
             "ffff", 0.0 if key_params is None else float(len(key_params)), min(max(float(exp.grade), r_min), r_max), r_min, r_max
@@ -1962,11 +2029,14 @@ class GPUEngine:
                 *preflash_params(exp.grade, d_min, paper),
             )
             # Contrast Mask: stops per unit of plane (0 = off), then the printed frame's
-            # origin and span in rotated pixels. The shader does the upscale.
-            + struct.pack("ffff", *(contrast_mask[:3] if contrast_mask else (0.0, 0.0, 0.0)), 0.0)
-            + struct.pack("ffff", *(contrast_mask[3:] if contrast_mask else (1.0, 1.0)), 0.0, 0.0)
+            # origin and span in rotated pixels, shared with the Diffusion plane; w = the
+            # diffusion mix (0 = off). The shader does the upscale.
+            + struct.pack("ffff", contrast_mask_scale_v, plane_rect_v[0], plane_rect_v[1], diffusion_mix)
+            + struct.pack("ffff", plane_rect_v[2], plane_rect_v[3], 0.0, 0.0)
             + key_rows.tobytes()
             + key_meta
+            # Diffusion: each channel's log range, one normalized unit of val in density.
+            + struct.pack("ffff", *channel_density_ranges(LogNegativeBounds(adj_floors, adj_ceils)), 0.0)
         )
 
         cls = float(settings.lab.clahe_strength)
@@ -2670,19 +2740,28 @@ class GPUEngine:
                     img,
                     global_bounds,
                     unmix_m,
-                    rotation=settings.geometry.rotation,
-                    fine_rotation=settings.geometry.fine_rotation,
-                    flip_horizontal=settings.geometry.flip_horizontal,
-                    flip_vertical=settings.geometry.flip_vertical,
-                    converge_v=settings.geometry.converge_v,
-                    converge_h=settings.geometry.converge_h,
-                    distortion_k1=k1_eff,
                     roi_norm=normalized_roi(roi, (h_rot, w_rot)),
                     spacer=settings.exposure.mask_spacer,
+                    **geometry_kwargs(settings.geometry, k1_eff),
                 ),
                 (x1, y1, crop_w, crop_h),
             )
             # One plane serves every tile; the first upload wins.
+            self._mask_tex_key = None
+        global_diffusion = None
+        if settings.exposure.diffusion > 0.0 and render_path(settings.process) is RenderPath.PRINT:
+            wp3, bp3 = per_channel_point_offsets(settings.process)
+            trimmed = LogNegativeBounds(
+                tuple(global_bounds.floors[ch] + wp3[ch] for ch in range(3)), tuple(global_bounds.ceils[ch] + bp3[ch] for ch in range(3))
+            )
+            grid = diffusion_grid(
+                img,
+                unmix_m,
+                roi_norm=normalized_roi(roi, (h_rot, w_rot)),
+                **geometry_kwargs(settings.geometry, k1_eff),
+            )
+            plane = diffusion_plane(grid, trimmed, settings.process.process_mode == ProcessMode.BW)
+            global_diffusion = None if plane is None else (plane, (x1, y1, crop_w, crop_h))
             self._mask_tex_key = None
 
         paper_w, paper_h, content_w, content_h, off_x, off_y, _ = self._calculate_layout_dims(settings, crop_w, crop_h, render_size_ref)
@@ -2766,6 +2845,7 @@ class GPUEngine:
                     camera_wb=camera_wb,
                     contrast_mask_override=global_mask,
                     sabattier_sigma_override=sabattier_sigma,
+                    diffusion_override=global_diffusion,
                 )
                 handle = self._submit_readback(tile_res, slot=0 if low_vram else tile_index % 2)
                 if low_vram:

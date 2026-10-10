@@ -49,7 +49,7 @@ Migrations that rewrite *rows* rather than a config payload need a repository, s
 
 **Search by meaning** (`services/assets/semantic_model.py`, `embeddings.py`, `clip_tokenizer.py`) — opt-in CLIP (ONNX) search over one vector per frame in the `image_embeddings` table, keyed by `MODEL_VERSION` so a model swap leaves old vectors unread. Only the inference engine ships; the weights download on first use. `workers/embedding.py` indexes exactly like `ThumbnailWorker`.
 
-**Gear catalog** (`features/metadata/gear_*.py`, `services/assets/gear_match.py`) — bundled reference gear plus the user's own. A newly imported roll's folder name is matched against it (shared words, and a delimiter-free run for abbreviations); more than one candidate for a field counts as no match.
+**Gear catalog** (`features/metadata/gear_*.py`, `services/assets/gear_match.py`) — bundled reference gear plus the user's own. A newly imported roll's folder name is matched against it (shared words, and a delimiter-free run for abbreviations; a token that carries a digit, `portra400`, `hp5`, outranks a plain word, so a subject word beside the stock does not cancel it); more than one candidate at the strongest tier counts as no match.
 
 ### Pipeline
 

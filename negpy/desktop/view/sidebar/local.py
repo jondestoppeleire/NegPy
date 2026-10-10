@@ -121,6 +121,13 @@ class LocalSidebar(BaseSidebar):
             "midtone holds, so this changes its contrast without moving its overall density."
         )
 
+        self.flash_slider = CompactSlider("Flash", 0.0, 1.0, 0.0)
+        self.flash_slider.setToolTip(
+            "Pre-expose the paper under the selected mask, as a fraction of the threshold exposure like "
+            "the Tone card's Preflash. It compresses the region's highlights without the density a burn adds. "
+            "Off on a tone-limited mask."
+        )
+
         self._tone_keys = (MaskKey.OFF, MaskKey.HIGHLIGHTS, MaskKey.SHADOWS)
         self.tone_btn = ChoiceButton(
             (("fa5s.adjust", "All"), ("fa5s.sun", "Highlights"), ("fa5s.moon", "Shadows")),
@@ -140,6 +147,7 @@ class LocalSidebar(BaseSidebar):
         self.layout.addWidget(section_subheader("SELECTED MASK"))
         self.layout.addWidget(self.burn_slider)
         self.layout.addWidget(self.grade_slider)
+        self.layout.addWidget(self.flash_slider)
         self.layout.addWidget(self.feather_slider)
         self.layout.addWidget(section_subheader("Tone Limit"))
         self.layout.addWidget(self.tone_btn)
@@ -157,6 +165,7 @@ class LocalSidebar(BaseSidebar):
             (self.burn_slider, "stops"),
             (self.feather_slider, "feather"),
             (self.grade_slider, "grade"),
+            (self.flash_slider, "flash"),
             (self.key_zone_slider, "key_zone"),
             (self.key_softness_slider, "key_softness"),
         ):
@@ -190,14 +199,16 @@ class LocalSidebar(BaseSidebar):
 
     def _build_mask_row(self, i: int, mask) -> _MaskRow:
         dodge, burn = palette_for(self.state.color_vision).dodge_burn
+        limited = limited_indices(self.state.config.local)
+        flashed = bool(mask.flash) and i not in limited  # a tone-limited mask carries no flash
         if mask.stops > 0:
             kind, color = "Burn", burn
         elif mask.stops < 0:
             kind, color = "Dodge", dodge
         else:
-            # A mask that only changes grade is neither: it re-prints the area at its own contrast
-            # without adding or holding back exposure.
-            kind, color = "Grade", THEME.text_primary
+            # A mask that only changes grade, or only flashes, is neither: it re-prints the area
+            # at its own contrast, or pre-exposes it, without adding or holding back exposure.
+            kind, color = ("Flash" if flashed and not mask.grade else "Grade"), THEME.text_primary
         row = _MaskRow()
         lay = QHBoxLayout(row)
         lay.setContentsMargins(6, 2, 4, 2)
@@ -206,7 +217,9 @@ class LocalSidebar(BaseSidebar):
         values = [f"{mask.stops:+.2f} st"] if mask.stops else []
         if mask.grade:
             values.append(f"{mask.grade:+.0f} R")
-        if i in limited_indices(self.state.config.local):
+        if flashed:
+            values.append(f"flash {mask.flash:.2f}")
+        if i in limited:
             values.append(tone_limit_label(mask))
         # The shape icon enables/disables the mask's effect; the row dims to text_muted while
         # disabled.
@@ -300,12 +313,14 @@ class LocalSidebar(BaseSidebar):
                 action.setEnabled(not blocked)
                 action.setToolTip(_TONE_FULL_TIP if blocked else _TONE_TIPS[key])
             keyed = editable and mask.key != MaskKey.OFF
+            self.flash_slider.setEnabled(editable and not keyed)
             self.key_zone_slider.setEnabled(keyed)
             self.key_softness_slider.setEnabled(keyed)
             if mask is not None:
                 self.burn_slider.setValue(mask.stops)
                 self.feather_slider.setValue(mask.feather)
                 self.grade_slider.setValue(mask.grade)
+                self.flash_slider.setValue(mask.flash)
                 self.tone_btn.setCurrentIndex(self._tone_keys.index(mask.key))
                 self.key_zone_slider.setValue(mask.key_zone)
                 self.key_softness_slider.setValue(mask.key_softness)
@@ -318,6 +333,7 @@ class LocalSidebar(BaseSidebar):
             self.burn_slider,
             self.feather_slider,
             self.grade_slider,
+            self.flash_slider,
             self.tone_btn,
             self.key_zone_slider,
             self.key_softness_slider,

@@ -129,7 +129,7 @@ Below it are the toolbar, the search box and two sections: **Library** (imported
 *   **Discovery Filters…**: folder names that importing and **↻** skip, with everything inside them, one per line (default `export`). A line matches any part of a name, ignoring case; a line with `*` must match the whole name (`raw_*`). Saving runs **↻**: rolls a filter now catches leave the list, and come back when the filter goes.
 *   **Sort**: Name or Date, ascending or descending.
 
-Each row shows name and count ("36 photos"); a roll whose folder is gone shows **folder missing** in amber. Importing only records the folder; nothing is decoded until you open the roll.
+Each row shows name and count ("36 photos"), where an assembled Trichrome triplet, stitch or HDR merge is one photo; a roll whose folder is gone shows **folder missing** in amber. Importing only records the folder; nothing is decoded until you open the roll.
 
 #### Importing
 
@@ -182,7 +182,7 @@ The Film Strip button row:
 *   **Sort** (arrows): Name or Date, or **Scene** once the loaded roll has one ([Scenes](#scenes)), ascending or descending.
 *   **Sheet filter** (funnel): *All Frames*, *Keepers Only*, *Hide Rejected* or *Unmarked Only*. **Advance After Marking** in the same menu moves to the next frame after a Keeper or Reject mark. `Home` and `End` jump to the first and last frame.
 
-Above both sections sit the **filter box**, a **`.*`** regex toggle, a **search-library** button and, once enabled in Preferences, a **search-by-meaning** toggle. The Film Strip has a **tally** ("Portra 400 — 36 frames · 12 keepers · 3 rejected", or **Collection** for frames that are not one roll) and a **thumbnail size** slider. With a filter active the tally names it; if it hides everything, **Show all frames** clears it.
+Above both sections sit the **filter box**, a **`.*`** regex toggle, a **search-library** button and, once enabled in Preferences, a **search-by-meaning** toggle. The Film Strip has a **tally** ("Ektacolor Pro 400 — 36 frames · 12 keepers · 3 rejected", or **Collection** for frames that are not one roll) and a **thumbnail size** slider. With a filter active the tally names it; if it hides everything, **Show all frames** clears it.
 
 Right-click empty space for **Add Files**, **Add Folder** and **Close Roll…**. Buttons that do not fit move into a **»** menu.
 
@@ -333,7 +333,9 @@ A 21-step gray wedge printed through the current curve. Patches that merge into 
 
 Ten cells on the Adams scale (**0** paper black, **V** 18% mid-gray); opacity shows how much of the frame lands in each. The end cells turn **red** when shadows block up or highlights blow.
 
-Click a cell, then a spot on the photo, to place that tone (see Zone placement); Esc cancels.
+Click a cell, then a spot on the photo, to place that tone (see Zone placement); Esc cancels. On a slide or a Positive frame the strip reads **Disabled for Slides/Reversal Film**.
+
+Double-click the strip to turn the canvas **Zone Overlay** on or off (also `Shift+Z` and the canvas toolbar's grid icon): every region of the print is outlined and labeled with its zone.
 
 #### Probe
 
@@ -436,6 +438,7 @@ Color timing, like enlarger dichroic filters. The **Global / Shadows / Highlight
 *   **Shadows Density** / **Highlights Density** (±1.0 ΔD): brighten or darken only the shadows or highlights, within paper black and white. With Auto Grade on, each shows its automatic share (Shadow Hold's lift, Highlight Hold's burn). They also work on slides.
 *   **Shadows Grade** / **Highlights Grade** (split grade, ±50 ISO-R): local contrast in the deep shadows or highlights.
 *   **Preflash** (0 to 1): an even flash over the sheet, as a fraction of the paper's threshold exposure. It pulls highlight detail off paper white and softens the print slightly; bare paper stays white. Hidden on slides.
+*   **Diffusion** (0 to 1, hidden in Transparency): a diffuser under the enlarger lens, a Softar or a stocking. The value is how much light it scatters: a stronger diffuser, or more of the exposure given through it. Shadows bleed into highlights and edges soften; flat areas print as before. Grays out in R/G/B mode.
 *   **Contrast Mask** (±0.5, hidden in Transparency): a blurred mask sandwiched with the negative; the value is its signed gamma. Positive compresses the range by (1 − gamma) so a harder grade fits, keeping fine detail. Negative expands the range by (1 + gamma) for a negative too flat for Grade; past about −0.4, highlights clip. Past about ±0.2, strong edges get a halo.
 *   **Mask Spacer** (2 to 6%, default 4%): the gap between mask and negative, as percent of the frame. Thicker masks only broad masses; thinner reaches into detail and hazes shadows next to bright areas. Both mask controls gray out in R/G/B mode.
 
@@ -463,12 +466,13 @@ Draw masks and lighten or darken only those areas. On a **Slide** the panel gray
 
 Handles can go into the gray area outside the frame. A tilted Card Edge usually must start past the corner it burns.
 
-*   **Mask list**: shape icon, Dodge, Burn or Grade, and values. The shape icon enables or disables the mask; the yin-yang inverts it (it acts outside its shape); the eye toggles the outline (shown only on the Exposure tab); the trash deletes it.
-*   The canvas tint of the current mask, and of masks that intersect it, hides while you drag **Burn**, **Feather**, **Grade** or a vertex.
+*   **Mask list**: shape icon, Dodge, Burn, Grade or Flash, and values. The shape icon enables or disables the mask; the yin-yang inverts it (it acts outside its shape); the eye toggles the outline (shown only on the Exposure tab); the trash deletes it.
+*   The canvas tint of the current mask, and of masks that intersect it, hides while you drag **Burn**, **Feather**, **Grade**, **Flash** or a vertex.
 *   **SELECTED MASK**: the controls below act on the mask selected in the list, and gray out with none selected.
 *   **Burn** (-2 to 2 stops, default 0): **positive burns** (darker), **negative dodges** (brighter), like Print Density and the Finishing edge burn.
 *   **Feather** (0.0 to 0.15): edge softness, as a fraction of the frame's short side.
 *   **Grade** (-40 to 40 R): the mask's own contrast, in ISO-R points off the frame's Grade, negative harder (burn a sky at −20 R). It pivots on the region's midtone; overlapping grades add, within R50…R180.
+*   **Flash** (0 to 1, default 0): pre-exposes the paper under the mask, as a fraction of the threshold exposure like the Tone card's Preflash: the region's highlights compress without the density a burn adds (flash a sky through a card). Overlapping flashes add. Off on a tone-limited mask.
 *   **Tone Limit** (*All*, *Highlights*, *Shadows*) with **Tone Zone** (0 to 10, in thirds, default 6) and **Tone Softness** (⅓ to 3 zones): limits the mask to tones lighter or darker than a print zone, so a sky burn on *Highlights* at VI stops at the skyline. The tint shows the tones it selects. Up to four tone-limited masks per frame.
 
 **Printing Notes** (Export tab, or **Shift+N**) makes a marked-up work print: each mask outlined with its number and value in stops, and a corner card with the paper, exposure, grade, filtration, curve and dodge/burn list.
