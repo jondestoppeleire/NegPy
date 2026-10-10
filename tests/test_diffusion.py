@@ -1,4 +1,4 @@
-"""Print Diffusion: a diffuser under the enlarger lens. The paper sees a mix of light, not
+"""Diffusion: a diffuser under the enlarger lens. The paper sees a mix of light, not
 density, so flat areas print as before and the dark parts of the negative spread into the
 light ones. One analysis-grid plane serves both engines."""
 
@@ -9,7 +9,14 @@ import numpy as np
 
 from negpy.domain.models import WorkspaceConfig
 from negpy.features.exposure.logic import apply_characteristic_curve, channel_density_ranges
-from negpy.features.exposure.normalization import LogNegativeBounds, diffusion_plane, normalize_log_image, to_log_density
+from negpy.features.exposure.normalization import (
+    LogNegativeBounds,
+    diffusion_grid,
+    diffusion_plane,
+    normalize_log_image,
+    to_log_density,
+    unmix_log_image,
+)
 from negpy.infrastructure.gpu.device import GPUDevice
 
 SLOPE, PIVOT = 2.9, 0.21
@@ -28,6 +35,12 @@ def _normalized(lin: np.ndarray) -> np.ndarray:
     return np.ascontiguousarray(normalize_log_image(to_log_density(lin), BOUNDS), dtype=np.float32)
 
 
+def _plane(lin: np.ndarray, radius: float, panchromatic: bool = False) -> np.ndarray:
+    plane = diffusion_plane(diffusion_grid(lin, None, radius=radius), BOUNDS, panchromatic)
+    assert plane is not None
+    return plane
+
+
 def _print(img: np.ndarray, **kw) -> np.ndarray:
     return np.asarray(apply_characteristic_curve(img, *ARGS, frame_grade=115.0, diffusion_range=channel_density_ranges(BOUNDS), **kw))
 
@@ -35,12 +48,12 @@ def _print(img: np.ndarray, **kw) -> np.ndarray:
 class TestPlane(unittest.TestCase):
     def test_a_flat_frame_diffuses_to_itself(self):
         lin = np.full((40, 60, 3), 0.3, dtype=np.float32)
-        plane = diffusion_plane(lin, BOUNDS, None, radius=3.0)
+        plane = _plane(lin, 3.0)
         np.testing.assert_allclose(plane, _normalized(lin), atol=1e-5)
 
     def test_the_plane_is_the_blurred_light_not_the_blurred_density(self):
         lin = _step_negative()
-        plane = diffusion_plane(lin, BOUNDS, None, radius=5.0)
+        plane = _plane(lin, 5.0)
         h, w = lin.shape[:2]
         # Far from the edge the plane is the frame; at the edge it is the mean of the two
         # lights (0.26), which in density sits nearer the thin side than the mean density does.
@@ -53,7 +66,7 @@ class TestPlane(unittest.TestCase):
     def test_a_panchromatic_plane_is_the_luma_of_a_cast_frame(self):
         lin = np.full((20, 30, 3), 0.3, dtype=np.float32)
         lin[:, :, 0] *= 1.4  # an orange-mask cast
-        plane = diffusion_plane(lin, BOUNDS, None, radius=3.0, panchromatic=True)
+        plane = _plane(lin, 3.0, panchromatic=True)
         norm = _normalized(lin)
         lum = 0.2126 * norm[:, :, 0] + 0.7152 * norm[:, :, 1] + 0.0722 * norm[:, :, 2]
         for ch in range(3):
@@ -61,25 +74,34 @@ class TestPlane(unittest.TestCase):
 
     def test_an_unmetered_frame_has_no_plane(self):
         lin = np.full((20, 30, 3), 0.3, dtype=np.float32)
-        self.assertIsNone(diffusion_plane(lin, LogNegativeBounds((-1.0,) * 3, (-1.0,) * 3), None))
+        self.assertIsNone(diffusion_plane(diffusion_grid(lin, None), LogNegativeBounds((-1.0,) * 3, (-1.0,) * 3)))
+
+    def test_the_grid_blurs_the_unmixed_light(self):
+        """The kernel mixes the light of the unmixed value, so a flat frame holds under crosstalk."""
+        lin = np.full((20, 30, 3), 0.3, dtype=np.float32)
+        lin[:, :, 2] = 0.1
+        unmix = np.array([[1.0, -0.2, 0.0], [-0.1, 1.0, -0.1], [0.0, -0.3, 1.0]], dtype=np.float32)
+        plane = diffusion_plane(diffusion_grid(lin, unmix, radius=3.0), BOUNDS)
+        expected = normalize_log_image(unmix_log_image(to_log_density(lin), unmix), BOUNDS)
+        np.testing.assert_allclose(plane, expected, atol=1e-5)
 
 
 class TestKernel(unittest.TestCase):
     def test_zero_diffusion_is_bit_identical(self):
         img = _normalized(_step_negative())
-        plane = diffusion_plane(_step_negative(), BOUNDS, None, radius=3.0)
+        plane = _plane(_step_negative(), 3.0)
         np.testing.assert_array_equal(_print(img), _print(img, diffusion=0.0, diffusion_plane=plane))
 
     def test_a_flat_frame_prints_as_before_at_full_diffusion(self):
         lin = np.full((32, 48, 3), 0.3, dtype=np.float32)
         img = _normalized(lin)
-        plane = diffusion_plane(lin, BOUNDS, None, radius=3.0)
+        plane = _plane(lin, 3.0)
         np.testing.assert_allclose(_print(img, diffusion=1.0, diffusion_plane=plane), _print(img), atol=1e-4)
 
     def test_the_dense_side_spreads_into_the_thin_side_at_the_edge_only(self):
         lin = _step_negative()
         img = _normalized(lin)
-        plane = diffusion_plane(lin, BOUNDS, None, radius=4.0)
+        plane = _plane(lin, 4.0)
         plain = _print(img)
         soft = _print(img, diffusion=0.6, diffusion_plane=plane)
         h, w = img.shape[:2]
@@ -94,7 +116,7 @@ class TestKernel(unittest.TestCase):
     def test_the_rect_places_the_plane_on_the_printed_frame(self):
         lin = _step_negative()
         img = _normalized(lin)
-        plane = diffusion_plane(lin, BOUNDS, None, radius=4.0)
+        plane = _plane(lin, 4.0)
         h, w = img.shape[:2]
         whole = _print(img, diffusion=0.6, diffusion_plane=plane, diffusion_rect=(0.0, 0.0, float(w), float(h)))
         np.testing.assert_array_equal(whole, _print(img, diffusion=0.6, diffusion_plane=plane))
@@ -141,8 +163,7 @@ class TestDiffusionParity(unittest.TestCase):
         cpu = self._render(settings, tag, prefer_gpu=False)
         gpu = self._render(settings, tag, prefer_gpu=True, size_ref=float(max(cpu.shape[:2])))
         self.assertEqual(cpu.shape, gpu.shape)
-        self.assertLess(float(np.mean(np.abs(cpu - gpu))), 0.01)
-        self.assertLess(float(np.max(np.abs(cpu - gpu))), 0.04)
+        self.assertLess(float(np.max(np.abs(cpu - gpu))), 1e-4)
         return cpu
 
     def test_cpu_gpu_match_and_the_diffusion_moves_the_print(self):
@@ -171,6 +192,28 @@ class TestDiffusionParity(unittest.TestCase):
         self.assertIsNotNone(key)
         self._render(replace(base, exposure=replace(base.exposure, diffusion=0.8)), "diffusion-drag", prefer_gpu=True)
         self.assertEqual(engine._mask_tex_key, key)
+
+    def test_a_trim_drag_keeps_the_blurred_grid(self):
+        base = _settings(diffusion=0.5)
+        self._render(base, "diffusion-trim", prefer_gpu=True)
+        engine = self.processor.engine_gpu
+        grid, plane = engine._diffusion_grid, engine._diffusion_plane
+        self.assertIsNotNone(grid)
+        trimmed = replace(base, process=replace(base.process, white_point_trim_red=0.05))
+        self._render(trimmed, "diffusion-trim", prefer_gpu=True)
+        self.assertIs(engine._diffusion_grid, grid)
+        self.assertIsNot(engine._diffusion_plane, plane)
+
+
+class TestFlatMaster(unittest.TestCase):
+    def test_a_flat_master_builds_no_plane(self):
+        from negpy.features.exposure.models import RenderIntent
+        from negpy.services.rendering.engine import DarkroomEngine
+
+        engine = DarkroomEngine()
+        s = _settings(diffusion=0.8, render_intent=RenderIntent.FLAT)
+        engine.process(_wide_range_negative(), s, "flat-master")
+        self.assertIsNone(engine._diffusion_plane)
 
 
 if __name__ == "__main__":

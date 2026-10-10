@@ -760,9 +760,8 @@ def contrast_mask_plane(
     return blurred - centre, centre
 
 
-def diffusion_plane(
+def diffusion_grid(
     image: ImageBuffer,
-    bounds: LogNegativeBounds,
     unmix: Optional[np.ndarray],
     rotation: int = 0,
     fine_rotation: float = 0.0,
@@ -773,22 +772,28 @@ def diffusion_plane(
     converge_h: float = 0.0,
     roi_norm: Optional[Tuple[float, float, float, float]] = None,
     radius: float = DIFFUSION_RADIUS_DEFAULT,
-    panchromatic: bool = False,
-) -> Optional[np.ndarray]:
+) -> np.ndarray:
     """
-    The light the paper sees through a diffuser: the linear frame blurred on the analysis
-    grid (`analysis_grid`), then taken to normalized log density per channel with the
-    bounds the print's own value uses, so the print kernel can mix the two as light.
-    `radius` is the blur sigma as a per-cent of the grid's short side. `panchromatic`
-    collapses the plane to luma, as a B&W print collapses the pixel it is mixed with.
-    None when the frame never metered.
+    The light the paper sees through a diffuser, as log density on the analysis grid
+    (`analysis_grid`): the unmixed light, blurred. The print's normalization is a per-channel
+    gain on that light, so the grid takes no bounds. `radius` is the blur sigma as a per-cent
+    of the grid's short side.
+    """
+    image = analysis_grid(image, rotation, fine_rotation, flip_horizontal, flip_vertical, distortion_k1, converge_v, converge_h, roi_norm)
+    light = np.ascontiguousarray(10.0 ** unmix_log_image(prefilter_log_grid(image, None, 0.0), unmix), dtype=np.float32)
+    sigma = min(max(radius, DIFFUSION_RADIUS_MIN), DIFFUSION_RADIUS_MAX) * 0.01 * min(light.shape[:2])
+    return np.log10(cv2.GaussianBlur(light, (0, 0), sigma, borderType=cv2.BORDER_REPLICATE))
+
+
+def diffusion_plane(grid: np.ndarray, bounds: LogNegativeBounds, panchromatic: bool = False) -> Optional[np.ndarray]:
+    """
+    `diffusion_grid` in the print's own normalization, so the print kernel can mix it with
+    the pixel as light. `panchromatic` collapses the plane to luma, as a B&W print collapses
+    the pixel it is mixed with. None when the frame never metered.
     """
     if luminance_density_range(bounds) < 1e-6:
         return None
-    image = analysis_grid(image, rotation, fine_rotation, flip_horizontal, flip_vertical, distortion_k1, converge_v, converge_h, roi_norm)
-    sigma = min(max(radius, DIFFUSION_RADIUS_MIN), DIFFUSION_RADIUS_MAX) * 0.01 * min(image.shape[:2])
-    blurred = cv2.GaussianBlur(np.ascontiguousarray(image, dtype=np.float32), (0, 0), sigma, borderType=cv2.BORDER_REPLICATE)
-    val = normalize_log_image(unmix_log_image(prefilter_log_grid(blurred, None, 0.0), unmix), bounds)
+    val = normalize_log_image(grid, bounds)
     if panchromatic:
         lum = LUMA_R * val[:, :, 0] + LUMA_G * val[:, :, 1] + LUMA_B * val[:, :, 2]
         val = np.dstack([lum, lum, lum])

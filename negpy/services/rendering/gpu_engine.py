@@ -19,6 +19,7 @@ from negpy.features.exposure.normalization import (
     analyze_log_exposure_bounds_from_log,
     blend_neutral_axis,
     contrast_mask_plane,
+    diffusion_grid,
     diffusion_plane,
     geometry_kwargs,
     luma_source_bounds,
@@ -383,7 +384,8 @@ class GPUEngine:
         # (key, maps): mask raster, keyed without grade; grade only rescales plane 1 at upload.
         self._local_maps_cache: Optional[Tuple[Tuple, Optional[np.ndarray]]] = None
         self._mask_plane: Optional[Tuple[Tuple, np.ndarray, float]] = None
-        self._diffusion_plane: Optional[Tuple[Tuple, np.ndarray]] = None
+        self._diffusion_grid: Optional[Tuple[Tuple, np.ndarray]] = None
+        self._diffusion_plane: Optional[Tuple[Tuple, Optional[np.ndarray]]] = None
         # Identity of the plane currently sitting in the contrast_mask texture.
         self._mask_tex_key: Optional[Tuple] = None
 
@@ -964,31 +966,30 @@ class GPUEngine:
                     tuple(bounds.floors[ch] + wp3[ch] for ch in range(3)), tuple(bounds.ceils[ch] + bp3[ch] for ch in range(3))
                 )
                 panchromatic = settings.process.process_mode == ProcessMode.BW
-                diff_key = (
+                grid_key = (
                     analysis_key,
-                    tuple(diff_bounds.floors),
-                    tuple(diff_bounds.ceils),
                     roi,
                     (h_rot, w_rot),
                     settings.exposure.diffusion_radius,
-                    panchromatic,
                     (geo.rotation, geo.fine_rotation, geo.flip_horizontal, geo.flip_vertical, geo.converge_v, geo.converge_h, k1_eff),
                 )
-                # A None plane (an unmetered frame) is cached under its key like any other.
-                cached = self._diffusion_plane
-                if cached is None or cached[0] != diff_key:
-                    cached = (
-                        diff_key,
-                        diffusion_plane(
+                # The blur is keyed without bounds, so a trim drag only re-normalizes the grid.
+                if self._diffusion_grid is None or self._diffusion_grid[0] != grid_key:
+                    self._diffusion_grid = (
+                        grid_key,
+                        diffusion_grid(
                             img,
-                            diff_bounds,
                             unmix_m,
                             roi_norm=normalized_roi(roi, (h_rot, w_rot)),
                             radius=settings.exposure.diffusion_radius,
-                            panchromatic=panchromatic,
                             **geometry_kwargs(geo, k1_eff),
                         ),
                     )
+                diff_key = (grid_key, tuple(diff_bounds.floors), tuple(diff_bounds.ceils), panchromatic)
+                # A None plane (an unmetered frame) is cached under its key like any other.
+                cached = self._diffusion_plane
+                if cached is None or cached[0] != diff_key:
+                    cached = (diff_key, diffusion_plane(self._diffusion_grid[1], diff_bounds, panchromatic))
                     self._diffusion_plane = cached
                 diff_plane = cached[1]
                 diff_rect = frame_rect
@@ -2689,15 +2690,14 @@ class GPUEngine:
             trimmed = LogNegativeBounds(
                 tuple(global_bounds.floors[ch] + wp3[ch] for ch in range(3)), tuple(global_bounds.ceils[ch] + bp3[ch] for ch in range(3))
             )
-            plane = diffusion_plane(
+            grid = diffusion_grid(
                 img,
-                trimmed,
                 unmix_m,
                 roi_norm=normalized_roi(roi, (h_rot, w_rot)),
                 radius=settings.exposure.diffusion_radius,
-                panchromatic=settings.process.process_mode == ProcessMode.BW,
                 **geometry_kwargs(settings.geometry, k1_eff),
             )
+            plane = diffusion_plane(grid, trimmed, settings.process.process_mode == ProcessMode.BW)
             global_diffusion = None if plane is None else (plane, (x1, y1, crop_w, crop_h))
             self._mask_tex_key = None
 

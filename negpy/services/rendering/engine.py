@@ -20,6 +20,7 @@ from negpy.features.exposure.processor import (
 from negpy.features.exposure.logic import expand_mask_plane
 from negpy.features.exposure.normalization import (
     contrast_mask_plane,
+    diffusion_grid,
     diffusion_plane,
     effective_crosstalk_matrix,
     geometry_kwargs,
@@ -224,9 +225,15 @@ class DarkroomEngine:
                 context.metrics["contrast_mask_roi"] = None
 
         # Same recipe as the mask plane, in the print's own normalization, so the kernel can
-        # mix it with the pixel as light. Print path only: the transfer curve takes no plane.
+        # mix it with the pixel as light. Print curve only: the transfer curve and the Flat
+        # master take no plane.
         diff_bounds = context.metrics.get("final_bounds")
-        if settings.exposure.diffusion > 0.0 and diff_bounds is not None and render_path(settings.process) is RenderPath.PRINT:
+        if (
+            settings.exposure.diffusion > 0.0
+            and diff_bounds is not None
+            and render_path(settings.process) is RenderPath.PRINT
+            and settings.exposure.render_intent != RenderIntent.FLAT
+        ):
             diff_roi = context.active_roi
             panchromatic = settings.process.process_mode == ProcessMode.BW
             diff_key = (
@@ -240,15 +247,14 @@ class DarkroomEngine:
             # A None plane (an unmetered frame) is cached under its key like any other.
             cached = self._diffusion_plane
             if cached is None or cached[0] != diff_key:
-                plane = diffusion_plane(
+                grid = diffusion_grid(
                     img,
-                    diff_bounds,
                     effective_crosstalk_matrix(settings.process, settings.process.process_mode),
                     roi_norm=normalized_roi(diff_roi, current_img.shape[:2]),
                     radius=settings.exposure.diffusion_radius,
-                    panchromatic=panchromatic,
                     **geometry_kwargs(settings.geometry, distortion_k1),
                 )
+                plane = diffusion_plane(grid, diff_bounds, panchromatic)
                 cached = (diff_key, plane)
                 self._diffusion_plane = cached
             if cached[1] is not None:
