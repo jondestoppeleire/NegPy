@@ -113,6 +113,14 @@ class TestKernel(unittest.TestCase):
         self.assertGreater(float(soft[mid, w // 2 - 2, 0]), float(plain[mid, w // 2 - 2, 0]))
         self.assertLess(float(soft[mid, w // 2 + 1, 0]), float(plain[mid, w // 2 + 1, 0]))
 
+    def test_the_full_slider_diffuses_half_the_light(self):
+        lin = _step_negative()
+        img = _normalized(lin)
+        plane = _plane(lin, 4.0)
+        r = np.array(channel_density_ranges(BOUNDS), dtype=np.float64)
+        half = np.log10(0.5 * 10.0 ** (img * r) + 0.5 * 10.0 ** (plane * r)) / r
+        np.testing.assert_allclose(_print(img, diffusion=1.0, diffusion_plane=plane), _print(half.astype(np.float32)), atol=1e-5)
+
     def test_the_rect_places_the_plane_on_the_printed_frame(self):
         lin = _step_negative()
         img = _normalized(lin)

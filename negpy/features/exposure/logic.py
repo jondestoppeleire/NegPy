@@ -815,7 +815,7 @@ def apply_characteristic_curve(
         use_flash=use_flash,
         diff_plane=diff_arr,
         diff_rect=np.array(rect, dtype=np.float64),
-        diff_mix=min(max(float(diffusion), 0.0), 1.0),
+        diff_mix=diffusion_mix(diffusion),
         diff_range=np.array(diffusion_range, dtype=np.float64),
         use_diff=use_diff,
         bpc=bool(bpc),
@@ -1476,6 +1476,15 @@ def channel_density_ranges(bounds: Any) -> Tuple[float, float, float]:
         return (1.0, 1.0, 1.0)
     out = [max(abs(bounds.ceils[ch] - bounds.floors[ch]), 1e-6) for ch in range(3)]
     return (out[0], out[1], out[2])
+
+
+# A real diffuser passes much of the light unscattered, so the slider's top is half the light.
+DIFFUSION_MIX_MAX = 0.5
+
+
+def diffusion_mix(diffusion: float) -> float:
+    """The fraction of blurred light the paper sees at a Diffusion slider value."""
+    return DIFFUSION_MIX_MAX * min(max(float(diffusion), 0.0), 1.0)
 
 
 def local_ev_scale(bounds: Any) -> Tuple[float, float, float]:

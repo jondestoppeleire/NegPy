@@ -55,6 +55,7 @@ from negpy.features.lab.models import SharpenMethod
 from negpy.features.altprocess.models import AltProcess
 from negpy.features.cyanotype.logic import CYANOTYPE_CONSTANTS, sensitizer_constants
 from negpy.features.lith.logic import LITH_CONSTANTS
+from negpy.features.exposure.logic import diffusion_mix
 from negpy.features.exposure.placement import limited_mask_params
 from negpy.features.local.logic import compute_local_maps, limited_masks
 from negpy.features.local.models import MAX_KEYED_MASKS
@@ -1036,7 +1037,7 @@ class GPUEngine:
             camera_wb=camera_wb,
             contrast_mask=mask_uniform,
             plane_rect=plane_rect,
-            diffusion_mix=min(max(float(settings.exposure.diffusion), 0.0), 1.0) if diff_plane is not None else 0.0,
+            diffusion_mix=diffusion_mix(settings.exposure.diffusion) if diff_plane is not None else 0.0,
         )
         if clahe_cdf_override is not None:
             self._buffers["clahe_c"].upload(clahe_cdf_override)
