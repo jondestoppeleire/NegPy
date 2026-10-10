@@ -805,6 +805,7 @@ How this frame is measured into a positive's tonal bounds.
 *   **Analysis Buffer** (0.0 to 0.25): insets the measurement window so rebate, sprocket holes and scanner borders do not skew it. Raise it for wide borders.
 *   **Reanalyze Frame** (circular arrow, on the ANALYSIS header): measures this frame again from its current crop, buffer and region. Grayed out with Lock Bounds on or with both averages on.
 *   **Draw Region** / **Clear Region**: draw a freehand region to meter *exactly* that area, overriding the buffer. Double-click inside to confirm.
+*   **Clipping** (line under the ANALYSIS header): the print's shadow and highlight clipping shares, worst channel, the Analysis panel's row; amber above 1%. The card's header carries the print's luma histogram.
 *   **Lock Bounds** (lock icon, on the ANALYSIS header): freezes this frame's bounds against crop and slider changes and against every Roll Analysis run.
 
 **Tonal Range**:

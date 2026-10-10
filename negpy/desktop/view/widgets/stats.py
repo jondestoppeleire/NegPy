@@ -6,6 +6,8 @@ from PyQt6.QtWidgets import QFrame, QGridLayout, QHBoxLayout, QLabel, QPushButto
 from negpy.desktop.view.styles.theme import THEME
 from negpy.features.exposure.stats import StatRow
 
+CLIPPING_TOOLTIP = "Share of pixels crushed to black (shadows) or blown to white (highlights), worst channel. Turns red above 1%."
+
 _TOOLTIPS = {
     "Negative": (
         "The negative itself: relative density range (luminance) and its development character vs a "
@@ -16,7 +18,7 @@ _TOOLTIPS = {
         "Where the frame's midtone sits, in stops from neutral: positive = brighter (high-key), "
         "negative = darker (low-key). Approximate — read off the metered midtone, not a precise meter."
     ),
-    "Clipping": ("Share of pixels crushed to black (shadows) or blown to white (highlights), worst channel. Turns red above 1%."),
+    "Clipping": CLIPPING_TOOLTIP,
     "Scan clip": (
         "Share of source-scan pixels at/above sensor white, per channel. In a negative scan the film base and "
         "scene shadows sit near sensor white — clipping there destroys base/shadow separation. Fix at capture: "
