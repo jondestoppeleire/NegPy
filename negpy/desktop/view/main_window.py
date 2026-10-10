@@ -601,6 +601,7 @@ class MainWindow(QMainWindow):
         self.controller.export_finished.connect(self._on_export_finished)
         self.controller.session.settings_copied.connect(lambda: self.canvas.hud.showMessage("Settings copied", timeout=1500))
         self.controller.session.settings_pasted.connect(lambda: self.canvas.hud.showMessage("Settings pasted", timeout=1500))
+        self.controller.session.color_vision_changed.connect(self.canvas.overlay.update)
         self.controller.session.settings_synced.connect(lambda msg: self.canvas.hud.showMessage(msg, timeout=2500))
         self.controller.tool_sync_requested.connect(self._sync_tool_buttons)
         self.controller.config_updated.connect(self.canvas.overlay.update)

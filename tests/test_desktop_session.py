@@ -53,6 +53,15 @@ class TestDesktopSessionSync(unittest.TestCase):
         # A scoped apply reads the visible set, which a real load always builds.
         self.session.asset_model.refresh()
 
+    def test_a_color_vision_choice_is_saved_and_announced(self):
+        heard = []
+        self.session.color_vision_changed.connect(lambda: heard.append(1))
+        self.session.set_color_vision("tritan")
+        self.session.set_color_vision("tritan")
+        self.assertEqual(self.session.state.color_vision, "tritan")
+        self.mock_repo.save_global_setting.assert_called_once_with("color_vision", "tritan")
+        self.assertEqual(heard, [1])
+
     def test_update_selection(self):
         self.session.update_selection([0, 1])
         self.assertEqual(self.session.state.selected_indices, [0, 1])

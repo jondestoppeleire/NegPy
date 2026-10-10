@@ -196,8 +196,8 @@ class AppState:
 
     # Canvas background color swatch index (0=Black, 1=Dark Gray, 2=Mid Gray)
     canvas_bg_index: int = 0
-    # Dust-overlay color pair, an index into overlay.DUST_MARK_COLORS
-    dust_mark_index: int = 0
+    # Preferences > Accessibility, a key into styles.color_vision.PALETTES
+    color_vision: str = "standard"
 
     # When False, fit-to-window reserves space for the floating toolbar so the image never
     # sits behind it. When True (default), the image fills the canvas and the toolbar overlaps.
@@ -803,6 +803,8 @@ class DesktopSessionManager(QObject):
     active_file_changing = pyqtSignal()  # Outgoing file about to be replaced — last chance to snapshot it
     settings_copied = pyqtSignal()
     settings_pasted = pyqtSignal()
+    # A view that reads styles.color_vision repaints on this.
+    color_vision_changed = pyqtSignal()
     settings_synced = pyqtSignal(str)  # Bulk "Apply to selected" done — carries a status message
     frames_edited_offscreen = pyqtSignal(list)  # hashes whose saved edits changed without a render
     file_selected = pyqtSignal(str)  # Emits file path when active file changes
@@ -853,7 +855,7 @@ class DesktopSessionManager(QObject):
         saved_bg = self.repo.get_global_setting("canvas_bg_index")
         if saved_bg is not None:
             self.state.canvas_bg_index = int(saved_bg)
-        self.state.dust_mark_index = int(self.repo.get_global_setting("dust_mark_index", 0) or 0)
+        self.state.color_vision = str(self.repo.get_global_setting("color_vision", "standard") or "standard")
 
         saved_immersive = self.repo.get_global_setting("immersive_canvas")
         if saved_immersive is not None:
@@ -1050,10 +1052,11 @@ class DesktopSessionManager(QObject):
             self.state.canvas_bg_index = index
             self.repo.save_global_setting("canvas_bg_index", index)
 
-    def set_dust_mark_colors(self, index: int) -> None:
-        if self.state.dust_mark_index != index:
-            self.state.dust_mark_index = index
-            self.repo.save_global_setting("dust_mark_index", index)
+    def set_color_vision(self, key: str) -> None:
+        if self.state.color_vision != key:
+            self.state.color_vision = key
+            self.repo.save_global_setting("color_vision", key)
+            self.color_vision_changed.emit()
 
     def set_crop_guide(self, guide: str) -> None:
         """Updates and persists the crop composition guide."""

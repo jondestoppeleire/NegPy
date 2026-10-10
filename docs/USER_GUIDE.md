@@ -560,7 +560,7 @@ Chemical toners (B&W Negative only) and a split tint (any mode). On a lith print
 
 Spotting, as with a brush on a finished print. Marks are found by local contrast, by the scanner's IR channel or by hand, and the three stack. Each mark is rebuilt from the clean film around it, grain included.
 
-**Overlay** (Off / Marked / IR, at the top): shows detections, green for Optical Removal, magenta for IR (**Dust marks** in Preferences picks other colors). IR needs an IR plane.
+**Overlay** (Off / Marked / IR, at the top): shows detections, green for Optical Removal, magenta for IR (**Color vision** in Preferences picks other colors). IR needs an IR plane.
 
 **Optical Removal** finds specks and hairs on the visible scan, with no IR needed:
 
@@ -1141,11 +1141,14 @@ Application-wide settings: canvas **⋯** menu → **Preferences…**, `Ctrl + ,
 
 *   **UI scale** (80% to 120%): after a restart.
 *   **Canvas background**: black, dark gray, mid gray (neutral for judging) or white (a print on a light table).
-*   **Dust marks** (default **Standard**): the Retouch overlay's two colors, one pair per kind of color vision: *Standard* (green, magenta), *Protanopia / deuteranopia* (blue, orange), *Tritanopia* (vermilion, bluish green) or *Achromatopsia* (white, black). The color-blind pairs come from the Okabe–Ito palette.
 *   **Immersive canvas**: toolbar floats over the image.
 *   **Sticky zoom**: keep the zoom when you switch frames.
 *   **Reverse scroll zoom**: scroll up zooms out.
 *   **Customize Shortcuts…**, **Edit Toolbar…**, **Reset Panel Layout**: shortcut editor, canvas toolbar picker, default panel layout.
+
+### Accessibility
+
+*   **Color vision** (default **Standard**): colors for marks told apart by color alone (the Retouch dust overlay). *Standard* is green and magenta; *Protanopia / deuteranopia* blue and orange; *Tritanopia* vermilion and bluish green; *Achromatopsia* white and black. The color-blind pairs come from the Okabe–Ito palette.
 
 ### Performance
 

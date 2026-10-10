@@ -18,6 +18,7 @@ from negpy.desktop.converters import ImageConverter
 from negpy.desktop.session import UNCROPPED_PREVIEW_TOOLS, AppState, ToolMode
 from negpy.desktop.view.canvas.crop_guides import CropGuide, guide_shapes
 from negpy.desktop.view.canvas.printing_notes import notes_outline, notes_sheet, paint_card, paint_map
+from negpy.desktop.view.styles.color_vision import palette_for
 from negpy.desktop.view.styles.theme import THEME
 from negpy.desktop.view.widgets.stats import PIN_COLORS
 from negpy.domain.types import LUMA_B, LUMA_G, LUMA_R
@@ -85,15 +86,6 @@ _SHAPE_FOR_TOOL = {
 }
 _LOCAL_TOOLS = (ToolMode.NONE, *_SHAPE_FOR_TOOL)
 
-# Dust-overlay marker colors (auto-detected, IR), one pair per kind of color vision, picked in
-# Preferences. Standard is neon, not a palette colour: a mark has to read over any film. The
-# color-blind pairs are Okabe–Ito (Color Universal Design) colors on an axis that vision keeps.
-DUST_MARK_COLORS = (
-    ("Standard", QColor(57, 255, 20), QColor(255, 0, 255)),
-    ("Protanopia / deuteranopia (red-green)", QColor(86, 180, 233), QColor(230, 159, 0)),
-    ("Tritanopia (blue-yellow)", QColor(213, 94, 0), QColor(0, 158, 115)),
-    ("Achromatopsia (no color)", QColor(255, 255, 255), QColor(0, 0, 0)),
-)
 _IR_CORRECTED_ALPHA = 55  # dim magenta wash over IR-division-corrected regions
 
 _ZONE_LINE_ALPHA = 150
@@ -2007,7 +1999,8 @@ class CanvasOverlay(QWidget):
     def _corrected_masks(self) -> List[Tuple[np.ndarray, QColor]]:
         """Repaired-region masks to wash, with the color that names their source."""
         with self.state.metrics_lock:
-            _, luma_color, ir_color = DUST_MARK_COLORS[self.state.dust_mark_index % len(DUST_MARK_COLORS)]
+            # Detected dust and IR repairs are told apart by hue alone.
+            luma_color, ir_color = (QColor(c) for c in palette_for(self.state.color_vision).pair)
             masks: List[Tuple[np.ndarray, QColor]] = []
             luma = self.state.last_metrics.get("detected_dust_mask")
             if luma is not None:
