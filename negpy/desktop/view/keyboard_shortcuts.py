@@ -483,6 +483,7 @@ class ShortcutManager:
             "local_oval": lambda: _toggle_tool_button(self.window, "tone", controls.local_sidebar.oval_btn),
             "local_gradient": lambda: _toggle_tool_button(self.window, "tone", controls.local_sidebar.gradient_btn),
             "analysis_draw": lambda: _toggle_tool_button(self.window, "roll", controls.process_sidebar.analysis_region_btn),
+            "film_base": lambda: _toggle_tool_button(self.window, "roll", controls.process_sidebar.film_base_btn),
             "open_tools_menu": lambda: self.window.toolbar.open_tools_menu(),
             "toggle_flat_peek": controller.toggle_flat_peek,
             "toggle_negative_peek": controller.toggle_negative_peek,

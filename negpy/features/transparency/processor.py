@@ -115,6 +115,7 @@ class TransparencyBaseProcessor:
         context.metrics["log_bounds_base"] = bounds
         context.metrics["final_bounds"] = bounds
         context.metrics["norm_density_range"] = luminance_density_range(bounds)
+        context.metrics["density_above_base"] = None  # a slide has no clear base to read above
         context.metrics["scan_clip_fractions"] = measure_clip_fractions(image, context.active_roi, self.config.analysis_buffer)
         context.metrics["normalized_log"] = res
         context.metrics["histogram_density"] = density_histogram(res, context.active_roi)

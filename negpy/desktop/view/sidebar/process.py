@@ -168,6 +168,18 @@ class ProcessSidebar(BaseSidebar):
         region_row.addWidget(self.clear_analysis_region_btn)
         analysis_col.addLayout(region_row)
 
+        self.film_base_btn = self._tool_toggle(
+            "fa5s.crosshairs",
+            " Film Base",
+            "Film Base: click the clear rebate to set the roll's film base. The Negative row's hover then reads "
+            "Dmax, Dmed and Dmin above it. Without one, the base is read from the rebate.",
+        )
+        self.clear_film_base_btn = self._icon_action("fa5s.times", "Clear Film Base: forget the roll's base; the rebate is read instead")
+        base_row = QHBoxLayout()
+        base_row.addWidget(self.film_base_btn, 1)
+        base_row.addWidget(self.clear_film_base_btn)
+        analysis_col.addLayout(base_row)
+
         initial_luma_slider_val = _luma_range_value_to_slider(conf.luma_range_clip)
         self.luma_range_clip_slider = CompactSlider(
             "Luma Range Clip", -100, 100, initial_luma_slider_val, precision=1, step=1, has_neutral=True
@@ -269,6 +281,8 @@ class ProcessSidebar(BaseSidebar):
         self.analysis_buffer_slider.dragEnded.connect(lambda: self.controller.analysis_buffer_drag_changed.emit(False))
         self.analysis_region_btn.toggled.connect(self._on_analysis_region_toggled)
         self.clear_analysis_region_btn.clicked.connect(self.controller.clear_analysis_region)
+        self.film_base_btn.toggled.connect(lambda on: self.controller.set_active_tool(ToolMode.FILM_BASE if on else ToolMode.NONE))
+        self.clear_film_base_btn.clicked.connect(self.controller.clear_roll_film_base)
 
         self.luma_range_clip_slider.valueChanged.connect(lambda v: self._on_luma_range_clip_changed(v, persist=False))
         self.luma_range_clip_slider.valueCommitted.connect(lambda v: self._on_luma_range_clip_changed(v, persist=True))
@@ -432,11 +446,17 @@ class ProcessSidebar(BaseSidebar):
             self.analysis_region_btn.setChecked(self.state.active_tool == ToolMode.ANALYSIS_DRAW)
             self.analysis_region_btn.edited_dot.set_active(has_region)
             self.clear_analysis_region_btn.setEnabled(has_region)
+            has_base = self.controller.roll_film_base() is not None
+            self.film_base_btn.setChecked(self.state.active_tool == ToolMode.FILM_BASE)
+            self.film_base_btn.edited_dot.set_active(has_base)
+            self.clear_film_base_btn.setEnabled(has_base)
 
             for w in (
                 self.analysis_buffer_slider,
                 self.analysis_region_btn,
                 self.clear_analysis_region_btn,
+                self.film_base_btn,
+                self.clear_film_base_btn,
                 self.avg_header,
                 self.use_luma_avg_btn,
                 self.use_color_avg_btn,

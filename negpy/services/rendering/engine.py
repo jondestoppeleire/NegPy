@@ -24,6 +24,7 @@ from negpy.features.exposure.normalization import (
     diffusion_plane,
     effective_crosstalk_matrix,
     geometry_kwargs,
+    measure_base_log,
     normalized_roi,
 )
 from negpy.features.process.hue import apply_hue_trim
@@ -162,6 +163,18 @@ class DarkroomEngine:
         distortion_k1 = settings.geometry.distortion_k1
 
         def run_base(img_in: ImageBuffer, ctx: PipelineContext) -> ImageBuffer:
+            # Only a negative's preview that reads its metrics back shows the densities; an
+            # export runs with stage caching off. The base is a property of the source, read
+            # once per source before geometry.
+            if ctx.cache_stages and ctx.readback_metrics and render_path(settings.process) is RenderPath.PRINT:
+                picked = ctx.metrics.get("film_base")  # set on the roll with the Film Base tool, in raw log space; wins
+                if picked is not None:
+                    ctx.metrics["base_log"], ctx.metrics["base_source"] = tuple(picked), "picked"
+                else:
+                    if not self.cache.base_measured:
+                        self.cache.base_log = measure_base_log(img_in)
+                        self.cache.base_measured = True
+                    ctx.metrics["base_log"], ctx.metrics["base_source"] = self.cache.base_log, "read"
             img_in = GeometryProcessor(settings.geometry).process(img_in, ctx)
             return base_processor(settings).process(img_in, ctx)
 
@@ -211,6 +224,7 @@ class DarkroomEngine:
             settings.process.black_point_trim_blue,
             settings.process.crosstalk_strength,
             settings.process.crosstalk_matrix,
+            context.metrics.get("film_base"),  # the roll's picked base: the stage reads the densities above it
             settings.process.crosstalk_process,
             settings.process.lock_bounds,
             settings.process.use_cast_average,
