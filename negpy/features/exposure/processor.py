@@ -29,9 +29,11 @@ from negpy.features.exposure.normalization import (
     LogNegativeBounds,
     analyze_log_exposure_bounds_from_log,
     blend_neutral_axis,
+    density_above_base,
     luma_source_bounds,
     luminance_density_range,
     measure_anchor_from_log,
+    measure_base_log,
     measure_highlight_point_from_log,
     measure_clip_fractions,
     measure_neutral_axis_from_log,
@@ -128,6 +130,11 @@ class NormalizationProcessor:
         pre_trim_bounds = bounds
 
         context.metrics["norm_density_range"] = luminance_density_range(bounds)
+        # Only a preview reads the densities; an export runs with stage caching off.
+        base_log = measure_base_log(image) if context.cache_stages else None
+        if base_log is not None:
+            base_log = tuple(unmix_log_image(np.asarray(base_log, dtype=np.float32).reshape(1, 1, 3), unmix).reshape(3).tolist())
+        context.metrics["density_above_base"] = density_above_base(base_log, pre_trim_bounds, prefiltered)
 
         if context.process_mode == ProcessMode.C41:
             cached_ref_buffer = context.metrics.get("shadow_refs_buffer_val")

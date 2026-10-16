@@ -281,6 +281,8 @@ class NegativeStatsWidget(QWidget):
                 continue
             row = rows[i]
             tip = _TOOLTIPS.get(row.name, "")
+            if row.detail:
+                tip = f"{tip}\n\n{row.detail}" if tip else row.detail
             self._names[i].setText(row.name)
             self._values[i].setText(row.value)
             self._values[i].setStyleSheet(self._warn_css if row.warn else self._value_css)

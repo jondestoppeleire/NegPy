@@ -7,6 +7,7 @@ import numpy as np
 from numba import njit  # type: ignore
 
 from negpy.domain.types import LUMA_B, LUMA_G, LUMA_R, ImageBuffer
+from negpy.features.geometry.logic import AUTOCROP_DETECT_RES, _normalize_detection_input, film_and_picture, rebate_mask
 from negpy.features.process.models import ProcessMode
 from negpy.kernel.image.validation import ensure_image
 
@@ -468,6 +469,62 @@ def measure_neutral_axis(
     """Linear-image wrapper around measure_neutral_axis_from_log."""
     img_log = to_log_density(image)
     return measure_neutral_axis_from_log(img_log, bounds, roi, analysis_buffer)
+
+
+#: Fewer rebate pixels than this at detection resolution is a sliver, not a base.
+_MIN_REBATE_PIXELS = 200
+
+
+#: Width of the brightness bins the base plateau is found in, in log10 transmittance.
+_PLATEAU_BIN = 0.02
+
+
+def _plateau(ring: np.ndarray) -> np.ndarray:
+    """The ring's pixels at its most common brightness, within one bin either side.
+
+    The clear base is the ring's plateau: perforations (bare light) are brighter and edge
+    printing is denser, and either can outnumber the base on a narrow ring, which a median
+    would then follow."""
+    lum = np.log10(np.maximum(ring.mean(axis=1), 1e-6))
+    bins = np.floor(lum / _PLATEAU_BIN).astype(np.int64)
+    values, counts = np.unique(bins, return_counts=True)
+    peak = values[int(np.argmax(counts))]
+    return ring[np.abs(bins - peak) <= 1]
+
+
+def measure_base_log(image: ImageBuffer) -> Optional[Tuple[float, float, float]]:
+    """Per-channel log10 transmittance of the clear base: the median of the rebate ring's
+    brightness plateau on the uncropped frame. None when the scan shows no film box, the ring is
+    a sliver, or the base is darker than the picture, because a negative's base is its thinnest film."""
+    det, _ = _normalize_detection_input(image, AUTOCROP_DETECT_RES)
+    det = np.ascontiguousarray(det, dtype=np.float32)
+    film_roi, gate = film_and_picture(det)
+    ring = det[rebate_mask(det.shape[:2], film_roi, gate)]
+    if ring.shape[0] < _MIN_REBATE_PIXELS:
+        return None
+    base = _plateau(ring)
+    gy1, gy2, gx1, gx2 = gate
+    picture = det[gy1:gy2, gx1:gx2].reshape(-1, 3)
+    if np.median(base.mean(axis=1)) <= np.median(picture.mean(axis=1)):
+        return None
+    r, g, b = (float(np.log10(max(float(v), 1e-6))) for v in np.median(base, axis=0))
+    return (r, g, b)
+
+
+def density_above_base(
+    base_log: Optional[Tuple[float, float, float]], bounds: LogNegativeBounds, prefiltered: np.ndarray
+) -> Optional[Tuple[float, float, float]]:
+    """(Dmin, Dmed, Dmax) above the clear base, luminance-weighted: the thin bound and dense bound
+    the frame is normalized with (before the trims; the roll's under Roll Analysis) and the metered
+    median. None without a base. Negatives only: the ceiling is the thin end."""
+    if base_log is None:
+        return None
+    w = np.array([LUMA_R, LUMA_G, LUMA_B], dtype=np.float64)
+    base = float(np.dot(w, np.asarray(base_log, dtype=np.float64)))
+    thin = float(np.dot(w, np.asarray(bounds.ceils, dtype=np.float64)))
+    dense = float(np.dot(w, np.asarray(bounds.floors, dtype=np.float64)))
+    median = float(np.median(np.asarray(prefiltered, dtype=np.float64).reshape(-1, 3) @ w))
+    return (base - thin, base - median, base - dense)
 
 
 def luminance_density_range(bounds: LogNegativeBounds) -> float:

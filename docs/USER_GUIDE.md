@@ -361,7 +361,7 @@ Pins are proofs, not edits: any other edit or a frame change removes them. Zone 
 
 Rows that measure the scan, not your edit; hover for details.
 
-*   **Negative**: relative density range and development character: flat (≈N−1), normal, contrasty (≈N+1). Comparable across a roll; an estimate, not a densitometer reading.
+*   **Negative**: relative density range and development character: flat (≈N−1), normal, contrasty (≈N+1). Comparable across a roll; an estimate, not a densitometer reading. Hover for Dmax, Dmed and Dmin above the clear base, read in the rebate; a scan with no rebate says so.
 *   **Exposure**: approximate midtone in stops from neutral; positive is high-key, negative low-key.
 *   **Clipping**: share of pixels crushed to black or blown to white, worst channel. Amber above 1%.
 *   **Scan clip**: share of source pixels at or above sensor white. On a negative no edit recovers it: expose the scan lower. Amber above 1%.

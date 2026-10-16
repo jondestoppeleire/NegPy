@@ -32,14 +32,30 @@ class StatRow:
     name: str
     value: str
     warn: bool = False
+    detail: str = ""  # lines the row's hover adds under its fixed explanation
 
 
 _LOG10_2 = 0.30103  # one stop in log10-density
 
 
-def _negative_row(norm_density_range: Optional[float]) -> StatRow:
+_NO_BASE = "Dmax, Dmed and Dmin need a negative with its clear base beside the picture."
+
+
+def _density_detail(density_above_base: Optional[Tuple[float, float, float]]) -> str:
+    if density_above_base is None:
+        return _NO_BASE
+    dmin, dmed, dmax = (float(v) for v in density_above_base)
+    return (
+        f"Above the clear base: Dmax {dmax:.2f} · Dmed {dmed:.2f} · Dmin {dmin:.2f}. "
+        "Dmin and Dmax are the bounds the frame is normalized with, before the White and Black Point trims "
+        "(the roll's under Roll Analysis); Dmed is the metered median. An estimate from the scan: flare reads dense areas low."
+    )
+
+
+def _negative_row(norm_density_range: Optional[float], density_above_base: Optional[Tuple[float, float, float]] = None) -> StatRow:
+    detail = _density_detail(density_above_base)
     if not norm_density_range:
-        return StatRow("Negative", _EMPTY)
+        return StatRow("Negative", _EMPTY, detail=detail)
     from negpy.features.exposure.logic import default_grade_range
 
     ratio = float(norm_density_range) / default_grade_range()
@@ -49,7 +65,7 @@ def _negative_row(norm_density_range: Optional[float]) -> StatRow:
         character = "contrasty (≈N+1)"
     else:
         character = "normal"
-    return StatRow("Negative", f"{float(norm_density_range):.2f} · {character}")
+    return StatRow("Negative", f"{float(norm_density_range):.2f} · {character}", detail=detail)
 
 
 def _exposure_row(metered_anchor: Optional[float], norm_density_range: Optional[float]) -> StatRow:
@@ -104,15 +120,17 @@ def negative_statistics(
     scan_clip: Optional[Tuple[float, float, float]] = None,
     repair: Optional[Tuple[float, float, float]] = None,
     gamut: Optional[float] = None,
+    density_above_base: Optional[Tuple[float, float, float]] = None,
 ) -> List[StatRow]:
     """
     Negative read-out, in display order. Every row is always present, so the
     panel height stays fixed. `scan_clip` is the per-channel sensor-white clipped
     fraction of the source scan. `repair` is the (IR, dust, painted) share each
     repair route rewrote. `gamut` is the share the proofed output profile cannot print.
+    `density_above_base` is (Dmin, Dmed, Dmax) above the clear base, for the Negative row's hover.
     """
     return [
-        _negative_row(norm_density_range),
+        _negative_row(norm_density_range, density_above_base),
         _exposure_row(metered_anchor, norm_density_range),
         clipping_row(clip_low, clip_high),
         _scan_clip_row(scan_clip),

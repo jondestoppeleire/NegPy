@@ -31,7 +31,9 @@ from negpy.features.exposure.normalization import (
     geometry_kwargs,
     luma_source_bounds,
     normalized_roi,
+    density_above_base,
     luminance_density_range,
+    measure_base_log,
     measure_anchor_from_log,
     measure_clip_fractions,
     measure_neutral_axis_from_log,
@@ -146,6 +148,17 @@ def _downsample_for_analysis(img: np.ndarray, max_size: int) -> np.ndarray:
     return cv2.resize(img, (int(w * scale), int(h * scale)), interpolation=cv2.INTER_AREA)
 
 
+def _oriented(img: np.ndarray, geometry: GeometryConfig) -> np.ndarray:
+    """The frame turned and flipped as the print stage turns it, as views."""
+    if geometry.rotation != 0:
+        img = np.rot90(img, k=geometry.rotation)
+    if geometry.flip_horizontal:
+        img = np.fliplr(img)
+    if geometry.flip_vertical:
+        img = np.flipud(img)
+    return img
+
+
 def _build_analysis_source(
     img: np.ndarray,
     geometry: GeometryConfig,
@@ -154,17 +167,12 @@ def _build_analysis_source(
     analysis_rect: Optional[tuple],
     tiling_mode: bool,
     max_size: int,
-) -> Tuple[np.ndarray, float]:
+) -> Tuple[np.ndarray, float, np.ndarray]:
     """The shared meter grid's own buffer: oriented, downsampled (only a meter reads it), warped and sliced once for every
     meter reading it. The whole frame is warped before the ROI is cut, as on the CPU and in the print stage: a crop rotated
-    about its own center is a different region."""
-    analysis_source = img
-    if geometry.rotation != 0:
-        analysis_source = np.rot90(analysis_source, k=geometry.rotation)
-    if geometry.flip_horizontal:
-        analysis_source = np.fliplr(analysis_source)
-    if geometry.flip_vertical:
-        analysis_source = np.flipud(analysis_source)
+    about its own center is a different region. The warped frame before the cut is returned too, for the clear base, which
+    lies in the rebate the cut removes."""
+    analysis_source = _oriented(img, geometry)
     full_h, full_w = analysis_source.shape[:2]
     analysis_source = _downsample_for_analysis(np.ascontiguousarray(analysis_source), max_size)
     if geometry.fine_rotation != 0.0:
@@ -182,10 +190,11 @@ def _build_analysis_source(
     analysis_roi, an_buffer = resolve_analysis_region(
         analysis_source.shape, base_roi, analysis_buffer, analysis_rect if not tiling_mode else None
     )
+    warped = analysis_source
     if analysis_roi is not None:
         ay1, ay2, ax1, ax2 = analysis_roi
         analysis_source = np.ascontiguousarray(analysis_source[ay1:ay2, ax1:ax2])
-    return analysis_source, an_buffer
+    return analysis_source, an_buffer, warped
 
 
 def _binding_identity(idx: int, res: Any) -> tuple:
@@ -248,11 +257,11 @@ def _analysis_cache_key(settings: WorkspaceConfig, analysis_source_hash: str) ->
     )
 
 
-def _fill_analysis_overrides(cache, key, bounds, refs, anchor, textural, neutral, shadow, highlight):
+def _fill_analysis_overrides(cache, key, bounds, refs, anchor, textural, neutral, shadow, highlight, density):
     """Fill the None overrides from the cache when its key matches; caller overrides win."""
     if cache is None or cache[0] != key:
-        return bounds, refs, anchor, textural, neutral, shadow, highlight
-    _, cb, cr, ca, ct, cn, cs, ch = cache
+        return bounds, refs, anchor, textural, neutral, shadow, highlight, density
+    _, cb, cr, ca, ct, cn, cs, ch, cd = cache
     return (
         bounds if bounds is not None else cb,
         refs if refs is not None else cr,
@@ -261,15 +270,16 @@ def _fill_analysis_overrides(cache, key, bounds, refs, anchor, textural, neutral
         neutral if neutral is not None else cn,
         shadow if shadow is not None else cs,
         highlight if highlight is not None else ch,
+        density if density is not None else cd,
     )
 
 
-def _update_analysis_cache(cache, key, bounds, refs, anchor, textural, neutral, shadow, highlight):
+def _update_analysis_cache(cache, key, bounds, refs, anchor, textural, neutral, shadow, highlight, density):
     """Store the resolved analysis under key, merging (a frame may compute only a subset)."""
     if cache is None or cache[0] != key:
-        cb = cr = ca = ct = cn = cs = ch = None
+        cb = cr = ca = ct = cn = cs = ch = cd = None
     else:
-        _, cb, cr, ca, ct, cn, cs, ch = cache
+        _, cb, cr, ca, ct, cn, cs, ch, cd = cache
     return (
         key,
         bounds if bounds is not None else cb,
@@ -279,6 +289,7 @@ def _update_analysis_cache(cache, key, bounds, refs, anchor, textural, neutral, 
         neutral if neutral is not None else cn,
         shadow if shadow is not None else cs,
         highlight if highlight is not None else ch,
+        density if density is not None else cd,
     )
 
 
@@ -722,6 +733,7 @@ class GPUEngine:
         # Reuse the per-source meter across creative-slider previews: fill any missing
         # override from the cache so the needs_* gates below skip the analysis entirely.
         analysis_key = None
+        density_above_base_value = None  # (Dmin, Dmed, Dmax) above the clear base; the cache keeps it across skipped analyses
         if analysis_source_hash is not None and not tiling_mode:
             analysis_key = _analysis_cache_key(settings, analysis_source_hash)
             (
@@ -732,6 +744,7 @@ class GPUEngine:
                 neutral_axis_override,
                 shadow_point_override,
                 highlight_point_override,
+                density_above_base_value,
             ) = _fill_analysis_overrides(
                 self._analysis_cache,
                 analysis_key,
@@ -742,6 +755,7 @@ class GPUEngine:
                 neutral_axis_override,
                 shadow_point_override,
                 highlight_point_override,
+                None,
             )
 
         analysis_t0 = time.perf_counter()
@@ -802,9 +816,10 @@ class GPUEngine:
                 prefiltered, scan_clip_fractions = self._prefilter_cache[1], self._prefilter_cache[2]
                 sorted_grid = self._prefilter_cache[3]
                 cam_prefiltered = self._prefilter_cache[4]
+                base_log = self._prefilter_cache[5]
             else:
                 # Use views to avoid copying the full-res image; crop to ROI first.
-                analysis_source, an_buffer = _build_analysis_source(
+                analysis_source, an_buffer, warped_frame = _build_analysis_source(
                     img,
                     settings.geometry,
                     roi,
@@ -817,6 +832,10 @@ class GPUEngine:
                 # Unmixed like the CPU path so every meter reads the unmixed film.
                 prefiltered = unmix_log_image(prefilter_log_grid(analysis_source, None, an_buffer), unmix_m)
                 scan_clip_fractions = measure_clip_fractions(analysis_source, None, an_buffer)
+                # Only a preview reads the densities, like the anchor's readback_metrics gate.
+                base_log = measure_base_log(warped_frame) if readback_metrics and not transfer else None
+                if base_log is not None:
+                    base_log = tuple(unmix_log_image(np.asarray(base_log, dtype=np.float32).reshape(1, 1, 3), unmix_m).reshape(3).tolist())
                 if transfer:
                     # No camera matrix (a scanner TIFF) means the buffer is already in
                     # working space, so the shared grid is the working-space grid.
@@ -826,7 +845,7 @@ class GPUEngine:
                         else unmix_log_image(prefilter_log_grid(apply_camera_matrix(analysis_source, cam_m), None, an_buffer), unmix_m)
                     )
                 if prefilter_key is not None:
-                    self._prefilter_cache = (prefilter_key, prefiltered, scan_clip_fractions, None, cam_prefiltered)
+                    self._prefilter_cache = (prefilter_key, prefiltered, scan_clip_fractions, None, cam_prefiltered, base_log)
             if analysis_key is not None:
                 self._clip_cache = (analysis_key, scan_clip_fractions)
         elif analysis_key is not None and self._clip_cache is not None and self._clip_cache[0] == analysis_key:
@@ -841,7 +860,7 @@ class GPUEngine:
                 sorted_grid = sorted_channel_grid(prefiltered)
                 cache = self._prefilter_cache
                 if cache is not None and cache[1] is prefiltered:
-                    self._prefilter_cache = (cache[0], cache[1], cache[2], sorted_grid, cache[4])
+                    self._prefilter_cache = (cache[0], cache[1], cache[2], sorted_grid, cache[4], cache[5])
             return sorted_grid
 
         def _analyze_bounds() -> LogNegativeBounds:
@@ -860,6 +879,8 @@ class GPUEngine:
         else:
             bounds, base_bounds = resolve_bounds_detailed(settings.process, _analyze_bounds)
             anchor_bounds = luma_source_bounds(settings.process, base_bounds)
+        if prefiltered is not None and not transfer:
+            density_above_base_value = density_above_base(base_log, bounds, prefiltered)
 
         shadow_refs = shadow_refs_override
         if needs_refs and prefiltered is not None:
@@ -911,6 +932,7 @@ class GPUEngine:
                 neutral_axis_refs,
                 shadow_point,
                 highlight_point,
+                density_above_base_value,
             )
 
         # Same helper, same pre-geometry array as the CPU engine, so the two mask alike.
@@ -1579,6 +1601,7 @@ class GPUEngine:
             "final_bounds": final_bounds,
             "log_bounds_base": base_bounds,
             "norm_density_range": luminance_density_range(bounds),
+            "density_above_base": density_above_base_value,
             "metered_anchor": metered_anchor,
             "contrast_mask_centre": mask_centre,
             "textural_range": textural_range,

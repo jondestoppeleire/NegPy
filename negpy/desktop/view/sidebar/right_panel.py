@@ -910,6 +910,7 @@ class RightPanel(QWidget):
                 scan_clip=metrics.get("scan_clip_fractions"),
                 repair=metrics.get("repair_fractions"),
                 gamut=self._gamut_fraction(metrics),
+                density_above_base=metrics.get("density_above_base"),
             )
         )
 
