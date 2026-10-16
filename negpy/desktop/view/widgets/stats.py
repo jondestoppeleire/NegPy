@@ -64,8 +64,9 @@ class DensitometerRow(QWidget):
     """Hover spot-densitometer read-out shown between the H&D curve and the stats."""
 
     _TOOLTIP = (
-        "Spot densitometer — hover the image to read the pixel: per-channel density above film base "
-        "(ΔD, relative to this scan's normalization, not absolute), the displayed tone's reflection "
+        "Spot densitometer — hover the image to read the pixel: per-channel density above the thin end of "
+        "this scan's normalization window (ΔD): the frame's thinnest metered tone on a negative, decoder white "
+        "on a slide. The rebate reads below zero. Then the displayed tone's reflection "
         "print density, and its print zone (0 = paper black, V = 18% mid-gray, X = paper white). "
         "In B&W Negative mode the ΔD channels read the pre-conversion color record."
     )

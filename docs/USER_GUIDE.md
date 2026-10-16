@@ -343,7 +343,7 @@ Double-click the strip, or press `Shift+Z`, to toggle the canvas **Zone Overlay*
 
 #### Probe
 
-A spot densitometer: hover the image for per-channel density above film base (ΔD), the print density and its zone. **Probe at Cursor** (**Overlays**, or `Shift+I`) shows the same reading in a chip beside the pointer.
+A spot densitometer: hover the image for the print density, its zone, and per-channel density above the thin end of this scan's normalization window (ΔD): the frame's thinnest metered tone on a negative, decoder white on a slide. The rebate reads below zero. **Probe at Cursor** (**Overlays**, or `Shift+I`) shows the same reading in a chip beside the pointer.
 
 #### Zone placement
 

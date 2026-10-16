@@ -156,7 +156,8 @@ def test_densitometer_not_double_compensated() -> None:
     reading = AppController._compute_densitometer_reading(stub, 0.25, 0.25, (0.5, 0.5, 0.5))
 
     assert reading is not None
-    assert all(abs(d - 0.7) < 1e-6 for d in reading.dd_rgb)
+    assert abs(reading.val_luma - 0.7) < 1e-6  # the pixel the probe sampled
+    assert all(abs(d - 0.3) < 1e-6 for d in reading.dd_rgb)  # read up from the ceiling (1.0) through the controller
 
 
 def test_no_border_fallback_unchanged() -> None:
