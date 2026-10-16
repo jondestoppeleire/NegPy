@@ -5,6 +5,8 @@ A still lit white or by the triplet's first channel advances the film; the other
 
 import functools
 import io
+import os
+import time
 from typing import Optional
 
 import cv2
@@ -43,6 +45,9 @@ _CFA_PHOTOMETRIC = 32803
 # Enough texture that every frame of a roll passes trichrome grouping's same-frame floor.
 _FILM_SHAPES = 24
 _FIRST_CHANNEL = "RGB".index(CAPTURE_ORDER[0].letter)
+#: Seconds between stills the simulated body fires by itself, standing in for a hand on the
+#: shutter or a remote release. Unset or 0: it never does.
+_BODY_SHOT_S = float(os.environ.get("NEGPY_SIM_BODY_SHOT_S") or 0)
 
 
 def _seconds(label: str) -> float:
@@ -150,13 +155,23 @@ class _Camera:
     def file_get(self, _folder: str, _name: str, _kind: int) -> _Data:
         return _Data(self._gp.pending_raw)
 
-    def file_delete(self, _folder: str, _name: str) -> None:
-        pass
+    def file_delete(self, _folder: str, name: str) -> None:
+        self._gp.deleted.append(name)
 
     def capture_preview(self) -> _Data:
         return _Data(self._gp.preview_jpeg())
 
-    def wait_for_event(self, _ms: int) -> tuple[int, None]:
+    def wait_for_event(self, _ms: int) -> tuple[int, object]:
+        if self._gp.noise_events:
+            self._gp.noise_events -= 1
+            return SimGphoto.GP_EVENT_UNKNOWN, "PTP Property changed"
+        if _BODY_SHOT_S and time.monotonic() - self._gp.last_body_shot >= _BODY_SHOT_S:
+            self._gp.last_body_shot = time.monotonic()
+            self._gp.fire_body_shot()
+        if self._gp.body_shots:
+            self._gp.body_shots -= 1
+            self._gp.pending_raw = self._gp.still_dng()
+            return SimGphoto.GP_EVENT_FILE_ADDED, _Path(self._gp.body_shot_name)
         if self._gp.shot_events:
             self._gp.shot_events -= 1
             return SimGphoto.GP_EVENT_CAPTURE_COMPLETE, None
@@ -166,7 +181,7 @@ class _Camera:
 class SimGphoto:
     GP_WIDGET_TEXT, GP_WIDGET_RADIO, GP_WIDGET_MENU = 2, 5, 6
     GP_CAPTURE_IMAGE, GP_FILE_TYPE_NORMAL = 0, 1
-    GP_EVENT_TIMEOUT, GP_EVENT_CAPTURE_COMPLETE = 0, 3
+    GP_EVENT_TIMEOUT, GP_EVENT_FILE_ADDED, GP_EVENT_CAPTURE_COMPLETE, GP_EVENT_UNKNOWN = 0, 2, 3, 4
     GP_OPERATION_CAPTURE_PREVIEW, GP_OPERATION_CONFIG = 8, 16
     GPhoto2Error = GPhoto2Error
 
@@ -181,6 +196,11 @@ class SimGphoto:
         }
         self.pending_raw = b""
         self.shot_events = 0
+        self.body_shots = 0  # stills fired on the body itself, announced as file-added events
+        self.noise_events = 0  # property-change chatter queued ahead of everything else
+        self.last_body_shot = time.monotonic()
+        self.body_shot_name = "DSC00001.DNG"
+        self.deleted: list[str] = []  # what a caller took off the body
         self._rng = np.random.default_rng(0)
         self._frame = 0
         self.Camera = lambda: _Camera(self)
@@ -211,6 +231,12 @@ class SimGphoto:
         out = io.BytesIO()
         tifffile.imwrite(out, raw, photometric=_CFA_PHOTOMETRIC, subfiletype=0, extratags=_DNG_TAGS, metadata=None)
         return out.getvalue()
+
+    def fire_body_shot(self, name: str = "DSC00001.DNG") -> None:
+        """Shoot as if the operator pressed the camera's own shutter: the body keeps the file
+        and announces it, and nothing tells us a still was coming."""
+        self.body_shot_name = name
+        self.body_shots += 1
 
     def preview_jpeg(self) -> bytes:
         display = np.clip(self._signal(_film(*_PREVIEW_HW, self._frame)), 0.0, 1.0) ** (1 / 2.2)

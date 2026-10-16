@@ -94,7 +94,8 @@ backend are fake.
 
 - **Camera**: exposes frames from a synthetic negative under the Scanlight's color and the
   body's shutter and ISO, saved as Bayer DNGs. Put the calibration ROI on the clear base
-  band around the picture.
+  band around the picture. `NEGPY_SIM_BODY_SHOT_S=10` makes it fire a still by itself every
+  10 s while Live View streams, which is a hand on the camera's own shutter.
 - **Scanlight**: a v4b that answers the firmware query and reports LED temperature.
 - **Film Scanner**: the "Simulated" backend has a feeder (frames by index, IR, Eject), a
   prescan device (full-window preview, then crop) and a roll device (frames found on the

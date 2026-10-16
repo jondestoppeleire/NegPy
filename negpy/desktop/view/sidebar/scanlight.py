@@ -8,7 +8,6 @@ aligns + merges + inverts them.
 
 import json
 import os
-import re
 from dataclasses import asdict, dataclass, fields, replace
 
 import cv2
@@ -64,6 +63,7 @@ from negpy.services.capture.calibration import (
 )
 from negpy.services.assets.sensor import SensorProfiles
 from negpy.services.capture.presets import PresetStore, ScanlightPreset, framing_levels
+from negpy.services.capture.service import last_frame_number
 
 _CHANNEL_COLORS = {"R": THEME.channel_red_text, "G": THEME.channel_green_text, "B": THEME.channel_blue_text, "W": THEME.text_secondary}
 
@@ -157,6 +157,7 @@ class ScanlightSidebar(QWidget):
         self._camera_verified = False  # "Live View & Scan" is gated until Check confirms camera…
         self._light_verified = False  # …and light, plus a folder + a selected preset
         self._rgb_mode = True  # Scanlight present → RGB (presets + sliders); else normal white-light scan
+        self._body_capture_target = None  # the CaptureRequest stills fired on the camera land in
         self._manual_mode = False  # True while building a preset by hand (sliders + exposure editable)
         self._manual_populate_pending = False  # seed the sidebar exposure steppers from the body once, then let the user drive
         self._calibrating_preset = ""  # non-empty while the "+" calibration flow is saving a new preset
@@ -939,6 +940,7 @@ class ScanlightSidebar(QWidget):
             self.lv_window.hide()
             self._push_light()  # back to the capture light (RGB unless white mode)
             self._set_status("")  # clear the "Live view running" line once the stream stops
+        self._arm_body_capture()  # the poll rides the stream, so it follows this toggle
 
     def _start_live_view_worker(self) -> None:
         """Spawn the live-view stream subprocess (shared by toggle-on and resume)."""
@@ -1485,23 +1487,32 @@ class ScanlightSidebar(QWidget):
         if not self._scanning:
             self._start_capture(retake=True)
 
-    def _last_frame_number(self, folder: str, roll: str) -> int:
-        """Highest existing Frame### for `roll` in `folder` (0 if none / unreadable).
+    def _arm_body_capture(self) -> None:
+        """Collect a still fired on the camera's own shutter as the roll's next frame.
 
-        The folder is the source of truth for numbering — a fresh scan takes the next
-        number, a retake re-uses this one. Matches the capture filename
-        `{roll}_Frame{n:03d}[_R/_G/_B].<raw>`, so the R/G/B triplet counts as one frame.
+        Normal camera scanning only: an RGB or white preset drives the Scanlight per shot, so
+        a frame the body takes by itself is lit by whatever the light shows and is not that
+        preset's exposure. The poll rides the live-view stream, so it needs the window open.
         """
-        pat = re.compile(re.escape(roll) + r"_Frame(\d+)", re.IGNORECASE)
-        hi = 0
-        try:
-            for name in os.listdir(folder):
-                m = pat.match(name)
-                if m:
-                    hi = max(hi, int(m.group(1)))
-        except OSError:
-            return 0
-        return hi
+        from negpy.desktop.workers.capture_worker import CaptureRequest
+
+        req = None
+        if self._camera_verified and not self._rgb_mode and self.lv_btn.isChecked():
+            roll = self.output.roll_name()
+            root = self.output.folder()
+            folder = self.output.target_folder()  # the roll's own subfolder, which the save creates
+            if roll and folder and os.path.isabs(root) and os.path.isdir(root):
+                req = CaptureRequest(
+                    roll_name=roll,
+                    frame_number=0,  # taken from the folder when the shot arrives, not now
+                    output_folder=folder,
+                    levels=(0, 0, 0),
+                    rgb_mode=False,
+                    as_roll=self.output.as_roll(),
+                )
+        if req != self._body_capture_target:
+            self._body_capture_target = req
+            self.controller.arm_body_capture(req)
 
     def _start_capture(self, retake: bool) -> None:
         if self._calibrating_preset:
@@ -1544,7 +1555,7 @@ class ScanlightSidebar(QWidget):
         # Frame numbers come from the roll's folder, with no manual field: a fresh scan takes the
         # next free number and a retake overwrites the last one. The service creates the subfolder
         # before writing.
-        last = self._last_frame_number(roll_folder, roll)
+        last = last_frame_number(roll_folder, roll)
         frame_number = max(1, last if retake else last + 1)
         rgb = self._rgb_mode
         single = rgb and not s.white_mode and s.single_capture
@@ -1779,6 +1790,7 @@ class ScanlightSidebar(QWidget):
         button only needs camera+light. When scanning is blocked, say why (task 5)."""
         missing = self._missing_requirements()
         can_scan = not missing
+        self._arm_body_capture()  # every state that decision reads already lands here
         # Live view needs only the camera; it stays enabled while open so it can be toggled off.
         self.lv_btn.setEnabled((self._camera_verified and not self._calibrating_preset) or self.lv_btn.isChecked())
         self.scan_btn.setEnabled(can_scan or self._scanning)

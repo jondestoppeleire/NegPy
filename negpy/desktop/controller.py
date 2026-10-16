@@ -576,6 +576,8 @@ class AppController(QObject):
     capture_live_view_unsupported = pyqtSignal(str)  # body advertises no preview; none was attempted
     capture_focus_magnifier_unavailable = pyqtSignal(str)  # reason
     capture_finished = pyqtSignal(list)
+    #: Where a still fired on the camera's own shutter should land (a CaptureRequest), or None.
+    body_capture_target_requested = pyqtSignal(object)
     capture_cancelled = pyqtSignal()
     capture_error = pyqtSignal(str)
     capture_status = pyqtSignal(str)
@@ -1084,6 +1086,7 @@ class AppController(QObject):
         self.capture_worker.cancelled.connect(self.capture_cancelled.emit)
         self.capture_worker.error.connect(self.capture_error.emit)
         self.capture_worker.status.connect(self.capture_status.emit)
+        self.body_capture_target_requested.connect(self.capture_worker.set_body_capture_target)
         self.live_view_requested.connect(self.capture_worker.start_live_view)
         self.live_view_stop_requested.connect(self.capture_worker.stop_live_view)
         self.camera_session_close_requested.connect(self.capture_worker.close_camera_session)
@@ -6606,9 +6609,18 @@ class AppController(QObject):
     def start_capture(self, req: CaptureRequest) -> None:
         """Start a capture; the Scanlight sidebar tracks state via signals."""
         self._ensure_capture_thread()
-        self._last_capture_req = req
         self.capture_worker.arm()
         self.capture_requested.emit(req)
+
+    def arm_body_capture(self, req: Optional[CaptureRequest]) -> None:
+        """Collect stills fired on the camera's own shutter into `req`'s roll, or stop (None).
+
+        Only normal camera scanning arms it, where every frame is one plain RAW: an RGB or
+        white preset lights the Scanlight per shot, which a still the body fires on its own
+        never gets.
+        """
+        self._ensure_capture_thread()
+        self.body_capture_target_requested.emit(req)
 
     def cancel_capture(self) -> None:
         self.capture_worker.cancel()
@@ -6673,14 +6685,14 @@ class AppController(QObject):
         if not all(key in defaults and rolls.same_value(value, defaults[key]) for key, value in wanted.items()):
             rolls.set_roll_defaults(self.session.repo, roll_id, **wanted)
 
-    def _on_capture_finished(self, paths: list) -> None:
+    def _on_capture_finished(self, paths: list, req: Optional[CaptureRequest]) -> None:
         """Feed the captured frame(s) into NegPy. An RGB triplet → RGB-Scan, C-41; a single-capture
         RGB frame → a single RAW, C-41; a white-light slide → E-6/positive; a normal camera scan →
-        a single RAW, process left to NegPy."""
+        a single RAW, process left to NegPy. `req` is the request the worker ran, with the frame
+        number it gave the files; a still fired on the camera's own shutter arrives the same way."""
         self.capture_finished.emit(paths)
         if not paths:
             return
-        req = getattr(self, "_last_capture_req", None)
         white = bool(req is not None and req.white_mode)
         rgb = bool(req is not None and getattr(req, "rgb_mode", True))
         single = bool(req is not None and getattr(req, "single_capture", False))

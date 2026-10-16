@@ -9,6 +9,7 @@ whole flow is unit-testable with fakes.
 from __future__ import annotations
 
 import os
+import re
 import shutil
 import tempfile
 import threading
@@ -51,6 +52,50 @@ def verify_raw_size(path: str, min_bytes: int, max_bytes: int) -> None:
             f"{os.path.basename(path)} is {size / 1024 / 1024:.1f} MB, outside the plausible "
             f"RAW range ({lo}-{hi} MB) — did the film move or the camera misfire?"
         )
+
+
+def last_frame_number(folder: str, roll_name: str) -> int:
+    """The highest frame number already in `folder` for this roll, or 0 for a fresh one."""
+    pattern = re.compile(re.escape(roll_name) + r"_Frame(\d+)", re.IGNORECASE)
+    highest = 0
+    try:
+        for name in os.listdir(folder):
+            match = pattern.match(name)
+            if match:
+                highest = max(highest, int(match.group(1)))
+    except OSError:
+        return 0
+    return highest
+
+
+def save_body_capture(
+    data: bytes,
+    *,
+    roll_name: str,
+    frame_number: int,
+    output_folder: str,
+    suffix: str,
+    min_raw_bytes: int = 8 * 1024 * 1024,
+    max_raw_bytes: int = 200 * 1024 * 1024,
+) -> str:
+    """Write a still the camera took on its own where a Scan of that frame would land.
+
+    The camera already holds the bytes, so this validates the size after the write instead
+    of capturing into a staging directory.
+    """
+    os.makedirs(output_folder, exist_ok=True)
+    final_path = os.path.join(output_folder, f"{roll_name}_Frame{frame_number:03d}{suffix}")
+    tmp = f"{final_path}.part"
+    with open(tmp, "wb") as handle:
+        handle.write(data)
+    try:
+        verify_raw_size(tmp, min_raw_bytes, max_raw_bytes)
+    except CaptureError:
+        os.unlink(tmp)
+        raise
+    os.replace(tmp, final_path)
+    logger.info("saved %s from the camera's own shutter", os.path.basename(final_path))
+    return final_path
 
 
 def _capture_validated_single(

@@ -114,6 +114,14 @@ _DRAIN_SILENCE_MS = 50
 _FUJI_DRAIN_SILENCE_MS = 300
 _FUJI_DRAIN_BUDGET_S = 2.0
 
+#: The event poll for a still the body took on its own, once per preview frame: each wait
+#: is short, and the budget bounds a body that streams property events faster than the
+#: preview reads them.
+_BODY_POLL_MS = 10
+_BODY_POLL_BUDGET_S = 0.1
+#: A hand on the shutter is slower than this, and every poll holds the session lock.
+_BODY_POLL_INTERVAL_S = 0.25
+
 #: An open is retried on any error except a claim conflict, and that asymmetry is the point: a
 #: busy transport clears on its own within seconds, while whoever holds a PTP body keeps it for
 #: minutes, so retrying there only delays the one message that explains it. An allow-list of
@@ -297,6 +305,7 @@ class GphotoCamera:
         on_preview_died: Optional[Callable[[str], None]] = None,
         on_preview_unusable: Optional[Callable[[str], None]] = None,
         on_magnifier_unusable: Optional[Callable[[str], None]] = None,
+        on_body_capture: Optional[Callable[[str, bytes], bool]] = None,
     ) -> None:
         self._gp = gp_module or _gp()
         self._jpeg_path = jpeg_path or default_jpeg_path()
@@ -310,6 +319,10 @@ class GphotoCamera:
         self._on_preview_unusable = on_preview_unusable
         # Called when a click asks for a magnifier this body cannot stream.
         self._on_magnifier_unusable = on_magnifier_unusable
+        # Called from the preview thread with one still the body took on its own, once
+        # `watch_body_captures` is on. True means the caller holds it; only then is it deleted
+        # off the camera, so a failed save leaves the only copy where it was.
+        self._on_body_capture = on_body_capture
         self._camera: Any = None
         self._model = ""
         # Cleared when the body stops answering. Unplugging it leaves the handle behind, and a
@@ -327,6 +340,11 @@ class GphotoCamera:
         # flag rather than the loop watching `_busy`: a capture can begin and end between two
         # poll ticks, and a missed drain blocks the next preview on Fujifilm.
         self._drain_owed = threading.Event()
+        # Raised while the preview should look for stills fired on the camera itself.
+        self._watch_body = threading.Event()
+        # File-added events a post-shot drain read while watching: the body's own stills,
+        # collected by the preview loop once the drain is done.
+        self._body_backlog: list[Any] = []
         self._reset_body_state()
 
     def _reset_body_state(self) -> None:
@@ -338,6 +356,9 @@ class GphotoCamera:
         self._drain_silence_ms = _DRAIN_SILENCE_MS
         self._drain_budget_s = _EVENT_DRAIN_S
         self._drain_owed.clear()  # a fresh body owes nothing until it has taken a shot
+        self._body_backlog.clear()
+        self._watch_body.clear()  # re-applied after open, once the driver's model is known
+        self._next_body_poll = 0.0
         self._magnifier: Optional[_Magnifier] = None
         self._magnifier_ratios: Optional[tuple[str, str]] = None
         self._magnifier_off = ""
@@ -744,9 +765,75 @@ class GphotoCamera:
         camera = self._require()
         deadline = time.monotonic() + (self._drain_budget_s if budget_s is None else budget_s)
         while time.monotonic() < deadline:
-            kind, _data = camera.wait_for_event(self._drain_silence_ms)
+            kind, data = camera.wait_for_event(self._drain_silence_ms)
             if kind == self._gp.GP_EVENT_TIMEOUT:
                 return
+            if kind == self._gp.GP_EVENT_FILE_ADDED and data is not None and self._watch_body.is_set():
+                self._body_backlog.append(data)  # the body's own still, not this shot's
+
+    def watch_body_captures(self, on: bool) -> None:
+        """Collect stills the operator fires on the camera itself, not through NegPy.
+
+        Off unless a caller asks for it: it adds an event poll to every preview frame, which
+        is only safe on a body already streaming (see `_preview_loop`). `stop()` clears it
+        with the stream. Canon is left out: a Canon EOS segfaulted the process in an event
+        wait right after open (issue #745), and no Canon has run this poll.
+        """
+        if on and "canon" in self._capabilities.driver_model.lower():
+            logger.info("gphoto2: not collecting %s's own shots; the event poll is untested on Canon (issue #745)", self._model)
+            on = False
+        if on:
+            self._watch_body.set()
+        else:
+            self._watch_body.clear()
+
+    def _next_body_shot(self) -> Optional[Any]:
+        """The path of one still the body took on its own, or None when the queue holds none."""
+        if self._body_backlog:
+            return self._body_backlog.pop(0)
+        camera = self._require()
+        deadline = time.monotonic() + _BODY_POLL_BUDGET_S
+        while time.monotonic() < deadline:
+            kind, data = camera.wait_for_event(_BODY_POLL_MS)
+            if kind == self._gp.GP_EVENT_TIMEOUT:
+                return None
+            if kind == self._gp.GP_EVENT_FILE_ADDED and data is not None:
+                return data
+        return None
+
+    def _collect_body_shot(self) -> Optional[tuple[Any, bytes]]:
+        """Download one still the body took on its own, or None when it took none.
+
+        Only a RAW is a scan: a RAW+JPEG body's JPEG stays on the camera untouched.
+        """
+        path = self._next_body_shot()
+        if path is None:
+            return None
+        if os.path.splitext(path.name)[1].lower() not in _CAMERA_RAW_EXTENSIONS:
+            logger.info("gphoto2: left %s on the camera; a scan is RAW", path.name)
+            return None
+        try:
+            camera_file = self._require().file_get(path.folder, path.name, self._gp.GP_FILE_TYPE_NORMAL)
+        except self._gp.GPhoto2Error as exc:
+            logger.warning("gphoto2: could not download %s fired on the camera: %s", path.name, exc)
+            return None
+        data = bytes(memoryview(camera_file.get_data_and_size()))
+        logger.info("gphoto2: collected %s (%.1f MB) fired on the camera", path.name, len(data) / 1e6)
+        return path, data
+
+    def _delete_off_camera(self, camera: Any, path: Any) -> None:
+        """Delete a downloaded shot from the body. On a self-recycling RAM target this is
+        redundant at worst, but a body without a capture target keeps every tethered object
+        until it refuses to capture at all (issue #658)."""
+        try:
+            camera.file_delete(path.folder, path.name)
+        except self._gp.GPhoto2Error as exc:
+            logger.debug("gphoto2: could not delete %s off the camera: %s", path.name, exc)
+
+    def _delete_body_shot(self, path: Any) -> None:
+        with self._lock:
+            if self._camera is not None:
+                self._delete_off_camera(self._camera, path)
 
     def capture(self, out_path: str, shutter: Optional[str] = None, iso: Optional[str] = None, aperture: Optional[str] = None) -> str:
         """Take one still, write the RAW next to `out_path`, and return where it landed.
@@ -788,14 +875,7 @@ class GphotoCamera:
                     camera_file = camera.file_get(path.folder, path.name, self._gp.GP_FILE_TYPE_NORMAL)
                     data = bytes(memoryview(camera_file.get_data_and_size()))
                     t_download = time.perf_counter()
-                    try:
-                        # Delete the downloaded shot from the body. On a self-recycling RAM
-                        # target this is redundant at worst, but a body without a capture target
-                        # keeps every tethered object until it refuses to capture at all
-                        # (issue #658).
-                        camera.file_delete(path.folder, path.name)
-                    except self._gp.GPhoto2Error as exc:
-                        logger.debug("gphoto2: could not delete %s off the camera: %s", path.name, exc)
+                    self._delete_off_camera(camera, path)
                 except BaseException:
                     # A failed shot drains inline, still under the lock: the error must leave a
                     # clean queue behind before the preview or a retry touches the session.
@@ -908,6 +988,7 @@ class GphotoCamera:
         return self._preview is not None and self._preview.is_alive()
 
     def stop(self) -> None:
+        self._watch_body.clear()  # the poll belongs to a running stream
         self._stop.set()
         thread, self._preview = self._preview, None
         if thread is not None and thread.is_alive():
@@ -940,6 +1021,17 @@ class GphotoCamera:
                     continue
                 self._publish_frame(data)
                 failures = 0
+                # After a published frame, never before one: #745's segfault is an event wait
+                # on a freshly opened body, and a collected shot must not be dropped by the
+                # stalled-magnifier path above.
+                if self._watch_body.is_set() and time.monotonic() >= self._next_body_poll:
+                    self._next_body_poll = time.monotonic() + _BODY_POLL_INTERVAL_S
+                    with self._lock:
+                        body_shot = None if self._camera is None else self._collect_body_shot()
+                    if body_shot is not None and self._on_body_capture is not None:
+                        path, data = body_shot
+                        if self._on_body_capture(path.name, data):
+                            self._delete_body_shot(path)
                 if time.monotonic() >= next_settings:
                     self._publish_settings()
                     next_settings = time.monotonic() + _SETTINGS_INTERVAL_S

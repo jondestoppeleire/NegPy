@@ -141,6 +141,15 @@ without advancing the counter. **Delay between exposures** adds a pause between 
 green and blue captures, for older bodies that lock up the USB/PTP link when a new capture
 command arrives too soon.
 
+**The camera's own shutter (camera-only scanning).** While Live View streams, a frame you
+shoot on the body or a remote release is downloaded, named and imported exactly as **Scan**
+does, and it takes the next free frame number. Once it is on disk it is deleted off the
+camera, as a Scan's is; a shot that cannot be saved stays on the camera and the panel says
+so. RAW only: a body set to RAW+JPEG keeps its JPEG on the camera. Scanlight presets are
+excluded, because they set the light and the exposure per shot and a frame the body fires on
+its own gets neither. Canon bodies are excluded until the event poll has run on one (issue
+#745).
+
 **Narrowband Scan.** Narrowband LEDs render more saturated than white light. The **Narrowband** toggle in the Process
 panel, beside **Linear RAW**, corrects this with the bundled RGBScan input profile, in the
 preview and in every export. An explicit **Input ICC** in the Export settings takes

@@ -7,7 +7,7 @@ and one libgphoto2 session, held open across captures and shared with live view.
 import os
 import threading
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Optional
 
 from PyQt6.QtCore import QObject, pyqtSignal, pyqtSlot
@@ -34,7 +34,13 @@ from negpy.services.capture.calibration import (
     normalize_start_point,
     scan_ladder,
 )
-from negpy.services.capture.service import CaptureService, capture_single
+from negpy.services.capture.service import (
+    CaptureError,
+    CaptureService,
+    capture_single,
+    last_frame_number,
+    save_body_capture,
+)
 
 logger = get_logger(__name__)
 
@@ -139,7 +145,9 @@ class CaptureWorker(QObject):
     #: One set_camera_setting call ran to completion: verified, rejected, or skipped without a
     #: session. Always fires, so the sidebar's pending-write gate on Scan cannot stick.
     camera_setting_applied = pyqtSignal(str)
-    finished = pyqtSignal(list)  # [red_path, green_path, blue_path]
+    #: The frame's files ([red, green, blue] for a triplet) and the CaptureRequest they landed
+    #: under, which carries the frame number the files were given.
+    finished = pyqtSignal(list, object)
     cancelled = pyqtSignal()
     error = pyqtSignal(str)
     status = pyqtSignal(str)
@@ -185,6 +193,13 @@ class CaptureWorker(QObject):
         # Abilities of the body last opened; None until one has been. Outlives the session so
         # the poll keeps reporting them after the identify probe closes it again.
         self._caps: Optional[CameraCapabilities] = None
+        # Where a still fired on the camera's own shutter lands, or None while nothing collects
+        # them. Only the frame number is left out: it is taken when the shot actually arrives.
+        self._body_target: Optional[CaptureRequest] = None
+        # Serializes frame numbering between a scan and a still the body fires on its own: a
+        # scan's file is invisible to the folder until it is promoted, so the body's shot waits
+        # for the whole scan before it reads the folder.
+        self._frame_lock = threading.Lock()
 
     # ----- camera session (one per body, held open) -----
 
@@ -202,6 +217,7 @@ class CaptureWorker(QObject):
                 # not a dead camera. Same UI as a body that never advertised one.
                 on_preview_unusable=self.live_view_unsupported.emit,
                 on_magnifier_unusable=self.focus_magnifier_unavailable.emit,
+                on_body_capture=self._on_body_capture,
             )
         if not self._camera.is_open():
             try:
@@ -279,6 +295,10 @@ class CaptureWorker(QObject):
 
     @pyqtSlot(CaptureRequest)
     def run_capture(self, req: CaptureRequest) -> None:
+        with self._frame_lock:
+            self._run_capture(req)
+
+    def _run_capture(self, req: CaptureRequest) -> None:
         _t0 = time.perf_counter()
         try:
             if not self._holds_camera():
@@ -293,6 +313,10 @@ class CaptureWorker(QObject):
                 # as an ordinary single RAW, with no LED control and no triplet. The operator's
                 # own light stays on, and the shutter is whatever the live-view steppers set.
                 self.status.emit("Capturing…")
+                if not req.is_retake:
+                    # The sidebar numbered this scan before a body-fired still may have taken
+                    # that number, so a fresh scan takes the next free one here.
+                    req = replace(req, frame_number=max(req.frame_number, last_frame_number(req.output_folder, req.roll_name) + 1))
                 path = capture_single(
                     camera,
                     roll_name=req.roll_name,
@@ -301,7 +325,7 @@ class CaptureWorker(QObject):
                     shutter=(req.shutters[0] or None),
                     cancel=self._cancel,
                 )
-                self.finished.emit([path])
+                self.finished.emit([path], req)
                 return
 
             # RGB / white-preset captures drive the Scanlight, so it must be connected.
@@ -318,7 +342,7 @@ class CaptureWorker(QObject):
                     settle_s=req.settle_s,
                     cancel=self._cancel,
                 )
-                self.finished.emit([path])
+                self.finished.emit([path], req)
                 return
 
             settings = CaptureSettings(
@@ -334,7 +358,7 @@ class CaptureWorker(QObject):
             )
             if req.single_capture:  # one narrowband exposure, imported as an ordinary single RAW
                 self.status.emit("Capturing…")
-                self.finished.emit([service.capture_rgb_single(settings, cancel=self._cancel)])
+                self.finished.emit([service.capture_rgb_single(settings, cancel=self._cancel)], req)
                 return
 
             self.status.emit("Capturing R / G / B…")
@@ -351,7 +375,7 @@ class CaptureWorker(QObject):
                 on_channel=_on_channel,
             )
 
-            self.finished.emit(result.paths)
+            self.finished.emit(result.paths, req)
         except Exception as e:
             self._cleanup_partial_frame(req)  # keep the folder a clean multiple of 3 for NegPy's grouper
             if self._cancel.is_set():
@@ -508,6 +532,9 @@ class CaptureWorker(QObject):
         try:
             camera = self._acquire_camera()
             camera.start()  # a no-op when the preview thread is already up
+            # The body-shot poll runs in the preview loop and a stopped stream drops it, so
+            # every start re-applies the standing target.
+            camera.watch_body_captures(self._body_target is not None)
             self.live_view_started.emit(camera.jpeg_path)
         except LiveViewUnsupported as e:
             # Not a failure: the body scans fine, it only has no preview to show. Reported on
@@ -517,6 +544,41 @@ class CaptureWorker(QObject):
         except Exception as e:
             logger.exception("start_live_view failed")
             self.error.emit(f"Live view: {e}")
+
+    @pyqtSlot(object)
+    def set_body_capture_target(self, req: Optional[CaptureRequest]) -> None:
+        """Collect stills fired on the camera itself into `req`'s roll, or stop (None)."""
+        self._body_target = req
+        if self._camera is not None:
+            self._camera.watch_body_captures(req is not None)
+
+    def _on_body_capture(self, name: str, data: bytes) -> bool:
+        """Save a still the operator fired on the camera as the roll's next frame; True once
+        it is on disk, which lets the camera drop its copy.
+
+        Runs on the camera's preview thread, so the whole report travels by signal. The frame
+        number is read off the folder here and not when the target was armed: scans and other
+        body shots land in between.
+        """
+        req = self._body_target
+        if req is None:
+            return False
+        with self._frame_lock:
+            req = replace(req, frame_number=last_frame_number(req.output_folder, req.roll_name) + 1)
+            try:
+                path = save_body_capture(
+                    data,
+                    roll_name=req.roll_name,
+                    frame_number=req.frame_number,
+                    output_folder=req.output_folder,
+                    suffix=os.path.splitext(name)[1],
+                )
+            except (CaptureError, OSError) as exc:
+                # Status, not error: the session is fine, and an error closes Live View.
+                self.status.emit(f"The camera's own shot could not be saved and stays on the camera: {exc}")
+                return False
+        self.finished.emit([path], req)
+        return True
 
     @pyqtSlot()
     def stop_live_view(self) -> None:
