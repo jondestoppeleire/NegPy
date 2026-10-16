@@ -1,5 +1,5 @@
 """Spot densitometer: hover position -> normalized-log coords -> darkroom read-out.
-Densities are relative to this scan's normalization, not absolute."""
+Densities are relative to this scan's normalization window, not absolute."""
 
 import math
 from dataclasses import dataclass
@@ -58,7 +58,7 @@ def map_display_to_norm(
 class DensitometerReading:
     """One probed pixel, in darkroom units (relative to this scan's bounds)."""
 
-    dd_rgb: Tuple[float, float, float]  # ΔD above base, per channel
+    dd_rgb: Tuple[float, float, float]  # density above the window's thin end, per channel
     val_luma: float  # Rec.709 luma of the val triplet (curve-dot x)
     print_density: float  # reflection density of the displayed tone
     zone: float  # print zone 0..10 (analysis.zone_of_encoded ruler, V = 18% gray)
@@ -70,7 +70,13 @@ def compute_reading(
     display_rgb: Tuple[float, float, float],
 ) -> DensitometerReading:
     """`bounds` is the LogNegativeBounds the image was normalized with."""
-    dd = tuple(float(val_rgb[ch]) * (float(bounds.ceils[ch]) - float(bounds.floors[ch])) for ch in range(3))
+    floors = [float(v) for v in bounds.floors]
+    ceils = [float(v) for v in bounds.ceils]
+    # The window's orientation picks the thin end once for all three channels (the ceiling
+    # on a negative, the floor on a positive), so a trim that crosses one channel's bounds
+    # cannot flip that channel's sign.
+    thin_is_ceil = sum(ceils) > sum(floors)
+    dd = tuple((c if thin_is_ceil else f) - (f + float(v) * (c - f)) for v, f, c in zip(val_rgb, floors, ceils))
     val_luma = LUMA_R * float(val_rgb[0]) + LUMA_G * float(val_rgb[1]) + LUMA_B * float(val_rgb[2])
     lum = LUMA_R * float(display_rgb[0]) + LUMA_G * float(display_rgb[1]) + LUMA_B * float(display_rgb[2])
     t = float(working_oetf_decode(np.asarray([lum], dtype=np.float32))[0])
