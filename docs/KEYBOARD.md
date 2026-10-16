@@ -171,6 +171,7 @@ Actions with no default key are not listed; every one of them can still be bound
 | Key | Action |
 |-----|--------|
 | `S` | Scan, or stop the capture |
+| `Space` | Scan, or stop the capture (second key) |
 | `R` | Retake the current frame |
 | `M` | Meter: set the shutter from one RAW probe |
 | `H` | Show the live histogram |
