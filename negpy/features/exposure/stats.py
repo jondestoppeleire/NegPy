@@ -48,7 +48,9 @@ def _density_detail(density_above_base: Optional[Tuple[float, float, float]]) ->
     return (
         f"Above the clear base: Dmax {dmax:.2f} · Dmed {dmed:.2f} · Dmin {dmin:.2f}. "
         "Dmin and Dmax are the bounds the frame is normalized with, before the White and Black Point trims "
-        "(the roll's under Roll Analysis); Dmed is the metered median. An estimate from the scan: flare reads dense areas low."
+        "(the roll's under Roll Analysis); Dmed is the metered median. A Dmin below zero means the metered area "
+        "holds something thinner than the base read: bare light through a perforation or past the film's edge, or a "
+        "misread base. An estimate from the scan: flare reads dense areas low."
     )
 
 

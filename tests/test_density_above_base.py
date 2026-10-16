@@ -28,19 +28,78 @@ def test_the_base_is_the_rebate_of_the_simulated_scan():
     assert 10 ** np.mean(base) > float(np.median(picture))  # a negative's base is its thinnest film
 
 
-def test_the_base_is_the_rings_plateau_not_its_median():
-    """A narrow ring that is mostly perforations: the median is bare light, the plateau is base."""
-    from negpy.features.exposure.normalization import _plateau
-
+def _ring_frame(fill: list[tuple[float, float, float]]) -> tuple[np.ndarray, np.ndarray]:
+    """A 160 x 320 frame whose ring (the outer 32 rows) is filled block-column by block-column
+    from `fill`: (value, noise, share) runs along the ring; the picture inside is mid-gray."""
     rng = np.random.default_rng(0)
-    holes = np.full((600, 3), 0.95, dtype=np.float32) + rng.normal(0, 0.03, (600, 3)).astype(np.float32)
-    base = np.full((400, 3), 0.60, dtype=np.float32) + rng.normal(0, 0.003, (400, 3)).astype(np.float32)
-    ring = np.vstack([holes, base])
+    det = np.full((160, 320, 3), 0.30, dtype=np.float32)
+    ring = np.zeros((160, 320), bool)
+    ring[:32, :] = True
+    ring[-32:, :] = True
+    x = 0
+    for value, noise, share in fill:
+        width = int(320 * share)
+        for rows in (slice(0, 32), slice(128, 160)):
+            det[rows, x : x + width] = value + rng.normal(0, noise, (32, width, 3)).astype(np.float32)
+        x += width
+    return det, ring
 
-    plateau = _plateau(ring)
 
-    assert abs(float(np.median(plateau)) - 0.60) < 0.02
-    assert abs(float(np.median(ring)) - 0.95) < 0.05  # what a median would have read
+def test_bare_light_at_the_film_edge_is_not_the_base():
+    """A flat sliver of bare light, brighter than the rebate, loses to the gray film below it."""
+    from negpy.features.exposure.normalization import _base_blocks
+
+    det, ring = _ring_frame([(0.84, 0.002, 0.30), (0.47, 0.004, 0.70)])
+
+    base = _base_blocks(det, ring)
+
+    assert base is not None
+    assert abs(float(np.median(base)) - 0.47) < 0.02
+
+
+def test_a_ring_that_is_mostly_perforations_still_reads_the_film():
+    from negpy.features.exposure.normalization import _base_blocks
+
+    det, ring = _ring_frame([(0.95, 0.002, 0.60), (0.60, 0.004, 0.40)])
+
+    base = _base_blocks(det, ring)
+
+    assert base is not None
+    assert abs(float(np.median(base)) - 0.60) < 0.02
+
+
+def test_a_ring_with_no_flat_film_reads_nothing():
+    from negpy.features.exposure.normalization import _base_blocks
+
+    det, ring = _ring_frame([(0.5, 0.2, 1.0)])  # texture everywhere, no flat block
+
+    assert _base_blocks(det, ring) is None
+
+
+def test_a_thin_ring_still_yields_blocks():
+    """A tight scan leaves a rebate a block or two wide; half a block in the ring counts."""
+    from negpy.features.exposure.normalization import _base_blocks
+
+    det = np.full((160, 320, 3), 0.30, dtype=np.float32)
+    ring = np.zeros((160, 320), bool)
+    ring[:12, :] = True  # twelve pixels: one and a half blocks
+    det[:12, :] = 0.55
+
+    base = _base_blocks(det, ring)
+
+    assert base is not None
+    assert abs(float(np.median(base)) - 0.55) < 0.05  # the straddling blocks pull it a little
+
+
+def test_clipped_light_is_never_the_base():
+    from negpy.features.exposure.normalization import _base_blocks
+
+    det, ring = _ring_frame([(0.995, 0.001, 0.70), (0.60, 0.004, 0.30)])  # holes at sensor white
+
+    base = _base_blocks(det, ring)
+
+    assert base is not None
+    assert abs(float(np.median(base)) - 0.60) < 0.02
 
 
 def test_an_export_does_not_measure_the_base():
@@ -49,16 +108,6 @@ def test_an_export_does_not_measure_the_base():
     _cpu_render(_negative(), WorkspaceConfig(), context)
 
     assert context.metrics["density_above_base"] is None
-
-
-def test_a_sparse_plateau_is_not_a_base():
-    """A ring whose most common brightness is held by a handful of pixels reads nothing."""
-    from negpy.features.exposure.normalization import _plateau
-
-    rng = np.random.default_rng(1)
-    ring = rng.uniform(0.2, 0.9, (260, 3)).astype(np.float32)  # no plateau at all
-
-    assert _plateau(ring).shape[0] < 200
 
 
 def test_a_frame_with_no_film_box_has_no_base():

@@ -471,42 +471,69 @@ def measure_neutral_axis(
     return measure_neutral_axis_from_log(img_log, bounds, roi, analysis_buffer)
 
 
-#: Fewer rebate pixels than this at detection resolution is a sliver, not a base.
-_MIN_REBATE_PIXELS = 200
-#: The base needs the film box roughly, not to the pixel: the ring's plateau is a median, so
-#: the detector runs at half the crop's resolution.
+#: The base needs the film box roughly, not to the pixel, so the detector runs at half the
+#: crop's resolution. The ring must be about two base blocks wide at this size.
 _BASE_DETECT_RES = 900
 
 
-#: Width of the brightness bins the base plateau is found in, in log10 transmittance.
-_PLATEAU_BIN = 0.02
+#: The base is read from flat blocks of the rebate ring, grouped by brightness.
+_BASE_BLOCK = 8  # block size at the base detector's resolution
+_FLAT_CV = 0.03  # a block whose std over mean is under this is flat film, not edge print or a gradient
+_GROUP_GAP = 0.04  # decades between neighbouring blocks that split two brightness groups
+_OPEN_LIGHT_GAP = 0.08  # decades a brighter group must clear the film below it to be bare light
+_MIN_BASE_BLOCKS = 5
+_CLIP_LEVEL = 0.98  # a block with a pixel at sensor white is light the scan clipped, never film
 
 
-def _plateau(ring: np.ndarray) -> np.ndarray:
-    """The ring's pixels at its most common brightness, within one bin either side.
+def _base_blocks(det: np.ndarray, ring: np.ndarray) -> Optional[np.ndarray]:
+    """Per-channel means of the ring's flat blocks that are clear base, or None without enough.
 
-    The clear base is the ring's plateau: perforations (bare light) are brighter and edge
-    printing is denser, and either can outnumber the base on a narrow ring, which a median
-    would then follow."""
-    lum = np.log10(np.maximum(ring.mean(axis=1), 1e-6))
-    bins = np.floor(lum / _PLATEAU_BIN).astype(np.int64)
-    values, counts = np.unique(bins, return_counts=True)
-    peak = values[int(np.argmax(counts))]
-    return ring[np.abs(bins - peak) <= 1]
+    Flat blocks are grouped by brightness. Bare light through a perforation or a gap at the
+    film's edge is flatter and brighter than the base, so a group that clears the film below
+    it is light, not film; the largest group left is the base."""
+    b = _BASE_BLOCK
+    hb, wb = det.shape[0] // b, det.shape[1] // b
+    blocks = det[: hb * b, : wb * b].reshape(hb, b, wb, b, 3)
+    mean = blocks.mean(axis=(1, 3))
+    lum = mean.mean(axis=2)
+    # Half a block in the ring is enough: a block straddling film and picture is not flat.
+    inside = ring[: hb * b, : wb * b].reshape(hb, b, wb, b).mean(axis=(1, 3)) >= 0.5
+    unclipped = blocks.max(axis=(1, 3, 4)) < _CLIP_LEVEL
+    flat = inside & unclipped & (lum > 1e-4) & (blocks.std(axis=(1, 3)).mean(axis=2) / np.maximum(lum, 1e-6) < _FLAT_CV)
+    if int(flat.sum()) < _MIN_BASE_BLOCKS:
+        return None
+    cand = mean[flat]
+    log_lum = np.log10(np.maximum(cand.mean(axis=1), 1e-6))
+    order = np.argsort(log_lum)[::-1]  # brightest first
+    groups: list[np.ndarray] = []
+    start = 0
+    for i in range(1, len(order) + 1):
+        if i == len(order) or log_lum[order[i - 1]] - log_lum[order[i]] > _GROUP_GAP:
+            groups.append(order[start:i])
+            start = i
+    min_n = max(_MIN_BASE_BLOCKS, int(0.02 * len(order)))
+    big = [g for g in groups if len(g) >= min_n]
+    if not big:
+        return None
+    if len(big) > 1:
+        brightest, rest = big[0], big[1:]
+        film = max(rest, key=len)
+        if float(np.median(log_lum[brightest]) - np.median(log_lum[film])) > _OPEN_LIGHT_GAP:
+            return cand[film]
+    return cand[max(big, key=len)]
 
 
 def measure_base_log(image: ImageBuffer) -> Optional[Tuple[float, float, float]]:
-    """Per-channel log10 transmittance of the clear base: the median of the rebate ring's
-    brightness plateau on the uncropped frame. None when the scan shows no film box, the ring is
-    a sliver, or the base is darker than the picture, because a negative's base is its thinnest film."""
+    """Per-channel log10 transmittance of the clear base: the median of the rebate ring's flat
+    base blocks on the uncropped frame. None when the scan shows no film box, the ring holds too
+    few flat blocks, or the base is darker than the picture, because a negative's base is its
+    thinnest film."""
     det, _ = _normalize_detection_input(image, _BASE_DETECT_RES)
     det = np.ascontiguousarray(det, dtype=np.float32)
     film_roi, gate = film_and_picture(det)
-    ring = det[rebate_mask(det.shape[:2], film_roi, gate)]
-    if ring.shape[0] < _MIN_REBATE_PIXELS:
-        return None
-    base = _plateau(ring)
-    if base.shape[0] < _MIN_REBATE_PIXELS:
+    ring = rebate_mask(det.shape[:2], film_roi, gate)
+    base = _base_blocks(det, ring)
+    if base is None:
         return None
     gy1, gy2, gx1, gx2 = gate
     picture = det[gy1:gy2, gx1:gx2].reshape(-1, 3)
