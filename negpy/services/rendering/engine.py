@@ -24,6 +24,7 @@ from negpy.features.exposure.normalization import (
     diffusion_plane,
     effective_crosstalk_matrix,
     geometry_kwargs,
+    measure_base_log,
     normalized_roi,
 )
 from negpy.features.process.hue import apply_hue_trim
@@ -162,6 +163,13 @@ class DarkroomEngine:
         distortion_k1 = settings.geometry.distortion_k1
 
         def run_base(img_in: ImageBuffer, ctx: PipelineContext) -> ImageBuffer:
+            # Only a negative's preview reads the densities; an export runs with stage caching
+            # off. The base is a property of the source, read once per source before geometry.
+            if ctx.cache_stages and render_path(settings.process) is RenderPath.PRINT:
+                if not self.cache.base_measured:
+                    self.cache.base_log = measure_base_log(img_in)
+                    self.cache.base_measured = True
+                ctx.metrics["base_log"] = self.cache.base_log
             img_in = GeometryProcessor(settings.geometry).process(img_in, ctx)
             return base_processor(settings).process(img_in, ctx)
 

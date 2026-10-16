@@ -148,17 +148,6 @@ def _downsample_for_analysis(img: np.ndarray, max_size: int) -> np.ndarray:
     return cv2.resize(img, (int(w * scale), int(h * scale)), interpolation=cv2.INTER_AREA)
 
 
-def _oriented(img: np.ndarray, geometry: GeometryConfig) -> np.ndarray:
-    """The frame turned and flipped as the print stage turns it, as views."""
-    if geometry.rotation != 0:
-        img = np.rot90(img, k=geometry.rotation)
-    if geometry.flip_horizontal:
-        img = np.fliplr(img)
-    if geometry.flip_vertical:
-        img = np.flipud(img)
-    return img
-
-
 def _build_analysis_source(
     img: np.ndarray,
     geometry: GeometryConfig,
@@ -167,12 +156,17 @@ def _build_analysis_source(
     analysis_rect: Optional[tuple],
     tiling_mode: bool,
     max_size: int,
-) -> Tuple[np.ndarray, float, np.ndarray]:
+) -> Tuple[np.ndarray, float]:
     """The shared meter grid's own buffer: oriented, downsampled (only a meter reads it), warped and sliced once for every
     meter reading it. The whole frame is warped before the ROI is cut, as on the CPU and in the print stage: a crop rotated
-    about its own center is a different region. The warped frame before the cut is returned too, for the clear base, which
-    lies in the rebate the cut removes."""
-    analysis_source = _oriented(img, geometry)
+    about its own center is a different region."""
+    analysis_source = img
+    if geometry.rotation != 0:
+        analysis_source = np.rot90(analysis_source, k=geometry.rotation)
+    if geometry.flip_horizontal:
+        analysis_source = np.fliplr(analysis_source)
+    if geometry.flip_vertical:
+        analysis_source = np.flipud(analysis_source)
     full_h, full_w = analysis_source.shape[:2]
     analysis_source = _downsample_for_analysis(np.ascontiguousarray(analysis_source), max_size)
     if geometry.fine_rotation != 0.0:
@@ -190,11 +184,10 @@ def _build_analysis_source(
     analysis_roi, an_buffer = resolve_analysis_region(
         analysis_source.shape, base_roi, analysis_buffer, analysis_rect if not tiling_mode else None
     )
-    warped = analysis_source
     if analysis_roi is not None:
         ay1, ay2, ax1, ax2 = analysis_roi
         analysis_source = np.ascontiguousarray(analysis_source[ay1:ay2, ax1:ax2])
-    return analysis_source, an_buffer, warped
+    return analysis_source, an_buffer
 
 
 def _binding_identity(idx: int, res: Any) -> tuple:
@@ -382,6 +375,8 @@ class GPUEngine:
         self._clip_cache: Optional[tuple] = None
         # (key, prefiltered grid, clip fractions), keyed without the clip sliders.
         self._prefilter_cache: Optional[tuple] = None
+        # The clear base, read off the raw source once per source; every edit reuses it.
+        self._base_cache: Optional[tuple] = None
         self._last_settings: Optional[WorkspaceConfig] = None
         self._last_targets_rev: int = -1
         self._last_scale_factor: float = 1.0
@@ -785,7 +780,21 @@ class GPUEngine:
         # The transparency curve reads working space, so its meter must too: the same
         # camera matrix TransparencyBaseProcessor applies, on the grid.
         cam_m = camera_to_working_matrix(cam_xyz, camera_wb if should_fold_camera_wb(settings.process) else None) if transfer else None
-        if needs_bounds_analysis or needs_refs or needs_axis or needs_anchor or needs_textural or needs_shadow or needs_highlight:
+        # A drag renders without metrics and caches no densities; the release that reads them
+        # back re-runs the grid once so the cache fills.
+        # A source with no base is known as such, so it never re-enters the grid for it.
+        base_known_empty = self._base_cache is not None and self._base_cache[0] == analysis_source_hash and self._base_cache[1] is None
+        needs_density = readback_metrics and not tiling_mode and not transfer and density_above_base_value is None and not base_known_empty
+        if (
+            needs_bounds_analysis
+            or needs_refs
+            or needs_axis
+            or needs_anchor
+            or needs_textural
+            or needs_shadow
+            or needs_highlight
+            or needs_density
+        ):
             # Keyed without the clip sliders: a clip drag reuses the grid and
             # re-runs only the percentile analysis.
             p = settings.process
@@ -816,10 +825,9 @@ class GPUEngine:
                 prefiltered, scan_clip_fractions = self._prefilter_cache[1], self._prefilter_cache[2]
                 sorted_grid = self._prefilter_cache[3]
                 cam_prefiltered = self._prefilter_cache[4]
-                base_log = self._prefilter_cache[5]
             else:
                 # Use views to avoid copying the full-res image; crop to ROI first.
-                analysis_source, an_buffer, warped_frame = _build_analysis_source(
+                analysis_source, an_buffer = _build_analysis_source(
                     img,
                     settings.geometry,
                     roi,
@@ -832,10 +840,6 @@ class GPUEngine:
                 # Unmixed like the CPU path so every meter reads the unmixed film.
                 prefiltered = unmix_log_image(prefilter_log_grid(analysis_source, None, an_buffer), unmix_m)
                 scan_clip_fractions = measure_clip_fractions(analysis_source, None, an_buffer)
-                # Only a preview reads the densities, like the anchor's readback_metrics gate.
-                base_log = measure_base_log(warped_frame) if readback_metrics and not transfer else None
-                if base_log is not None:
-                    base_log = tuple(unmix_log_image(np.asarray(base_log, dtype=np.float32).reshape(1, 1, 3), unmix_m).reshape(3).tolist())
                 if transfer:
                     # No camera matrix (a scanner TIFF) means the buffer is already in
                     # working space, so the shared grid is the working-space grid.
@@ -845,7 +849,7 @@ class GPUEngine:
                         else unmix_log_image(prefilter_log_grid(apply_camera_matrix(analysis_source, cam_m), None, an_buffer), unmix_m)
                     )
                 if prefilter_key is not None:
-                    self._prefilter_cache = (prefilter_key, prefiltered, scan_clip_fractions, None, cam_prefiltered, base_log)
+                    self._prefilter_cache = (prefilter_key, prefiltered, scan_clip_fractions, None, cam_prefiltered)
             if analysis_key is not None:
                 self._clip_cache = (analysis_key, scan_clip_fractions)
         elif analysis_key is not None and self._clip_cache is not None and self._clip_cache[0] == analysis_key:
@@ -860,7 +864,7 @@ class GPUEngine:
                 sorted_grid = sorted_channel_grid(prefiltered)
                 cache = self._prefilter_cache
                 if cache is not None and cache[1] is prefiltered:
-                    self._prefilter_cache = (cache[0], cache[1], cache[2], sorted_grid, cache[4], cache[5])
+                    self._prefilter_cache = (cache[0], cache[1], cache[2], sorted_grid, cache[4])
             return sorted_grid
 
         def _analyze_bounds() -> LogNegativeBounds:
@@ -879,8 +883,17 @@ class GPUEngine:
         else:
             bounds, base_bounds = resolve_bounds_detailed(settings.process, _analyze_bounds)
             anchor_bounds = luma_source_bounds(settings.process, base_bounds)
-        if prefiltered is not None and not transfer:
-            density_above_base_value = density_above_base(base_log, bounds, prefiltered)
+        if prefiltered is not None and readback_metrics and not transfer and (density_above_base_value is None or needs_bounds_analysis):
+            # Only a preview reads the densities, like the anchor's readback_metrics gate. The base
+            # is a property of the source: read off the raw frame once per source, or per render
+            # on a pass with no source identity (the tiled reference pass).
+            if analysis_source_hash is None:
+                base_log = measure_base_log(img)
+            else:
+                if self._base_cache is None or self._base_cache[0] != analysis_source_hash:
+                    self._base_cache = (analysis_source_hash, measure_base_log(img))
+                base_log = self._base_cache[1]
+            density_above_base_value = density_above_base(base_log, bounds, prefiltered, unmix_m)
 
         shadow_refs = shadow_refs_override
         if needs_refs and prefiltered is not None:
