@@ -29,6 +29,7 @@ from negpy.features.exposure.normalization import (
     LogNegativeBounds,
     analyze_log_exposure_bounds_from_log,
     blend_neutral_axis,
+    density_above_base,
     luma_source_bounds,
     luminance_density_range,
     measure_anchor_from_log,
@@ -53,7 +54,8 @@ from negpy.kernel.image.logic import get_luminance
 
 class NormalizationProcessor:
     """
-    Converts linear RAW to normalized log-density.
+    Converts linear RAW to normalized log-density. `context.metrics["base_log"]`, the clear
+    base the engine reads once per source, feeds `density_above_base`; absent, that metric is None.
     """
 
     def __init__(self, config: ProcessConfig):
@@ -128,6 +130,7 @@ class NormalizationProcessor:
         pre_trim_bounds = bounds
 
         context.metrics["norm_density_range"] = luminance_density_range(bounds)
+        context.metrics["density_above_base"] = density_above_base(context.metrics.get("base_log"), pre_trim_bounds, prefiltered, unmix)
 
         if context.process_mode == ProcessMode.C41:
             cached_ref_buffer = context.metrics.get("shadow_refs_buffer_val")

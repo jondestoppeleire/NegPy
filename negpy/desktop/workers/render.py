@@ -128,6 +128,9 @@ class RenderTask:
     gain_slices: tuple = ()
     # EXIF orientation the decode baked into `buffer`, for the flat-field gain to take first.
     source_orientation: int = 1
+    # The roll's clear film base set with the Film Base tool, per-channel log10 transmittance;
+    # None lets the rebate reader stand in.
+    film_base: Optional[tuple] = None
 
 
 @dataclass(frozen=True)
@@ -394,6 +397,7 @@ class RenderWorker(QObject):
                 crop_preview_full=task.crop_preview_full,
                 cam_xyz=task.cam_xyz,
                 camera_wb=task.camera_wb,
+                film_base=task.film_base,
                 gain_slices=task.gain_slices + ((n, task.split_x, None, task.gutter_thickness, task.split_axis),),
                 source_orientation=task.source_orientation,
             )
@@ -436,6 +440,7 @@ class RenderWorker(QObject):
                     camera_wb=task.camera_wb,
                     gain_slices=task.gain_slices,
                     source_orientation=task.source_orientation,
+                    film_base=task.film_base,
                 )
 
             # CPU renders have no in-shader histogram; bin the float output here.

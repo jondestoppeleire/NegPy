@@ -31,7 +31,9 @@ from negpy.features.exposure.normalization import (
     geometry_kwargs,
     luma_source_bounds,
     normalized_roi,
+    density_above_base,
     luminance_density_range,
+    measure_base_log,
     measure_anchor_from_log,
     measure_clip_fractions,
     measure_neutral_axis_from_log,
@@ -205,15 +207,16 @@ def _keystone_inverse_bytes(converge_v: float, converge_h: float) -> bytes:
     return struct.pack("ffff", m[0, 0], m[0, 1], m[0, 2], m[1, 0]) + struct.pack("ffff", m[1, 1], m[1, 2], m[2, 0], m[2, 1])
 
 
-def _analysis_cache_key(settings: WorkspaceConfig, analysis_source_hash: str) -> tuple:
+def _analysis_cache_key(settings: WorkspaceConfig, analysis_source_hash: str, film_base: Optional[tuple] = None) -> tuple:
     """Identity of the auto-exposure analysis: only the fields the meter reads, including every geometry field that moves
     which pixels land in the metered region. White/black point offsets and trims apply downstream as uniforms and must not
-    invalidate it."""
+    invalidate it. The roll's film base is in it because the cached densities are read above it."""
     e = settings.exposure
     p = settings.process
     g = settings.geometry
     return (
         analysis_source_hash,
+        film_base,
         p.process_mode,
         p.analysis_buffer,
         p.analysis_rect,
@@ -248,11 +251,11 @@ def _analysis_cache_key(settings: WorkspaceConfig, analysis_source_hash: str) ->
     )
 
 
-def _fill_analysis_overrides(cache, key, bounds, refs, anchor, textural, neutral, shadow, highlight):
+def _fill_analysis_overrides(cache, key, bounds, refs, anchor, textural, neutral, shadow, highlight, density=None):
     """Fill the None overrides from the cache when its key matches; caller overrides win."""
     if cache is None or cache[0] != key:
-        return bounds, refs, anchor, textural, neutral, shadow, highlight
-    _, cb, cr, ca, ct, cn, cs, ch = cache
+        return bounds, refs, anchor, textural, neutral, shadow, highlight, density
+    _, cb, cr, ca, ct, cn, cs, ch, cd = cache
     return (
         bounds if bounds is not None else cb,
         refs if refs is not None else cr,
@@ -261,15 +264,16 @@ def _fill_analysis_overrides(cache, key, bounds, refs, anchor, textural, neutral
         neutral if neutral is not None else cn,
         shadow if shadow is not None else cs,
         highlight if highlight is not None else ch,
+        density if density is not None else cd,
     )
 
 
-def _update_analysis_cache(cache, key, bounds, refs, anchor, textural, neutral, shadow, highlight):
+def _update_analysis_cache(cache, key, bounds, refs, anchor, textural, neutral, shadow, highlight, density=None):
     """Store the resolved analysis under key, merging (a frame may compute only a subset)."""
     if cache is None or cache[0] != key:
-        cb = cr = ca = ct = cn = cs = ch = None
+        cb = cr = ca = ct = cn = cs = ch = cd = None
     else:
-        _, cb, cr, ca, ct, cn, cs, ch = cache
+        _, cb, cr, ca, ct, cn, cs, ch, cd = cache
     return (
         key,
         bounds if bounds is not None else cb,
@@ -279,6 +283,7 @@ def _update_analysis_cache(cache, key, bounds, refs, anchor, textural, neutral, 
         neutral if neutral is not None else cn,
         shadow if shadow is not None else cs,
         highlight if highlight is not None else ch,
+        density if density is not None else cd,
     )
 
 
@@ -371,6 +376,8 @@ class GPUEngine:
         self._clip_cache: Optional[tuple] = None
         # (key, prefiltered grid, clip fractions), keyed without the clip sliders.
         self._prefilter_cache: Optional[tuple] = None
+        # The clear base, read off the raw source once per source; every edit reuses it.
+        self._base_cache: Optional[tuple] = None
         self._last_settings: Optional[WorkspaceConfig] = None
         self._last_targets_rev: int = -1
         self._last_scale_factor: float = 1.0
@@ -635,6 +642,7 @@ class GPUEngine:
         cam_xyz: Optional[list] = None,
         camera_wb: Optional[list] = None,
         contrast_mask_override: Optional[Tuple[np.ndarray, float, Tuple[int, int, int, int]]] = None,
+        film_base: Optional[tuple] = None,
         sabattier_sigma_override: Optional[float] = None,
         diffusion_override: Optional[Tuple[np.ndarray, Tuple[int, int, int, int]]] = None,
         # Crop tool preview: toning and finish span the whole rotated frame, with no border or
@@ -722,8 +730,9 @@ class GPUEngine:
         # Reuse the per-source meter across creative-slider previews: fill any missing
         # override from the cache so the needs_* gates below skip the analysis entirely.
         analysis_key = None
+        density_above_base_value = None  # (Dmin, Dmed, Dmax) above the clear base; the cache keeps it across skipped analyses
         if analysis_source_hash is not None and not tiling_mode:
-            analysis_key = _analysis_cache_key(settings, analysis_source_hash)
+            analysis_key = _analysis_cache_key(settings, analysis_source_hash, film_base)
             (
                 bounds_override,
                 shadow_refs_override,
@@ -732,6 +741,7 @@ class GPUEngine:
                 neutral_axis_override,
                 shadow_point_override,
                 highlight_point_override,
+                density_above_base_value,
             ) = _fill_analysis_overrides(
                 self._analysis_cache,
                 analysis_key,
@@ -742,6 +752,7 @@ class GPUEngine:
                 neutral_axis_override,
                 shadow_point_override,
                 highlight_point_override,
+                None,
             )
 
         analysis_t0 = time.perf_counter()
@@ -771,7 +782,21 @@ class GPUEngine:
         # The transparency curve reads working space, so its meter must too: the same
         # camera matrix TransparencyBaseProcessor applies, on the grid.
         cam_m = camera_to_working_matrix(cam_xyz, camera_wb if should_fold_camera_wb(settings.process) else None) if transfer else None
-        if needs_bounds_analysis or needs_refs or needs_axis or needs_anchor or needs_textural or needs_shadow or needs_highlight:
+        # A drag renders without metrics and caches no densities; the release that reads them
+        # back re-runs the grid once so the cache fills.
+        # A source with no base is known as such, so it never re-enters the grid for it.
+        base_known_empty = self._base_cache is not None and self._base_cache[0] == analysis_source_hash and self._base_cache[1] is None
+        needs_density = readback_metrics and not tiling_mode and not transfer and density_above_base_value is None and not base_known_empty
+        if (
+            needs_bounds_analysis
+            or needs_refs
+            or needs_axis
+            or needs_anchor
+            or needs_textural
+            or needs_shadow
+            or needs_highlight
+            or needs_density
+        ):
             # Keyed without the clip sliders: a clip drag reuses the grid and
             # re-runs only the percentile analysis.
             p = settings.process
@@ -860,6 +885,21 @@ class GPUEngine:
         else:
             bounds, base_bounds = resolve_bounds_detailed(settings.process, _analyze_bounds)
             anchor_bounds = luma_source_bounds(settings.process, base_bounds)
+        if prefiltered is not None and readback_metrics and not transfer and (density_above_base_value is None or needs_bounds_analysis):
+            # Only a preview reads the densities, like the anchor's readback_metrics gate. A base
+            # the user set on the roll wins; else the rebate reader's, a property of the source
+            # read off the raw frame once per source, or per render on a pass with no source
+            # identity (the tiled reference pass).
+            if film_base is not None:
+                density_above_base_value = density_above_base(tuple(film_base), bounds, prefiltered, unmix_m)
+            else:
+                if analysis_source_hash is None:
+                    base_log = measure_base_log(img)
+                else:
+                    if self._base_cache is None or self._base_cache[0] != analysis_source_hash:
+                        self._base_cache = (analysis_source_hash, measure_base_log(img))
+                    base_log = self._base_cache[1]
+                density_above_base_value = density_above_base(base_log, bounds, prefiltered, unmix_m)
 
         shadow_refs = shadow_refs_override
         if needs_refs and prefiltered is not None:
@@ -911,6 +951,7 @@ class GPUEngine:
                 neutral_axis_refs,
                 shadow_point,
                 highlight_point,
+                density_above_base_value,
             )
 
         # Same helper, same pre-geometry array as the CPU engine, so the two mask alike.
@@ -1579,6 +1620,8 @@ class GPUEngine:
             "final_bounds": final_bounds,
             "log_bounds_base": base_bounds,
             "norm_density_range": luminance_density_range(bounds),
+            "density_above_base": density_above_base_value,
+            "base_source": "picked" if film_base is not None else "read",
             "metered_anchor": metered_anchor,
             "contrast_mask_centre": mask_centre,
             "textural_range": textural_range,
@@ -2577,6 +2620,7 @@ class GPUEngine:
         analysis_source_hash: Optional[str] = None,
         memory_bounded: bool = False,
         render_size_ref: Optional[float] = None,
+        film_base: Optional[tuple] = None,
     ) -> Tuple[np.ndarray, Dict[str, Any]]:
         """High-level processing entry point with automatic tiling."""
         self._init_resources()
@@ -2592,6 +2636,7 @@ class GPUEngine:
                 readback_metrics=readback_metrics,
                 memory_bounded=memory_bounded,
                 render_size_ref=render_size_ref,
+                film_base=film_base,
             )
         tex_final, metrics = self.process_to_texture(
             img,
@@ -2604,6 +2649,7 @@ class GPUEngine:
             source_hash=source_hash,
             analysis_source_hash=analysis_source_hash,
             render_size_ref=render_size_ref,
+            film_base=film_base,
         )
         return self._readback_downsampled(tex_final), metrics
 
@@ -2615,6 +2661,7 @@ class GPUEngine:
         bounds_override: Optional[Any] = None,
         cam_xyz: Optional[list] = None,
         camera_wb: Optional[list] = None,
+        film_base: Optional[tuple] = None,
         readback_metrics: bool = True,
         memory_bounded: bool = False,
         render_size_ref: Optional[float] = None,
@@ -2680,6 +2727,7 @@ class GPUEngine:
             camera_wb=camera_wb,
             readback_metrics=readback_metrics,
             apply_layout=False,
+            film_base=film_base,
         )
 
         global_cdfs = self._readback_clahe_cdf()

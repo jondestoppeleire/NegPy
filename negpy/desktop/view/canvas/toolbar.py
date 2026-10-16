@@ -196,6 +196,7 @@ _TOOL_ROWS: dict[ToolMode, tuple[str, str, str]] = {
     ToolMode.LOCAL_OVAL: ("Oval Mask", "Drag out an oval", ""),
     ToolMode.LOCAL_GRADIENT: ("Card Edge", "Drag from the full-exposure edge to where it fades out", ""),
     ToolMode.ANALYSIS_DRAW: ("Draw Region", "Drag the area the meters read", ""),
+    ToolMode.FILM_BASE: ("Film Base", "Click the clear rebate to set the roll's film base", ""),
     ToolMode.STRAIGHTEN: ("Straighten", "Draw a line along a horizon or an edge to level the frame", _FINE_ROTATION),
     ToolMode.KEYSTONE_LINES: (
         "Keystone Lines",
@@ -215,6 +216,7 @@ _CANVAS_TOOLS: tuple[tuple[ToolMode, str, str] | str, ...] = (
     (ToolMode.KEYSTONE_LINES, "keystone_lines", "controls_panel.geometry_sidebar.keystone_lines_btn"),
     "Metering",
     (ToolMode.ANALYSIS_DRAW, "analysis_draw", "controls_panel.process_sidebar.analysis_region_btn"),
+    (ToolMode.FILM_BASE, "film_base", "controls_panel.process_sidebar.film_base_btn"),
     "Filtration",
     (ToolMode.WB_PICK, "pick_wb", "controls_panel.color_sidebar.pick_wb_btn"),
     "Dodge & Burn",

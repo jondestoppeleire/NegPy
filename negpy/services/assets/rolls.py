@@ -869,6 +869,26 @@ def set_roll_normalization(
     _write(repo, store)
 
 
+def roll_film_base(repo: Any, roll_id: Optional[str]) -> Optional[tuple]:
+    """The clear film base the user set on the roll with the Film Base tool, as per-channel
+    raw log10 transmittance (every render unmixes it like the rebate reader's), or None."""
+    entry = roll_for_id(repo, roll_id) if roll_id else None
+    saved = entry.get("film_base") if entry else None
+    return tuple(float(v) for v in saved) if saved else None
+
+
+def set_roll_film_base(repo: Any, roll_id: str, base_log: Optional[tuple]) -> bool:
+    """Records the roll's clear film base in raw log space; None clears it. False for an
+    unknown roll id."""
+    store = _read(repo)
+    entry = store.get(roll_id)
+    if entry is None:
+        return False
+    entry["film_base"] = None if base_log is None else [float(v) for v in base_log]
+    _write(repo, store)
+    return True
+
+
 def roll_scenes(repo: Any, roll_id: Optional[str]) -> List[tuple]:
     """The roll's scenes as ``(scene_id, entry)`` pairs, in creation order: a scene's
     ordinal is its 1-based position here."""

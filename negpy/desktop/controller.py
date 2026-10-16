@@ -446,6 +446,10 @@ def _stamp_render_serial(last_metrics: Dict[str, Any], metrics: Dict[str, Any]) 
         last_metrics["render_serial"] = next(_RENDER_SERIALS)
 
 
+#: A Film Base patch whose log luminance varies more than this across its pixels is not flat film.
+_FILM_BASE_FLAT_DECADES = 0.02
+
+
 class AppController(QObject):
     """
     Main application orchestrator.
@@ -887,6 +891,14 @@ class AppController(QObject):
     def _sample_normalized_log(self, nx: float, ny: float, radius: int = 0) -> Optional[Tuple[float, float, float]]:
         """Mean of the (2·radius+1)² normalized-log patch at content-normalized nx,ny;
         None when no frame is probed. Shared by the hover probe (1×1) and zone pins."""
+        patch = self._sample_normalized_patch(nx, ny, radius)
+        if patch is None:
+            return None
+        val = patch.mean(axis=0)
+        return (float(val[0]), float(val[1]), float(val[2]))
+
+    def _sample_normalized_patch(self, nx: float, ny: float, radius: int = 0) -> Optional[np.ndarray]:
+        """The (n, 3) normalized-log pixels of the patch at content-normalized nx,ny, or None."""
         from negpy.features.exposure.densitometer import map_display_to_norm
 
         metrics = self.state.last_metrics
@@ -920,13 +932,11 @@ class AppController(QObject):
         y0, y1 = max(0, y - radius), min(norm_h, y + radius + 1)
         try:
             if isinstance(nl, np.ndarray):
-                val = nl[y0:y1, x0:x1].reshape(-1, nl.shape[2]).mean(axis=0)
-            else:
-                region = np.asarray(nl.readback_region(x0, y0, x1 - x0, y1 - y0), dtype=np.float32)
-                val = region[..., :3].reshape(-1, 3).mean(axis=0)
+                return np.asarray(nl[y0:y1, x0:x1], dtype=np.float32).reshape(-1, nl.shape[2])[:, :3]
+            region = np.asarray(nl.readback_region(x0, y0, x1 - x0, y1 - y0), dtype=np.float32)
+            return region[..., :3].reshape(-1, 3)
         except Exception:
             return None
-        return (float(val[0]), float(val[1]), float(val[2]))
 
     def set_status(self, message: str, timeout: int = 0, kind: str = "info") -> None:
         """kind: "info" | "warning" | "error" — the HUD colours the toast by it."""
@@ -3113,6 +3123,8 @@ class AppController(QObject):
             self._handle_scratch_line_pick(nx, ny)
         elif self.state.active_tool == ToolMode.ZONE_PLACE:
             self._handle_zone_pin(nx, ny)
+        elif self.state.active_tool == ToolMode.FILM_BASE:
+            self._handle_film_base_pick(nx, ny)
 
     def set_active_tool(self, mode: ToolMode) -> None:
         if mode != ToolMode.NONE and self._diptych_blocks_canvas():
@@ -3318,6 +3330,53 @@ class AppController(QObject):
             self.zone_arm_changed.emit(None)
         if not self.state.zone_pins and self.state.active_tool == ToolMode.ZONE_PLACE:
             self.set_active_tool(ToolMode.NONE)
+
+    def _handle_film_base_pick(self, nx: float, ny: float) -> None:
+        """Set the roll's clear film base from the patch under the click, as a densitometer is
+        zeroed on the rebate. The patch is read back through the frame's window and its crosstalk
+        unmix, so the roll keeps a raw base that every render unmixes like the rebate reader's.
+        One click: the tool disarms, and leaving it re-renders the roll's frame above the base."""
+        from negpy.features.exposure.normalization import effective_crosstalk_matrix, log_from_val
+
+        roll_id = self._active_frame_roll()
+        if roll_id is None:
+            self.set_status("Film Base needs a roll: this frame is in none", 4000, "warning")
+            self.set_active_tool(ToolMode.NONE)
+            return
+        bounds = self.state.last_metrics.get("final_bounds") or self.state.last_metrics.get("log_bounds")
+        patch = self._sample_normalized_patch(nx, ny, radius=4)
+        if bounds is None or patch is None:
+            self.set_status("Film Base: click the clear rebate once the frame has rendered", 3000, "warning")
+            return
+        logs = np.asarray([log_from_val(tuple(px), bounds) for px in patch], dtype=np.float64)
+        if float(logs.mean(axis=1).std()) > _FILM_BASE_FLAT_DECADES:
+            # Edge print, a perforation's edge or bare light inside the patch: not the base.
+            self.set_status("Film Base: that spot is not flat film; click the clear rebate", 4000, "warning")
+            return
+        base = logs.mean(axis=0)
+        unmix = effective_crosstalk_matrix(self.state.config.process, self.state.config.process.process_mode)
+        if unmix is not None:
+            try:
+                base = np.linalg.solve(np.asarray(unmix, dtype=np.float64), base)
+            except np.linalg.LinAlgError:
+                pass  # a singular matrix never reaches a render; the unmixed value is the best there is
+        if rolls.set_roll_film_base(self.session.repo, roll_id, tuple(float(v) for v in base)):
+            self.set_status("Film base set for the roll", 3000)
+        else:
+            self.set_status("Film Base: this frame's roll is not in the library", 4000, "warning")
+        self.set_active_tool(ToolMode.NONE)  # leaving the uncropped tool view re-renders
+
+    def roll_film_base(self) -> Optional[tuple]:
+        """The active frame's roll's clear film base, or None."""
+        return rolls.roll_film_base(self.session.repo, self._active_frame_roll())
+
+    def clear_roll_film_base(self) -> None:
+        roll_id = self._active_frame_roll()
+        if roll_id is None:
+            return
+        rolls.set_roll_film_base(self.session.repo, roll_id, None)
+        self.tool_sync_requested.emit()
+        self.request_render()
 
     def _handle_zone_pin(self, nx: float, ny: float) -> None:
         """Armed: the pin takes the zone picked on the strip. Unarmed: it takes the zone
@@ -7042,6 +7101,7 @@ class AppController(QObject):
             split_axis=str(dip[0].get("split_axis") or "x") if dip is not None else "x",
             gain_slices=self._preview_gain_slices(dip),
             source_orientation=self.state.preview_orientation,
+            film_base=self.roll_film_base(),
         )
 
         self._cancel_neighbor_prefetch()
