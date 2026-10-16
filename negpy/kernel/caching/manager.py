@@ -1,4 +1,4 @@
-from typing import Any, Optional
+from typing import Optional, Tuple
 from negpy.kernel.caching.logic import CacheEntry
 
 
@@ -17,7 +17,7 @@ class PipelineCache:
     lab: Optional[CacheEntry] = None
     # The clear base, read once per source: every edit reuses it.
     base_measured: bool = False
-    base_log: Any = None
+    base_log: Optional[Tuple[float, float, float]] = None
 
     def clear(self) -> None:
         self.base = None

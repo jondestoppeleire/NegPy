@@ -816,6 +816,7 @@ class ImageProcessor:
             cam_xyz=cam_xyz,
             camera_wb=camera_wb,
             cache_stages=cache_stages,
+            readback_metrics=readback_metrics,
         )
         if metrics:
             context.metrics.update(metrics)
@@ -1857,6 +1858,7 @@ class ImageProcessor:
                     render_size_ref=float(target_long_px),
                     prefer_gpu=False,
                     wants_uv_grid=False,
+                    readback_metrics=False,
                     skip_flatfield=True,  # f32_buffer already flat-fielded by _load_source_f32
                     cam_xyz=self._cam_xyz_by_path.get(file_path, (None, None))[0],
                     camera_wb=self._cam_xyz_by_path.get(file_path, (None, None))[1],

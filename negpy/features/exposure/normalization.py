@@ -6,8 +6,8 @@ import cv2
 import numpy as np
 from numba import njit  # type: ignore
 
-from negpy.domain.types import LUMA_B, LUMA_G, LUMA_R, ImageBuffer
-from negpy.features.geometry.logic import _normalize_detection_input, film_and_picture, rebate_mask
+from negpy.domain.types import LUMA_B, LUMA_G, LUMA_R, ROI, ImageBuffer
+from negpy.features.geometry.logic import AUTOCROP_DETECT_RES, _normalize_detection_input, film_and_picture
 from negpy.features.process.models import ProcessMode
 from negpy.kernel.image.validation import ensure_image
 
@@ -471,33 +471,40 @@ def measure_neutral_axis(
     return measure_neutral_axis_from_log(img_log, bounds, roi, analysis_buffer)
 
 
-#: The base needs the film box roughly, not to the pixel, so the detector runs at half the
-#: crop's resolution. The ring must be about two base blocks wide at this size.
-_BASE_DETECT_RES = 900
-
-
-#: The base is read from flat blocks of the rebate ring, grouped by brightness.
-_BASE_BLOCK = 8  # block size at the base detector's resolution
+#: The clear base is read from flat blocks in the film box's margin, grouped by brightness, the
+#: way negdensity.py reads it. The film box comes from the crop's detector at its own resolution,
+#: whose edge walk is calibrated there.
+_BASE_MARGIN = 0.15  # the band inside the film box, per side, that holds rebate, perforations and picture edge
+_BASE_BLOCK = 8  # block size at detection resolution
 _FLAT_CV = 0.03  # a block whose std over mean is under this is flat film, not edge print or a gradient
 _GROUP_GAP = 0.04  # decades between neighbouring blocks that split two brightness groups
-_OPEN_LIGHT_GAP = 0.08  # decades a brighter group must clear the film below it to be bare light
+_OPEN_LIGHT_GAP = 0.08  # decades a brighter, smaller group must clear the base to be bare light
 _MIN_BASE_BLOCKS = 5
 _CLIP_LEVEL = 0.98  # a block with a pixel at sensor white is light the scan clipped, never film
 
 
-def _base_blocks(det: np.ndarray, ring: np.ndarray) -> Optional[np.ndarray]:
-    """Per-channel means of the ring's flat blocks that are clear base, or None without enough.
+def _margin_band(shape: Tuple[int, int], film_roi: ROI) -> np.ndarray:
+    """Inside the film box, outside its central core: where the rebate and the perforations lie."""
+    fy1, fy2, fx1, fx2 = film_roi
+    band = np.zeros(shape, bool)
+    band[fy1:fy2, fx1:fx2] = True
+    my, mx = int((fy2 - fy1) * _BASE_MARGIN), int((fx2 - fx1) * _BASE_MARGIN)
+    band[fy1 + my : fy2 - my, fx1 + mx : fx2 - mx] = False
+    return band
 
-    Flat blocks are grouped by brightness. Bare light through a perforation or a gap at the
-    film's edge is flatter and brighter than the base, so a group that clears the film below
-    it is light, not film; the largest group left is the base."""
+
+def _base_blocks(det: np.ndarray, band: np.ndarray) -> Optional[np.ndarray]:
+    """Per-channel means of the band's flat blocks that are clear base, or None without enough.
+
+    Flat blocks are grouped by brightness; the largest group is the base. A smaller group
+    well above it is bare light through a perforation or past the film's edge. A flat
+    picture region in the band that outnumbers the base is taken for it."""
     b = _BASE_BLOCK
     hb, wb = det.shape[0] // b, det.shape[1] // b
     blocks = det[: hb * b, : wb * b].reshape(hb, b, wb, b, 3)
     mean = blocks.mean(axis=(1, 3))
     lum = mean.mean(axis=2)
-    # Half a block in the ring is enough: a block straddling film and picture is not flat.
-    inside = ring[: hb * b, : wb * b].reshape(hb, b, wb, b).mean(axis=(1, 3)) >= 0.5
+    inside = band[: hb * b, : wb * b].reshape(hb, b, wb, b).mean(axis=(1, 3)) >= 0.9
     unclipped = blocks.max(axis=(1, 3, 4)) < _CLIP_LEVEL
     flat = inside & unclipped & (lum > 1e-4) & (blocks.std(axis=(1, 3)).mean(axis=2) / np.maximum(lum, 1e-6) < _FLAT_CV)
     if int(flat.sum()) < _MIN_BASE_BLOCKS:
@@ -515,24 +522,20 @@ def _base_blocks(det: np.ndarray, ring: np.ndarray) -> Optional[np.ndarray]:
     big = [g for g in groups if len(g) >= min_n]
     if not big:
         return None
-    if len(big) > 1:
-        brightest, rest = big[0], big[1:]
-        film = max(rest, key=len)
-        if float(np.median(log_lum[brightest]) - np.median(log_lum[film])) > _OPEN_LIGHT_GAP:
-            return cand[film]
     return cand[max(big, key=len)]
 
 
 def measure_base_log(image: ImageBuffer) -> Optional[Tuple[float, float, float]]:
-    """Per-channel log10 transmittance of the clear base: the median of the rebate ring's flat
-    base blocks on the uncropped frame. None when the scan shows no film box, the ring holds too
-    few flat blocks, or the base is darker than the picture, because a negative's base is its
-    thinnest film."""
-    det, _ = _normalize_detection_input(image, _BASE_DETECT_RES)
+    """Per-channel log10 transmittance of the clear base: the median of the flat base blocks in
+    the film box's margin on the uncropped frame. None when the scan shows no film box, the
+    margin holds too few flat blocks, or the base is darker than the picture, because a
+    negative's base is its thinnest film."""
+    det, _ = _normalize_detection_input(image, AUTOCROP_DETECT_RES)
     det = np.ascontiguousarray(det, dtype=np.float32)
     film_roi, gate = film_and_picture(det)
-    ring = rebate_mask(det.shape[:2], film_roi, gate)
-    base = _base_blocks(det, ring)
+    if film_roi is None:
+        return None
+    base = _base_blocks(det, _margin_band(det.shape[:2], film_roi))
     if base is None:
         return None
     gy1, gy2, gx1, gx2 = gate

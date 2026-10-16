@@ -163,9 +163,10 @@ class DarkroomEngine:
         distortion_k1 = settings.geometry.distortion_k1
 
         def run_base(img_in: ImageBuffer, ctx: PipelineContext) -> ImageBuffer:
-            # Only a negative's preview reads the densities; an export runs with stage caching
-            # off. The base is a property of the source, read once per source before geometry.
-            if ctx.cache_stages and render_path(settings.process) is RenderPath.PRINT:
+            # Only a negative's preview that reads its metrics back shows the densities; an
+            # export runs with stage caching off. The base is a property of the source, read
+            # once per source before geometry.
+            if ctx.cache_stages and ctx.readback_metrics and render_path(settings.process) is RenderPath.PRINT:
                 if not self.cache.base_measured:
                     self.cache.base_log = measure_base_log(img_in)
                     self.cache.base_measured = True

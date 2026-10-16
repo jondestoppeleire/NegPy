@@ -250,7 +250,7 @@ def _analysis_cache_key(settings: WorkspaceConfig, analysis_source_hash: str) ->
     )
 
 
-def _fill_analysis_overrides(cache, key, bounds, refs, anchor, textural, neutral, shadow, highlight, density):
+def _fill_analysis_overrides(cache, key, bounds, refs, anchor, textural, neutral, shadow, highlight, density=None):
     """Fill the None overrides from the cache when its key matches; caller overrides win."""
     if cache is None or cache[0] != key:
         return bounds, refs, anchor, textural, neutral, shadow, highlight, density
@@ -267,7 +267,7 @@ def _fill_analysis_overrides(cache, key, bounds, refs, anchor, textural, neutral
     )
 
 
-def _update_analysis_cache(cache, key, bounds, refs, anchor, textural, neutral, shadow, highlight, density):
+def _update_analysis_cache(cache, key, bounds, refs, anchor, textural, neutral, shadow, highlight, density=None):
     """Store the resolved analysis under key, merging (a frame may compute only a subset)."""
     if cache is None or cache[0] != key:
         cb = cr = ca = ct = cn = cs = ch = cd = None
