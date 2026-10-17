@@ -7,7 +7,7 @@ at app launch.
 
 import sys
 from dataclasses import replace
-from unittest.mock import MagicMock
+from unittest.mock import ANY, MagicMock
 
 import pytest
 from PyQt6.QtWidgets import QApplication
@@ -219,7 +219,7 @@ def test_cancelled_calibration_restores_scan_target_and_gates():
     w.calib_window.set_progress(0.67)
     w._lv_timer.start()
     w._apply_gating()
-    assert not w.preset_new_btn.isEnabled()
+    assert not w.preset_calibrate_action.isEnabled()
 
     w._on_cancelled()
 
@@ -229,7 +229,7 @@ def test_cancelled_calibration_restores_scan_target_and_gates():
     assert "canceled" in w.calib_window.status.text().lower()
     assert not w._lv_timer.isActive()
     w.controller.stop_live_view.assert_called_once_with()
-    assert w.preset_new_btn.isEnabled()
+    assert w.preset_calibrate_action.isEnabled()
     assert w.calib_window.calibrate_btn.isEnabled()
 
 
@@ -395,9 +395,9 @@ def test_gate_hint_lists_missing_requirements():
 
 def test_new_preset_button_needs_only_camera_and_light():
     w = _sidebar()
-    assert not w.preset_new_btn.isEnabled()
+    assert not w.preset_calibrate_action.isEnabled()
     w._on_poll_status(_poll(usb_ok=True))  # no folder / preset yet
-    assert w.preset_new_btn.isEnabled()  # calibration can create the first preset
+    assert w.preset_calibrate_action.isEnabled()  # calibration can create the first preset
 
 
 def test_magnifier_click_toggles_back_to_full_frame():
@@ -561,7 +561,7 @@ def test_meter_reading_writes_the_shutter_as_a_counted_exposure_write(tmp_path, 
 
     w._on_meter_finished(_reading())
 
-    w.controller.set_camera_setting.assert_called_once_with("shutter", 1)
+    w.controller.set_camera_setting.assert_called_once_with("shutter", 1, "1/60")
     assert w._pending_exposure_writes == 1  # Scan waits for the body's confirmation
     assert "wait for the exposure to reach the camera" in w._missing_requirements()
     assert w.lv_window.shutter_stepper.currentText() == "1/60"
@@ -663,7 +663,7 @@ def test_a_reading_from_a_stopped_stream_writes_nothing(tmp_path, monkeypatch):
     w._on_probe_failed((first, "late", True))  # even a lost camera from the stopped stream stops nothing
     assert w._metering and w.lv_btn.isChecked()
     w._on_probe_finished((second, _reading()))
-    w.controller.set_camera_setting.assert_called_once_with("shutter", 1)
+    w.controller.set_camera_setting.assert_called_once_with("shutter", 1, "1/60")
 
 
 def test_camera_only_meters_on_the_bodys_whole_ladder_and_lets_the_probe_decide(tmp_path, monkeypatch):
@@ -699,14 +699,10 @@ def test_meter_past_the_fastest_rung_asks_for_aperture_or_iso(tmp_path, monkeypa
     assert "close the aperture or lower the ISO" in w.lv_window.status.text()
 
 
-def test_meter_is_refused_while_busy_locked_unparseable_or_without_a_ladder(tmp_path, monkeypatch):
+def test_meter_is_refused_while_busy_unparseable_or_without_a_ladder(tmp_path, monkeypatch):
     import json
 
     w, p = _metering_sidebar(tmp_path, monkeypatch)
-    w._rgb_mode = True
-    w._settings = replace(w._settings, white_mode=False)  # a calibrated RGB preset owns its exposure
-    w._on_meter()
-    w._settings = replace(w._settings, white_mode=True)
     w._scanning = True
     w._on_meter()
     w._scanning = False
@@ -786,7 +782,7 @@ def test_camera_settings_populate_and_set(tmp_path, monkeypatch):
     w.lv_window.iso_stepper.setCurrentIndex(w.lv_window.iso_stepper.findData(100))
     w._on_camera_setting("iso", w.lv_window.iso_stepper)
     w._flush_camera_settings()
-    w.controller.set_camera_setting.assert_called_with("iso", 100)
+    w.controller.set_camera_setting.assert_called_with("iso", 100, ANY)
 
 
 def test_camera_setting_writes_are_debounced_to_the_final_value(tmp_path, monkeypatch):
@@ -815,7 +811,7 @@ def test_camera_setting_writes_are_debounced_to_the_final_value(tmp_path, monkey
         w._on_camera_setting("shutter", st)
     w.controller.set_camera_setting.assert_not_called()  # nothing written until the user pauses
     w._flush_camera_settings()
-    w.controller.set_camera_setting.assert_called_once_with("shutter", 2)  # only the final value
+    w.controller.set_camera_setting.assert_called_once_with("shutter", 2, ANY)  # only the final value
 
 
 def test_setting_stepper_steps_and_clamps():
@@ -1046,11 +1042,11 @@ def test_scan_is_blocked_while_a_calibration_runs():
 def test_calibration_is_blocked_while_a_scan_runs():
     w = _sidebar()
     w._on_poll_status(_poll(usb_ok=True))
-    assert w.preset_new_btn.isEnabled()  # camera + light present
+    assert w.preset_calibrate_action.isEnabled()  # camera + light present
     w.set_scanning(True)
-    assert not w.preset_new_btn.isEnabled()
+    assert not w.preset_calibrate_action.isEnabled()
     w.set_scanning(False)
-    assert w.preset_new_btn.isEnabled()
+    assert w.preset_calibrate_action.isEnabled()
 
 
 def test_calibrate_button_in_an_open_popup_is_refused_during_a_scan():
@@ -1146,21 +1142,21 @@ def test_calibration_steppers_are_populated_and_drive_the_camera(tmp_path, monke
     w.calib_window.iso_stepper.setCurrentIndex(w.calib_window.iso_stepper.findData(200))
     w._on_camera_setting("iso", w.calib_window.iso_stepper)
     w._flush_camera_settings()
-    w.controller.set_camera_setting.assert_called_with("iso", 200)  # the calib stepper drives the body
+    w.controller.set_camera_setting.assert_called_with("iso", 200, ANY)  # the calib stepper drives the body
 
 
 def _rgb_preset(**kw):
     return ScanlightPreset(r_level=200, g_level=100, b_level=90, shutter_r="1/5", **kw)
 
 
-def test_rgb_preset_hides_the_scan_live_view_steppers(monkeypatch):
+def test_rgb_preset_keeps_the_scan_live_view_steppers_live(monkeypatch):
     w = _sidebar()  # RGB mode is the default
     monkeypatch.setattr(w._presets, "get", lambda _n: _rgb_preset())
     w.preset_combo.addItem("TestStock", "TestStock")
     idx = w.preset_combo.findData("TestStock")
     w.preset_combo.setCurrentIndex(idx)
     w._on_preset_selected(idx)
-    assert w.lv_window.settings_widget.isHidden()  # exposure is locked to the calibrated preset
+    assert not w.lv_window.settings_widget.isHidden()  # the preset's exposure is live on both surfaces
 
 
 def test_white_preset_keeps_the_scan_live_view_steppers():
@@ -1307,8 +1303,8 @@ def test_applying_an_rgb_preset_drives_the_body_iso_and_aperture(tmp_path, monke
     idx = w.preset_combo.findData("TestStock")
     w.preset_combo.setCurrentIndex(idx)
     w._on_preset_selected(idx)
-    w.controller.set_camera_setting.assert_any_call("iso", 2)  # label "100" → this body's raw
-    w.controller.set_camera_setting.assert_any_call("aperture", 11)  # label "f/11" → raw
+    w.controller.set_camera_setting.assert_any_call("iso", 2, "100")  # label "100" → this body's raw, checked again at the write
+    w.controller.set_camera_setting.assert_any_call("aperture", 11, "f/11")  # label "f/11" → raw
 
 
 def test_applying_rgb_preset_shows_and_stores_the_exposure(monkeypatch):
@@ -1321,7 +1317,7 @@ def test_applying_rgb_preset_shows_and_stores_the_exposure(monkeypatch):
     assert w.iso_stepper.currentText() == "100" and w.aperture_stepper.currentText() == "f/8"  # read-only steppers
     assert w.shutter_stepper.currentText() == "1/5"  # _rgb_preset defaults the shutter to 1/5
     assert w._settings.iso == "100" and w._settings.aperture == "f/8"  # what the scan will force
-    assert not w.iso_stepper.isEnabled()  # a selected preset is a fixed, read-only recipe
+    assert w.iso_stepper.isEnabled()  # the recipe's exposure is live: a step overrides it until the preset is picked again
 
 
 def test_white_preset_clears_the_exposure_fields():
@@ -1335,27 +1331,19 @@ def test_white_preset_clears_the_exposure_fields():
 
 
 def test_manual_preset_option_unlocks_editing():
-    import negpy.desktop.view.sidebar.scanlight as sl
-
     w = _sidebar()
     w._camera_verified = True  # a manual preset needs the camera's exposure choices
-    idx = w.preset_combo.findData(sl._MANUAL_PRESET)
-    w.preset_combo.setCurrentIndex(idx)
-    w._on_preset_selected(idx)
+    w._on_preset_manual()
     assert w._manual_mode
     assert w.r_slider.isEnabled() and w.iso_stepper.isEnabled() and w.shutter_stepper.isEnabled()
     assert w.preset_save_btn.isEnabled()  # the floppy is active only while building a manual preset
 
 
 def test_white_slider_is_locked_off_in_manual_mode():
-    import negpy.desktop.view.sidebar.scanlight as sl
-
     w = _sidebar()
     w._camera_verified = True
     w._set_slider(w.w_slider, 200)  # leftover from a white-light preset
-    midx = w.preset_combo.findData(sl._MANUAL_PRESET)
-    w.preset_combo.setCurrentIndex(midx)
-    w._on_preset_selected(midx)
+    w._on_preset_manual()
     assert w.w_slider.value() == 0 and not w.w_slider.isEnabled()  # RGB + white can't combine on the Scanlight
     w._push_light()
     assert w.controller.set_scanlight_color.call_args[0][3] == 0  # the white LED stays off while building
@@ -1369,7 +1357,7 @@ def test_selecting_a_preset_is_read_only(monkeypatch):
     w.preset_combo.setCurrentIndex(idx)
     w._on_preset_selected(idx)
     assert not w._manual_mode
-    assert not w.r_slider.isEnabled() and not w.iso_stepper.isEnabled()  # no dragging a stored recipe
+    assert not w.r_slider.isEnabled() and w.iso_stepper.isEnabled()  # no dragging a stored recipe's levels; its exposure is live
     assert not w.preset_save_btn.isEnabled()  # floppy greyed out
 
 
@@ -1396,9 +1384,7 @@ def test_manual_save_bakes_the_stepper_values_and_exits(tmp_path, monkeypatch):
     monkeypatch.setattr(w._presets, "get", lambda _n: None)
     monkeypatch.setattr(w, "_reload_presets", lambda **_k: None)
     monkeypatch.setattr(sl.QInputDialog, "getText", lambda *a, **k: ("Homebrew", True))
-    midx = w.preset_combo.findData(sl._MANUAL_PRESET)
-    w.preset_combo.setCurrentIndex(midx)
-    w._on_preset_selected(midx)
+    w._on_preset_manual()
     assert w.iso_stepper.count() == 2  # steppers filled from the body's own choices
     w._on_preset_save()  # the floppy
     assert saved["preset"].iso == "100" and saved["preset"].shutter_r == "1/5" and saved["preset"].aperture == "f/8"
@@ -1423,10 +1409,8 @@ def test_manual_stepper_edits_survive_a_periodic_refresh(tmp_path, monkeypatch):
     monkeypatch.setattr(sl, "default_settings_path", lambda: str(p))
     w = _sidebar()
     w._camera_verified = True
-    midx = w.preset_combo.findData(sl._MANUAL_PRESET)
-    w.preset_combo.setCurrentIndex(midx)
-    w._on_preset_selected(midx)  # one-shot populate: ISO stepper lands on the body's "100"
-    w.iso_stepper.setCurrentIndex(w.iso_stepper.findData(3))  # user steps it to 200
+    w._on_preset_manual()  # one-shot populate: ISO stepper lands on the body's "100"
+    w.iso_stepper._step(1)  # the user steps it to 200 with the arrow
     w._on_sidebar_exposure_changed("iso", w.iso_stepper)
     assert w._settings.iso == "200"
     w._refresh_camera_settings()  # a periodic refresh (body still reports 100 — write not landed / no session)
@@ -1435,27 +1419,16 @@ def test_manual_stepper_edits_survive_a_periodic_refresh(tmp_path, monkeypatch):
 
 
 def test_manual_preset_option_is_disabled_without_a_camera():
-    from PyQt6.QtGui import QStandardItemModel
-
-    import negpy.desktop.view.sidebar.scanlight as sl
-
     w = _sidebar()  # no camera verified by default
-    idx = w.preset_combo.findData(sl._MANUAL_PRESET)
-    model = w.preset_combo.model()
-    assert isinstance(model, QStandardItemModel)
-    assert not model.item(idx).isEnabled()  # greyed — NegPy can't know a missing body's exposure choices
+    assert not w.preset_manual_action.isEnabled()  # greyed — NegPy can't know a missing body's exposure choices
     w._camera_verified = True
     w._apply_gating()
-    assert model.item(idx).isEnabled()  # a verified camera enables it
+    assert w.preset_manual_action.isEnabled()  # a verified camera enables it
 
 
 def test_selecting_manual_without_a_camera_is_refused():
-    import negpy.desktop.view.sidebar.scanlight as sl
-
     w = _sidebar()  # no camera
-    midx = w.preset_combo.findData(sl._MANUAL_PRESET)
-    w.preset_combo.setCurrentIndex(midx)
-    w._on_preset_selected(midx)
+    w._on_preset_manual()
     assert not w._manual_mode  # refused — no body to source valid ISO/shutter/aperture from
     assert w.preset_combo.currentData() is None  # reverted to "— Select preset —"
 
@@ -1977,9 +1950,7 @@ def test_manual_preset_can_be_marked_single_capture(tmp_path, monkeypatch):
     monkeypatch.setattr(w._presets, "get", lambda _n: None)
     monkeypatch.setattr(w, "_reload_presets", lambda **_k: None)
     monkeypatch.setattr(sl.QInputDialog, "getText", lambda *a, **k: ("Homebrew", True))
-    midx = w.preset_combo.findData(sl._MANUAL_PRESET)
-    w.preset_combo.setCurrentIndex(midx)
-    w._on_preset_selected(midx)
+    w._on_preset_manual()
     assert w.capture_btn.isEnabled()
     w.capture_btn.setCurrentIndex(1)
     assert w._settings.single_capture
@@ -2173,3 +2144,192 @@ def test_keep_light_on_shortcut_acts_only_while_the_toggle_shows(hidden):
     manager._build_actions()["scanlight_keep_light_on"]()
 
     assert btn.toggle.called is not hidden
+
+
+def test_meter_under_an_rgb_preset_shoots_the_scan_light_and_overrides_the_recipes_shutter(tmp_path, monkeypatch):
+    w, _ = _metering_sidebar(tmp_path, monkeypatch, cur=1)
+    w._rgb_mode = True
+    w._settings = replace(w._settings, white_mode=False, shutter_r="1/5", shutter_g="1/5", shutter_b="1/5")
+    w.preset_combo.addItem("Stock", "Stock")
+    w.preset_combo.setCurrentIndex(w.preset_combo.findData("Stock"))
+    for slider, level in ((w.r_slider, 212), (w.g_slider, 140), (w.b_slider, 96)):
+        w._set_slider(slider, level)
+
+    w._on_meter()
+
+    assert w.controller.set_scanlight_color.call_args.args[:4] == (212, 140, 96, 0)  # the scan light, not the framing mix
+    assert w.controller.start_exposure_probe.call_args.args[0].medium == "negative"
+    w._on_meter_finished(_reading())
+    assert not w._manual_mode and w.preset_combo.currentData() == "Stock"
+    assert (w._settings.shutter_r, w._settings.shutter_g, w._settings.shutter_b) == ("1/60", "1/60", "1/60")
+    assert w.shutter_stepper.currentText() == "1/60"
+    assert w.lv_window.status.text().endswith("the preset scans at 1/60 until you pick it again")
+    assert w.controller.set_scanlight_color.call_args.args[:4] == (26, 17, 12, 0)  # the framing light is back
+
+
+def test_channel_toggles_shape_scan_and_retake(tmp_path):
+    w = _sidebar()
+    w.output.folder_edit.setText(str(tmp_path))
+    w._camera_verified = w._light_verified = True
+    w.preset_combo.setCurrentIndex(w.preset_combo.findData("Trichrome, Color Negative"))
+    w._on_preset_selected(w.preset_combo.currentIndex())
+    (tmp_path / f"{w.output.roll_name()}_Frame002_R.ARW").write_bytes(b"x")  # frame 2 exists
+
+    w.lv_window.channel_btns["R"].setChecked(False)
+
+    assert w.controller.set_scanlight_color.call_args.args[:3] == (0, 31, 31)  # the framing light shows the selection, dimmed
+    w._start_capture(retake=False)
+    req = w.controller.start_capture.call_args.args[0]
+    assert (req.channels, req.frame_number, req.is_retake) == (("G", "B"), 3, False)  # Scan never touches frame 2
+    w.set_scanning(False)
+    w._start_capture(retake=True)
+    req = w.controller.start_capture.call_args.args[0]
+    assert (req.channels, req.frame_number, req.is_retake) == (("G", "B"), 2, True)
+    w.set_scanning(False)
+    for letter in ("G", "B"):
+        w.lv_window.channel_btns[letter].setChecked(False)
+    w.controller.start_capture.reset_mock()
+    w._start_capture(retake=False)
+    assert not w.controller.start_capture.called  # nothing selected, infrared off
+    assert "select an exposure" in " ".join(w._missing_requirements())
+
+
+def test_an_ir_shutter_the_camera_does_not_offer_falls_back_to_the_cameras(tmp_path, monkeypatch):
+    w, _ = _metering_sidebar(tmp_path, monkeypatch, cur=1)
+    w._light_verified = True
+    w.output.folder_edit.setText(str(tmp_path))
+    w._settings = replace(w._settings, shutter_ir="1/2")  # a label from another body
+
+    w._start_capture(retake=False)
+
+    assert w.controller.start_capture.call_args.args[0].shutter_ir == ""
+    assert "not a step this camera offers" in w.status_strip.message()
+
+
+def test_built_in_trichrome_exposure_is_live(tmp_path, monkeypatch):
+    w, _ = _metering_sidebar(tmp_path, monkeypatch, cur=1)  # the stream JSON holds the body's ladder
+    w._light_verified = True
+    w.output.folder_edit.setText(str(tmp_path))
+    w.preset_combo.setCurrentIndex(w.preset_combo.findData("Trichrome, Color Negative"))
+    w._on_preset_selected(w.preset_combo.currentIndex())
+
+    assert w._free_exposure and w.shutter_stepper.isEnabled() and w.shutter_stepper.currentText() == "1/60"
+    w.shutter_stepper.setCurrentIndex(0)
+    w._on_sidebar_exposure_changed("shutter", w.shutter_stepper)
+    assert w._settings.shutter_r == "1/5"
+    w._start_capture(retake=False)
+    assert w.controller.start_capture.call_args.args[0].shutters == ("1/5", "1/5", "1/5")
+    w.preset_combo.setCurrentIndex(0)
+    w._on_preset_selected(0)
+    assert not w._free_exposure and not w.shutter_stepper.isEnabled()
+
+
+def test_channel_buttons_follow_the_connected_light():
+    w = _sidebar()
+    w._on_poll_status({**_poll(usb_ok=True), "light_has_ir": True})
+    assert w.lv_window.channel_widget.isVisibleTo(w.lv_window)
+    assert w.lv_window.channel_btns["IR"].isVisibleTo(w.lv_window)
+    assert w.lv_window.channel_btns["R"].isVisibleTo(w.lv_window)
+    w.preset_combo.setCurrentIndex(w.preset_combo.findData("White Light, Slide"))
+    w._on_preset_selected(w.preset_combo.currentIndex())
+    assert not w.lv_window.channel_btns["R"].isVisibleTo(w.lv_window)  # a white frame has no channels to pick
+    w.lv_window.channel_btns["IR"].setChecked(True)
+    assert w._settings.infrared and w.ir_toggle.isChecked()  # one Infrared setting, two toggles
+    w._on_poll_status({**_poll(usb_ok=True), "light_has_ir": False})
+    assert not w.lv_window.channel_btns["IR"].isVisibleTo(w.lv_window)
+    w._on_poll_status(_poll(usb_ok=True, light_ok=False))
+    assert not w.lv_window.channel_widget.isVisibleTo(w.lv_window)
+
+
+def test_the_ir_shutter_is_its_own_setting_and_reaches_the_ir_shot(tmp_path, monkeypatch):
+    w, _ = _metering_sidebar(tmp_path, monkeypatch, cur=1)  # the body sits at 1/60
+    w._on_poll_status({**_poll(usb_ok=True), "light_has_ir": True})
+    assert w._ir_exposure_widget.isVisibleTo(w)
+    w._refresh_camera_settings()
+    assert w.ir_shutter_stepper.currentText() == "1/60"  # nothing saved: the body's shutter shows
+
+    w.ir_shutter_stepper.setCurrentIndex(0)
+    w._on_ir_shutter_changed()
+
+    assert w._settings.shutter_ir == "1/5"
+    w._refresh_camera_settings()
+    assert w.ir_shutter_stepper.currentText() == "1/5"  # a refresh does not snap it back to the body
+    w.output.folder_edit.setText(str(tmp_path))
+    w._set_infrared(True)
+    w._start_capture(retake=False)
+    assert w.controller.start_capture.call_args.args[0].shutter_ir == "1/5"
+    w._on_poll_status({**_poll(usb_ok=True), "light_has_ir": False})
+    assert not w._ir_exposure_widget.isVisibleTo(w)
+
+
+def test_built_in_trichrome_presets_scan_without_calibration_and_carry_infrared():
+    w = _sidebar()
+    w._camera_verified = True
+    w._on_poll_status({**_poll(usb_ok=True), "light_has_ir": True})
+    combo = w.preset_combo
+    combo.setCurrentIndex(combo.findData("Trichrome + IR, Color Negative"))
+    w._on_preset_selected(combo.currentIndex())
+
+    assert not w._settings.white_mode and w._preset_selected()
+    assert (w.r_slider.value(), w.g_slider.value(), w.b_slider.value()) == (255, 255, 255)
+    assert w._settings.infrared and w.ir_toggle.isChecked()
+    assert not w.preset_del_btn.isEnabled()
+    assert "preset" not in " ".join(w._missing_requirements())
+    assert "infrared exposure" in w.preset_hint.text()
+    w.ir_toggle.setChecked(False)
+    assert not w._settings.infrared
+    combo.setCurrentIndex(combo.findData("White Light, Slide + IR"))
+    w._on_preset_selected(combo.currentIndex())
+    assert w._settings.white_mode and w._settings.infrared
+    w._on_poll_status({**_poll(usb_ok=True), "light_has_ir": False})  # a light without infrared LEDs drops it
+    assert combo.currentData() is None
+
+
+def test_scan_under_an_infrared_preset_asks_for_the_infrared_exposure(tmp_path):
+    w = _sidebar()
+    w.output.folder_edit.setText(str(tmp_path))
+    w._camera_verified = w._light_verified = True
+    w.preset_combo.setCurrentIndex(w.preset_combo.findData("Trichrome + IR, Color Negative"))
+    w._on_preset_selected(w.preset_combo.currentIndex())
+
+    w._start_capture(retake=False)
+
+    req = w.controller.start_capture.call_args.args[0]
+    assert req.infrared and not req.white_mode and not req.single_capture and req.shutters == ("", "", "")
+
+
+def test_a_hand_set_recipe_scans_without_a_save(tmp_path):
+    w = _sidebar()
+    w.output.folder_edit.setText(str(tmp_path))
+    w._camera_verified = w._light_verified = True
+    w._on_preset_manual()
+
+    assert w._manual_mode and w._missing_requirements() == []
+    assert "save button" in w.preset_hint.text()
+
+
+def test_the_card_meter_opens_live_view_and_meters_once_it_streams(tmp_path, monkeypatch):
+    w, _ = _metering_sidebar(tmp_path, monkeypatch, cur=1)
+    w.lv_btn.blockSignals(True)
+    w.lv_btn.setChecked(False)
+    w.lv_btn.blockSignals(False)
+    w._apply_gating()
+    assert w.meter_btn.isEnabled()
+
+    w._on_meter()
+
+    assert w.lv_btn.isChecked() and w._meter_pending and not w.controller.start_exposure_probe.called
+    w._refresh_camera_settings()
+    assert w.controller.start_exposure_probe.called and not w._meter_pending
+    w.lv_btn.setChecked(False)
+
+
+def test_the_plus_menu_offers_calibration_and_hand_setting():
+    w = _sidebar()
+    assert w.preset_combo.currentText() == "— Select preset —"  # the placeholder shows only for a hand-set recipe
+    assert [a.text() for a in w.preset_new_btn.menu().actions()] == ["Calibrate on the Film Base…", "Set by Hand"]
+    assert not w.preset_new_btn.isEnabled()
+    w._camera_verified = True
+    w._apply_gating()
+    assert w.preset_new_btn.isEnabled() and w.preset_manual_action.isEnabled()
+    assert not w.preset_calibrate_action.isEnabled()  # calibration also needs the light

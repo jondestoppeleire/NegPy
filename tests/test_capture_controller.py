@@ -203,3 +203,34 @@ def test_single_capture_frame_outside_a_roll_takes_the_sensor_profile_itself(mon
 
     process = c.state.config.process
     assert (process.sensor_profile, process.sensor_matrix, process.linear_raw) == ("Portra", tuple(unmix), True)
+
+
+def test_an_infrared_shot_alone_keeps_the_rolls_modes_and_import_settings(tmp_path):
+    path = str(tmp_path / "Roll001_Frame001_IR.ARW")
+
+    controller = _run([path], channels=(), infrared=True, as_roll=False)
+
+    controller.request_asset_discovery.assert_called_once_with([path], restore_triplets=None)
+    assert not controller.session.repo.save_global_setting.called  # Trichrome Mode untouched
+    assert controller._pending_capture_imports == {}
+
+
+def test_a_re_shot_channel_re_enters_discovery_with_its_siblings_as_one_triplet(tmp_path):
+    paths = [str(tmp_path / f"Roll001_Frame001_{letter}.ARW") for letter in ("R", "G", "B")]
+    for p in paths:
+        open(p, "wb").close()
+
+    controller = _run([paths[1]], channels=("G",), as_roll=False)
+
+    controller.request_asset_discovery.assert_called_once_with(paths, restore_triplets={paths[0]: paths[1:]})
+    assert controller._pending_scanned_file == paths[0]
+
+
+def test_an_infrared_exposure_rides_beside_the_triplet(tmp_path):
+    paths = [str(tmp_path / f"Roll001_Frame001_{letter}.ARW") for letter in ("R", "G", "B", "IR")]
+
+    controller = _run(paths, as_roll=False)
+
+    controller.request_asset_discovery.assert_called_once_with(paths, restore_triplets={paths[0]: [paths[1], paths[2]]})
+    assert controller._pending_scanned_file == paths[0]
+    assert os.path.normcase(os.path.abspath(paths[0])) in controller._pending_capture_imports

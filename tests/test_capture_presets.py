@@ -85,3 +85,14 @@ def test_store_knows_which_sensor_profiles_its_presets_own():
     assert store.owns_sensor_profile("Portra")
     assert not store.owns_sensor_profile("Hand Made")
     assert not store.owns_sensor_profile("")
+
+
+def test_forget_triplets_drops_only_the_named_primaries():
+    from negpy.services.assets.triplets import TRIPLETS_KEY, forget_triplets, saved_triplets
+
+    repo = FakeRepo()
+    repo.save_global_setting(TRIPLETS_KEY, {"/a_R": ["/a_G", "/a_B", True, ["h1", "h2", "h3"]], "/b_R": ["/b_G", "/b_B", True, []]})
+
+    forget_triplets(repo, ["/a_R"])
+
+    assert list(saved_triplets(repo)) == ["/b_R"]

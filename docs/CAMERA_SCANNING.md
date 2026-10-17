@@ -72,8 +72,9 @@ the preview range. The preview is the body's JPEG, which clips before the RAW, s
 leaves some RAW headroom. On a negative the clear base must stay under the top; on a slide
 the picture's highlights must.
 
-**Meter (white-light and camera-only scanning).** Press **Meter** to take one RAW probe at
-the current exposure. On **White Light, B&W Negative**, or a color negative on the AUTO
+**Meter.** Press **Meter** in Live View, or the **Aperture Priority Meter** gauge beside
+CAMERA EXPOSURE on the card, to take one RAW probe at the current exposure. The card's gauge
+opens Live View when it is closed. On **White Light, B&W Negative**, or a color negative on the AUTO
 preset, the clear base (read in the rebate around the picture) goes to 90% of the RAW range
 in the brightest channel, the same target as Calibrate. On **White Light, Slide** the
 picture's brightest highlights go there. AUTO classifies the probe as an import does, so it
@@ -102,10 +103,11 @@ magnifier returns to the preview's zebras. The blue shadow hatching always comes
 preview. The map is used only when the first preview at the metered exposure has the same
 aspect as the probe and matches it by rank correlation of thumbnails. A body whose live
 view crops or reframes the RAW fails this check, and the status line says `RAW zebras off:`
-with the reason. A calibrated RGB preset hides the button with the exposure steppers.
+with the reason. Under a calibrated RGB preset the probe shoots under the scan light, and the
+metered shutter replaces the preset's until you pick the preset again.
 
 **Calibrate (RGB mode).** Set the ISO and the aperture you scan with. Press **+** beside the
-preset dropdown, place the small rectangle on the clear film base (the rebate strip between
+preset dropdown, pick **Calibrate on the Film Base…**, place the small rectangle on the clear film base (the rebate strip between
 frames is a good target), name the preset and run it. Calibration solves one shared
 shutter plus a per-channel LED level, so each channel lands just under clipping, and
 records the ISO and the aperture. The clear base becomes the *black point* after inversion,
@@ -127,19 +129,32 @@ over-exposed, close the aperture or lower the ISO; under-exposed, open up or rai
 No preset is saved. Adjust and calibrate again in the window, which stays open.
 
 **Presets.** A selected preset shows read-only, with its RGB levels, ISO, shutter and
-aperture. The scan sets that exposure on the body before every frame. To build a preset by hand, pick **Create a manual preset…** from
-the dropdown to unlock the sliders and the exposure steppers. Set them and **Capture
-mode** (triplet or single capture), then press the save (floppy) button. Only the
+aperture. The scan sets that exposure on the body before every frame. To build a preset by hand, press **+** beside
+PRESET and pick **Set by Hand** to unlock the sliders and the exposure steppers. Set them and **Capture
+mode** (triplet or single capture); Scan uses them as they stand, and the save (floppy)
+button keeps them as a preset. Only the
 white-light presets use the White channel, because the Scanlight cannot light it together
 with RGB. The three white-light presets differ only in film type: AUTO classifies each
-capture, **B&W Negative** and **Slide** fix it, for the import and for Meter.
+capture, **B&W Negative** and **Slide** fix it, for the import and for Meter. **White
+Light, Slide + IR**, **Trichrome, Color Negative** and **Trichrome + IR, Color Negative**
+need no calibration either: full LED power at the camera's shutter, which Meter sets, and
+a **+ IR** preset ends each frame with an infrared exposure at **IR Shutter**. The
+**Infrared** toggle beside IR Shutter does the same for any preset.
 
 **Scan.** Pick an output folder and a preset, then press **Scan** for each frame. Files go
 to an auto-numbered per-roll subfolder and are imported and merged automatically. A
 single-capture preset writes one file per frame. **Retake** shoots the current frame again
 without advancing the counter. **Delay between exposures** adds a pause between the red,
 green and blue captures, for older bodies that lock up the USB/PTP link when a new capture
-command arrives too soon.
+command arrives too soon. In Live View, **R**, **G**, **B** and, on a light with infrared
+LEDs, **IR** select which exposures Scan and Retake shoot, and the framing light shows the
+selection. Scan shoots them into the next frame and never touches an existing file. Retake
+re-shoots them on the current frame, one channel of a triplet shot again, and first keeps
+each file it replaces as a hidden `.previous-` copy beside it. **IR Shutter** on the card
+sets the infrared exposure's shutter, which an IR-cut filter leaves far slower than the
+visible channels; a step the camera does not offer falls back to the camera's shutter. Infrared
+needs a light with infrared LEDs and a camera that passes 850 nm, a full-spectrum or IR-converted
+body: a stock camera's IR-cut filter leaves the infrared frame at noise. An `_IR` file stays its own frame in the Film Strip.
 
 **Narrowband Scan.** Narrowband LEDs render more saturated than white light. The **Narrowband** toggle in the Process
 panel, beside **Linear RAW**, corrects this with the bundled RGBScan input profile, in the
@@ -174,7 +189,7 @@ change the profile.
 
 ### Sensor profile workflows
 
-You build a profile in the preset calibration that **+** opens in the **Preset & Light**
+You build a profile in the preset calibration that **+** opens in the **Preset**
 panel, or in the **Calibration** panel on the Roll tab. A preset that made its own profile
 assigns it on every scan. You assign a Calibration-panel profile yourself, once per roll.
 
@@ -193,8 +208,8 @@ The default, for calibrated Single Capture presets.
 
 Once per film stock:
 
-1. Load the film. In the **Preset & Light** panel, press **+** beside the preset
-   dropdown. The calibration window opens with its own live view.
+1. Load the film. In the **Preset** panel, press **+** beside the preset
+   dropdown and pick **Calibrate on the Film Base…**. The calibration window opens with its own live view.
 2. Set the ISO and the aperture you scan with, click the clear film base and name the
    preset after the stock.
 3. Pick **Single Capture**, leave **Create Sensor Profile** on and press **Calibrate & Save**.
@@ -248,8 +263,8 @@ A manual preset meters nothing, so it cannot make a profile. A single-shot roll 
 with it has no correction until you pick one.
 
 1. Build the profile as in workflow B, step 1, or use one the rig already has.
-2. In the **Preset & Light** panel, pick **Create a manual preset…** from the preset
-   dropdown, set the levels and the exposure, set **Capture mode** to **Single Capture**
+2. In the **Preset** panel, press **+** beside PRESET, pick **Set by Hand**,
+   set the levels and the exposure, set **Capture mode** to **Single Capture**
    and save the preset.
 3. Scan the first frame, then assign the profile to the roll as in workflow B, step 3.
 

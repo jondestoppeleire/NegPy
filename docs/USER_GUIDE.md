@@ -1054,7 +1054,7 @@ Capture film directly into NegPy. The **Scanner** card picks the scanner; the ta
 <!-- panel:scan_source -->
 ### Scanner
 
-*   **Scanner** (Camera by default): **Film Scanner** drives a dedicated film scanner (Device, Film & Quality, Framing); **Camera** drives a camera on a copy stand (Camera, Preset & Light).
+*   **Scanner** (Camera by default): **Film Scanner** drives a dedicated film scanner (Device, Film & Quality, Framing); **Camera** drives a camera on a copy stand (Camera, Preset).
 
 <!-- panel:scan_device -->
 ### Device
@@ -1096,23 +1096,26 @@ Capture film directly into NegPy. The **Scanner** card picks the scanner; the ta
 Copy-stand capture with a camera in **PC Remote** mode over USB (macOS/Linux): with a NegPy **Scanlight**, R/G/B triplets or one exposure with the three LEDs lit together, else one white-light exposure. Needs `python-gphoto2` (`pip install gphoto2`; no Windows build). Setup and troubleshooting: CAMERA_SCANNING.md.
 
 *   **Camera** / **Light**: connection status, found automatically; the light turns amber once it runs warm. On Linux, the Scanlight's serial port needs your user in the `dialout` group (`sudo usermod -aG dialout $USER`, then log out and back in).
-*   **Live View**: click the image to aim the focus magnifier. Turn the focus ring past best focus, then back until the **Focus meter** reads **at peak**. ISO, shutter and aperture are set from its toolbar, or locked by a calibrated RGB preset.
+*   **Live View**: click the image to aim the focus magnifier. Turn the focus ring past best focus, then back until the **Focus meter** reads **at peak**. ISO, shutter and aperture are set from its toolbar or from the card; both follow the camera. With a Scanlight, **R**, **G**, **B** and, on a light with infrared LEDs, **IR** select which exposures Scan and Retake shoot, and the framing light shows the selection. Scan shoots them into the next frame and never touches an existing file; Retake re-shoots them on the current frame and first keeps each file it replaces as a hidden `.previous-` copy beside it, which a rename brings back. A frame whose three visible exposures exist stays one triplet. An `_IR` file stays its own frame in the Film Strip.
 *   **Histogram** and **Zebras**: the frame's RGB histogram, and hatching on pixels at the top (red) and bottom (blue) of the preview range. The preview clips before the RAW does, so a zebra is an early warning.
-*   **Meter** (white-light and camera-only scanning): one RAW probe sets the shutter so the region that must not clip (a negative's clear base, a slide's brightest highlights) lands just under clipping. The white-light preset's film type decides which. A clipped reading steps down two stops; meter again.
+*   **Meter**: one RAW probe sets the shutter so the region that must not clip (a negative's clear base, a slide's brightest highlights) lands just under clipping. The white-light preset's film type decides which. An RGB preset meters its base under the scan light, and the metered shutter replaces the preset's until you pick the preset again. A clipped reading steps down two stops; meter again.
 *   **Scan** and **Retake**: **Scan** shoots the next frame, auto-numbered, and imports it; **Retake** (the redo arrow beside **Live View**) shoots the last frame again. In the Live View window, `S` scans and `R` retakes.
 *   **Keep Light On** (the bulb beside **Retake**, off by default): the Scanlight goes dark after each scan; this lights it again with the framing light, so you can frame the next shot on the camera's screen. Live View lights it again without this toggle.
 *   **Narrowband**: RGB-lit scans render more saturated; the Calibration card's **Narrowband** toggle corrects this.
 
 <!-- panel:scan_light -->
-### Preset & Light
+### Preset
 
-Shown while a Scanlight is connected.
+Shown while a Scanlight is connected. The LED levels, the camera exposure and the infrared row sit on a rail under the preset dropdown: they are the preset's values. Channel Delay, below the rail, is a setting of the rig.
 
-*   **Preset**: forces its RGB levels, ISO, shutter and aperture each frame. **+** calibrates: place the rectangle on clear film base, name it, run it; it solves a shutter and LED levels just under clipping. **Create a manual preset…** sets one by hand.
+*   **Preset**: forces its RGB levels, ISO, shutter and aperture each frame. Built in, with no calibration: **White Light** (B&W or Slide, autodetected or named), **White Light, Slide + IR**, **Trichrome, Color Negative** and **Trichrome + IR, Color Negative**; the Trichrome ones shoot at full LED power at the camera's exposure, so their ISO, Shutter and Aperture steppers are live and the meter sets the shutter. **+** offers two ways to add one. **Calibrate on the Film Base…**: place the rectangle on clear film base, name it, run it; it solves a shutter and LED levels just under clipping. **Set by Hand**: unlocks the sliders and steppers; Scan uses them as they stand, and the save button keeps them as a preset.
 *   **Red**, **Green**, **Blue**, **White** (0 to 255): LED levels, editable while you build a manual preset. **Light Off** turns every channel off.
 *   **Capture mode**: **Triplet** shoots one exposure per LED and merges them; **Single Capture** shoots one exposure with all three lit and imports it as an ordinary RAW.
 *   **Create Sensor Profile** (Single Capture only, default on): also saves a sensor profile under the preset's name; a roll scanned with the preset takes it and turns Linear RAW on. Other rolls do not get it.
-*   **ISO**, **Shutter**, **Aperture**: the preset's exposure, editable while you build a manual preset.
+*   **ISO**, **Shutter**, **Aperture**: the preset's exposure, live under any preset; a step overrides the recipe until you pick the preset again.
+*   **Aperture Priority Meter** (the gauge beside CAMERA EXPOSURE): the Live View **Meter**, from the card. Opens Live View when it is closed.
+*   **IR Shutter** (with infrared LEDs): the infrared exposure's own shutter, stepped through the camera's choices while Live View runs. Set it by hand; calibration does not solve it. A preset saves it.
+*   **Infrared** (the LED beside IR Shutter): ends every Scan with an infrared exposure at the IR Shutter, saved as `_IR` beside the frame; the camera returns to its own shutter afterwards. A preset recalls it. Color film passes infrared; silver grain does not, so there is no B&W + IR. Needs a light with infrared LEDs and a camera that passes 850 nm, a full-spectrum or IR-converted body: a stock camera's IR-cut filter leaves the infrared frame at noise.
 *   **Channel Delay** (0 to 5000 ms): pauses between R, G and B for bodies that lock up. Triplet presets only.
 
 <!-- panel:scan_output -->

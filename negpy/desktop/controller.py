@@ -107,7 +107,7 @@ from negpy.domain.models import (
     resolve_preset_export,
 )
 from negpy.services.assets.composites import forget_composite, restore_maps, source_files
-from negpy.services.assets.triplets import saved_triplets
+from negpy.services.assets.triplets import forget_triplets, saved_triplets
 from negpy.services.assets import rolls
 from negpy.services.assets.sensor import SensorProfiles
 from negpy.services.export.contact_sheet_layout import ContactSheetSettings
@@ -592,7 +592,7 @@ class AppController(QObject):
     camera_session_close_requested = pyqtSignal()
     live_view_focus_magnifier_requested = pyqtSignal(bool)
     live_view_focus_magnifier_pos_requested = pyqtSignal(int, int)
-    live_view_camera_setting_requested = pyqtSignal(str, int)
+    live_view_camera_setting_requested = pyqtSignal(str, int, str)
     capture_live_view_started = pyqtSignal(str)
     calibration_requested = pyqtSignal(CalibrationRequest)
     capture_calibration_progress = pyqtSignal(float, str)
@@ -6642,11 +6642,11 @@ class AppController(QObject):
     def set_focus_magnifier_pos(self, x: int, y: int) -> None:
         self.live_view_focus_magnifier_pos_requested.emit(x, y)
 
-    def set_camera_setting(self, which: str, raw: int) -> None:
+    def set_camera_setting(self, which: str, raw: int, label: str = "") -> None:
         # Ensure the worker thread runs. The sidebar counts these writes and gates Scan until
         # each reports back, so a write queued to an unstarted thread gates forever.
         self._ensure_capture_thread()
-        self.live_view_camera_setting_requested.emit(which, raw)
+        self.live_view_camera_setting_requested.emit(which, raw, label)
 
     def start_calibration(self, req: CalibrationRequest) -> None:
         self._ensure_capture_thread()
@@ -6689,9 +6689,27 @@ class AppController(QObject):
         if not paths:
             return
         req = getattr(self, "_last_capture_req", None)
+        # An infrared exposure rides beside the frame's files; the frame's own files come first.
+        main = [p for p in paths if not os.path.splitext(os.path.basename(p))[0].lower().endswith("_ir")] or list(paths)
         white = bool(req is not None and req.white_mode)
         rgb = bool(req is not None and getattr(req, "rgb_mode", True))
         single = bool(req is not None and getattr(req, "single_capture", False))
+        channels = tuple(getattr(req, "channels", ("R", "G", "B")) or ()) if req is not None else ("R", "G", "B")
+        if rgb and not white and not single and channels != ("R", "G", "B"):
+            # A subset of the frame's exposures. Once the frame's three visible files exist it
+            # re-enters discovery as one triplet, with its saved record dropped first: a re-shot
+            # channel changes a member's hash on purpose, and the record's hashes would refuse it.
+            # Short of that the files enter alone, and the roll keeps its modes and settings.
+            base, ext = os.path.splitext(main[0])
+            siblings = [f"{base.rsplit('_', 1)[0]}_{letter}{ext}" for letter in ("R", "G", "B")]
+            as_roll = bool(getattr(req, "as_roll", False))
+            if all(os.path.exists(p) for p in siblings):
+                forget_triplets(self.session.repo, [siblings[0]])
+                extra = [p for p in paths if p not in siblings]
+                self._discover_scanned(siblings + extra, siblings[0], as_roll, {siblings[0]: siblings[1:]})
+            else:
+                self._discover_scanned(list(paths), main[0], as_roll, None, select=False)
+            return
         # RGB-Scan (triplet merge) is on only for an RGB triplet. It belongs to the roll of the
         # folder the files land in, not to the open roll.
         as_roll = bool(getattr(req, "as_roll", False))
@@ -6710,7 +6728,7 @@ class AppController(QObject):
         if white:  # slides / B&W negatives force a positive process
             mode = WhiteCaptureMode(req.white_process_mode)
             target = {WhiteCaptureMode.E6: ProcessMode.E6, WhiteCaptureMode.BW: ProcessMode.BW}.get(mode)
-            self._pending_capture_imports[_capture_import_key(paths[0])] = _PendingCaptureImport(
+            self._pending_capture_imports[_capture_import_key(main[0])] = _PendingCaptureImport(
                 process_mode=target,
                 detect_mode=target is None,
                 capture_roll=capture_roll,
@@ -6719,7 +6737,7 @@ class AppController(QObject):
         elif rgb:
             # Narrowband RGB exposures carry no broadband orange-mask signal for the classifier,
             # so they import as C-41 unless capture metadata says otherwise.
-            self._pending_capture_imports[_capture_import_key(paths[0])] = _PendingCaptureImport(
+            self._pending_capture_imports[_capture_import_key(main[0])] = _PendingCaptureImport(
                 process_mode=ProcessMode.C41,
                 capture_roll=capture_roll,
                 capture_frame=capture_frame,
@@ -6727,7 +6745,7 @@ class AppController(QObject):
                 sensor_matrix=sensor_matrix,
             )
         elif req is not None:
-            self._pending_capture_imports[_capture_import_key(paths[0])] = _PendingCaptureImport(
+            self._pending_capture_imports[_capture_import_key(main[0])] = _PendingCaptureImport(
                 capture_roll=capture_roll,
                 capture_frame=capture_frame,
             )
@@ -6735,8 +6753,8 @@ class AppController(QObject):
         # (CaptureResult.paths), so hand discovery the triplet instead of asking it to
         # re-derive one it already knows. Deriving it can only refuse a frame it should
         # have kept: a blank or untextured frame gives the content test nothing to match.
-        triplet = {paths[0]: [paths[1], paths[2]]} if rgb and not white and len(paths) == 3 else None
-        self._discover_scanned(list(paths), paths[0], as_roll, triplet)
+        triplet = {main[0]: [main[1], main[2]]} if rgb and not white and len(main) == 3 else None
+        self._discover_scanned(list(paths), main[0], as_roll, triplet)
 
     def effective_output_icc(self) -> Optional[str]:
         """Profile the *export* converts to and tags with: a custom override, else the

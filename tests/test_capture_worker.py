@@ -623,3 +623,49 @@ def test_a_probe_whose_capture_fails_reports_the_lost_camera_with_its_session(tm
     worker.run_exposure_probe(ExposureProbeRequest(shutter="1/30", session=3))
 
     assert failures == [(3, "could not set shutter", True)] and errors == []
+
+
+def test_an_infrared_preset_ends_the_frame_with_an_ir_exposure(tmp_path, monkeypatch):
+    class WritingCamera:
+        def __init__(self):
+            self.shutters = []
+            self.restored = []
+
+        def read_settings(self):
+            return {"shutter": {"cur": 7, "options": [{"label": "1/60", "raw": 7}]}}
+
+        def set_shutter(self, raw):
+            self.restored.append(raw)
+
+        def capture(self, out_path, shutter=None, iso=None, aperture=None):
+            path = os.path.splitext(out_path)[0] + ".ARW"
+            self.shutters.append(shutter)
+            with open(path, "wb") as f:
+                f.write(b"\0" * (9 * 1024 * 1024))
+            return path
+
+        def close(self):
+            pass
+
+    camera = WritingCamera()
+    worker = CaptureWorker()
+    monkeypatch.setattr(worker, "_acquire_camera", lambda: camera)
+    monkeypatch.setattr(worker, "_ensure_light", lambda _port: FakeLight())
+    finished = []
+    worker.finished.connect(finished.append)
+
+    worker.run_capture(
+        CaptureRequest(
+            roll_name="Slide01",
+            frame_number=3,
+            output_folder=str(tmp_path),
+            levels=(0, 0, 0),
+            white_mode=True,
+            w_level=255,
+            infrared=True,
+            shutter_ir="4",
+        )
+    )
+
+    assert [os.path.basename(p) for p in finished[0]] == ["Slide01_Frame003.ARW", "Slide01_Frame003_IR.ARW"]
+    assert camera.shutters == [None, "4"] and camera.restored == [7]  # the body is back on its own shutter
