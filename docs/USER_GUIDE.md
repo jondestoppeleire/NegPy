@@ -361,7 +361,7 @@ Pins are proofs, not edits: any other edit or a frame change removes them. Zone 
 
 Rows that measure the scan, not your edit; hover for details.
 
-*   **Negative**: development character (lo = flat, ≈N−1; nrm = normal; hi = contrasty, ≈N+1), then Dmin · Dmed · Dmax above the clear base and Δ, the normalization window's density range. Comparable across a roll; an estimate, not a densitometer reading. The base is the one set with **Film Base** on the Metering card, else one read from the rebate; the hover names which, and without a base the row shows the character and Δ alone.
+*   **Negative**: development character (lo = flat, ≈N−1; nrm = normal; hi = contrasty, ≈N+1), then Dmin · Dmed · Dmax above the clear base and Δ, the normalization window's density range. Comparable across a roll; an estimate, not a densitometer reading. The base is the one set with **Film Base** on the Metering card, else one read from the rebate; the hover names which, and without a base the row shows the character in full (flat, normal, contrasty) and Δ alone.
 *   **Exposure**: approximate midtone in stops from neutral; positive is high-key, negative low-key.
 *   **Clipping**: share of pixels crushed to black or blown to white, worst channel. Amber above 1%.
 *   **Scan clip**: share of source pixels at or above sensor white. On a negative no edit recovers it: expose the scan lower. Amber above 1%.

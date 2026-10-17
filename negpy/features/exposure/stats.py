@@ -71,12 +71,12 @@ def _negative_row(
     from negpy.features.exposure.logic import default_grade_range
 
     ratio = float(norm_density_range) / default_grade_range()
-    character = "lo" if ratio < _DIAG_FLAT else "hi" if ratio > _DIAG_CONTRASTY else "nrm"
+    short, word = ("lo", "flat") if ratio < _DIAG_FLAT else ("hi", "contrasty") if ratio > _DIAG_CONTRASTY else ("nrm", "normal")
     window = f"Δ{float(norm_density_range):.2f}"
     if density_above_base is None:
-        return StatRow("Negative", f"{character} · {window}", detail=detail)
+        return StatRow("Negative", f"{word} · {window}", detail=detail)  # room for the word when the densities are absent
     dmin, dmed, dmax = (float(v) for v in density_above_base)
-    return StatRow("Negative", f"{character} · {dmin:.2f} · {dmed:.2f} · {dmax:.2f} · {window}", detail=detail)
+    return StatRow("Negative", f"{short} · {dmin:.2f} · {dmed:.2f} · {dmax:.2f} · {window}", detail=detail)
 
 
 def _exposure_row(metered_anchor: Optional[float], norm_density_range: Optional[float]) -> StatRow:
