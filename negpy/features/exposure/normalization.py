@@ -6,7 +6,8 @@ import cv2
 import numpy as np
 from numba import njit  # type: ignore
 
-from negpy.domain.types import LUMA_B, LUMA_G, LUMA_R, ImageBuffer
+from negpy.domain.types import LUMA_B, LUMA_G, LUMA_R, ROI, ImageBuffer
+from negpy.features.geometry.logic import AUTOCROP_DETECT_RES, _normalize_detection_input, film_and_picture
 from negpy.features.process.models import ProcessMode
 from negpy.kernel.image.validation import ensure_image
 
@@ -434,6 +435,109 @@ def measure_neutral_axis(
     """Linear-image wrapper around measure_neutral_axis_from_log."""
     img_log = to_log_density(image)
     return measure_neutral_axis_from_log(img_log, bounds, roi, analysis_buffer)
+
+
+#: The clear base is read from flat blocks in the film box's margin, grouped by brightness, the
+#: way negdensity.py reads it. The film box comes from the crop's detector at its own resolution,
+#: whose edge walk is calibrated there.
+_BASE_MARGIN = 0.15  # the band inside the film box, per side, that holds rebate, perforations and picture edge
+_BASE_BLOCK = 8  # block size at detection resolution
+_FLAT_CV = 0.03  # a block whose std over mean is under this is flat film, not edge print or a gradient
+_GROUP_GAP = 0.04  # decades between neighbouring blocks that split two brightness groups
+_OPEN_LIGHT_GAP = 0.08  # decades a brighter, smaller group must clear the base to be bare light
+_MIN_BASE_BLOCKS = 5
+_CLIP_LEVEL = 0.98  # a block with a pixel at sensor white is light the scan clipped, never film
+
+
+def _margin_band(shape: Tuple[int, int], film_roi: ROI) -> np.ndarray:
+    """Inside the film box, outside its central core: where the rebate and the perforations lie."""
+    fy1, fy2, fx1, fx2 = film_roi
+    band = np.zeros(shape, bool)
+    band[fy1:fy2, fx1:fx2] = True
+    my, mx = int((fy2 - fy1) * _BASE_MARGIN), int((fx2 - fx1) * _BASE_MARGIN)
+    band[fy1 + my : fy2 - my, fx1 + mx : fx2 - mx] = False
+    return band
+
+
+def _base_blocks(det: np.ndarray, band: np.ndarray) -> Optional[np.ndarray]:
+    """Per-channel means of the band's flat blocks that are clear base, or None without enough.
+
+    Flat blocks are grouped by brightness; the largest group is the base. A smaller group
+    well above it is bare light through a perforation or past the film's edge. A flat
+    picture region in the band that outnumbers the base is taken for it."""
+    b = _BASE_BLOCK
+    hb, wb = det.shape[0] // b, det.shape[1] // b
+    blocks = det[: hb * b, : wb * b].reshape(hb, b, wb, b, 3)
+    mean = blocks.mean(axis=(1, 3))
+    lum = mean.mean(axis=2)
+    inside = band[: hb * b, : wb * b].reshape(hb, b, wb, b).mean(axis=(1, 3)) >= 0.9
+    unclipped = blocks.max(axis=(1, 3, 4)) < _CLIP_LEVEL
+    flat = inside & unclipped & (lum > 1e-4) & (blocks.std(axis=(1, 3)).mean(axis=2) / np.maximum(lum, 1e-6) < _FLAT_CV)
+    if int(flat.sum()) < _MIN_BASE_BLOCKS:
+        return None
+    cand = mean[flat]
+    log_lum = np.log10(np.maximum(cand.mean(axis=1), 1e-6))
+    order = np.argsort(log_lum)[::-1]  # brightest first
+    groups: list[np.ndarray] = []
+    start = 0
+    for i in range(1, len(order) + 1):
+        if i == len(order) or log_lum[order[i - 1]] - log_lum[order[i]] > _GROUP_GAP:
+            groups.append(order[start:i])
+            start = i
+    min_n = max(_MIN_BASE_BLOCKS, int(0.02 * len(order)))
+    big = [g for g in groups if len(g) >= min_n]
+    if not big:
+        return None
+    return cand[max(big, key=len)]
+
+
+def measure_base_log(image: ImageBuffer) -> Optional[Tuple[float, float, float]]:
+    """Per-channel log10 transmittance of the clear base: the median of the flat base blocks in
+    the film box's margin on the uncropped frame. None when the scan shows no film box, the
+    margin holds too few flat blocks, or the base is darker than the picture, because a
+    negative's base is its thinnest film."""
+    det, _ = _normalize_detection_input(image, AUTOCROP_DETECT_RES)
+    det = np.ascontiguousarray(det, dtype=np.float32)
+    film_roi, gate = film_and_picture(det)
+    if film_roi is None:
+        return None
+    base = _base_blocks(det, _margin_band(det.shape[:2], film_roi))
+    if base is None:
+        return None
+    gy1, gy2, gx1, gx2 = gate
+    picture = det[gy1:gy2, gx1:gx2].reshape(-1, 3)
+    if np.median(base.mean(axis=1)) <= np.median(picture.mean(axis=1)):
+        return None
+    r, g, b = (float(np.log10(max(float(v), 1e-6))) for v in np.median(base, axis=0))
+    return (r, g, b)
+
+
+def log_from_val(val_rgb: Tuple[float, float, float], bounds: LogNegativeBounds) -> Tuple[float, float, float]:
+    """A normalized-log triplet back to per-channel log10 transmittance, through the window it
+    was normalized with. The trims cancel: the window that made the value unmakes it."""
+    r, g, b = (float(f) + float(v) * (float(c) - float(f)) for v, f, c in zip(val_rgb, bounds.floors, bounds.ceils))
+    return (r, g, b)
+
+
+def density_above_base(
+    base_log: Optional[Tuple[float, float, float]],
+    bounds: LogNegativeBounds,
+    prefiltered: np.ndarray,
+    unmix: Optional[np.ndarray] = None,
+) -> Optional[Tuple[float, float, float]]:
+    """(Dmin, Dmed, Dmax) above the clear base, luminance-weighted: the thin bound and dense bound
+    the frame is normalized with (before the trims; the roll's under Roll Analysis) and the metered
+    median. `unmix` is the meters' crosstalk matrix, applied to the base so all four share one
+    space. None without a base. Negatives only: the ceiling is the thin end."""
+    if base_log is None:
+        return None
+    base_rgb = unmix_log_image(np.asarray(base_log, dtype=np.float32).reshape(1, 1, 3), unmix).reshape(3)
+    w = np.array([LUMA_R, LUMA_G, LUMA_B], dtype=np.float64)
+    base = float(np.dot(w, np.asarray(base_rgb, dtype=np.float64)))
+    thin = float(np.dot(w, np.asarray(bounds.ceils, dtype=np.float64)))
+    dense = float(np.dot(w, np.asarray(bounds.floors, dtype=np.float64)))
+    median = float(np.median(np.asarray(prefiltered, dtype=np.float64).reshape(-1, 3) @ w))
+    return (base - thin, base - median, base - dense)
 
 
 def luminance_density_range(bounds: LogNegativeBounds) -> float:

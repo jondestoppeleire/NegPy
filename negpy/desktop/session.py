@@ -66,10 +66,12 @@ class ToolMode(Enum):
     STRAIGHTEN = auto()
     KEYSTONE_LINES = auto()
     ZONE_PLACE = auto()
+    FILM_BASE = auto()
 
 
 # These tools' renders carry crop_preview_full, which skips the crop, the border and the filed carrier.
-UNCROPPED_PREVIEW_TOOLS = frozenset({ToolMode.CROP_MANUAL, ToolMode.ANALYSIS_DRAW, ToolMode.KEYSTONE_LINES})
+# Film Base shows the whole scan too: the rebate it reads lies outside the crop.
+UNCROPPED_PREVIEW_TOOLS = frozenset({ToolMode.CROP_MANUAL, ToolMode.ANALYSIS_DRAW, ToolMode.KEYSTONE_LINES, ToolMode.FILM_BASE})
 
 # Zone Overlay looks, by stored key and menu label.
 ZONE_STYLES = {"false_color": "Color", "zone_map": "Grayscale", "grid": "Grid"}
