@@ -121,6 +121,8 @@ _BUILTIN_WHITE_PRESETS = {name: b.process for name, b in _BUILTIN_PRESETS.items(
 _LED_SETTLE_S = 0.05
 #: Time a body takes to switch between its full and magnified view.
 _MAGNIFIER_SETTLE_MS = 2500
+#: A probe this far under the ceiling in its brightest channel is dark, not a level to expose for.
+_METER_FLOOR = 0.005
 
 
 def _gray_array(pixmap: QPixmap) -> np.ndarray:
@@ -1261,10 +1263,15 @@ class ScanlightSidebar(QWidget):
         self._metering = False
         self._relight_after_meter()
         pinned = self._rgb_mode and not self._settings.white_mode  # the relight's echo must not replace the reading
-        where = f"{reading.medium}, {reading.region}"
+        region = "thin end" if reading.medium == "negative" and reading.region == "highlights" else reading.region
+        where = f"{reading.medium}, {region}" + (" (base unreadable)" if reading.ring_saturated else "")
         level = f"{reading.measured / CLIP_CEILING:.0%}"
         label = reading.recommended
         raw = self._meter_raw.get(label) if label else None
+        if reading.measured < _METER_FLOOR * CLIP_CEILING:
+            self._apply_gating()
+            self._set_status(f"Meter: {where} reads {level}, too dark to meter; check the light", pinned=pinned)
+            return
         if label is None:
             self._apply_gating()
             limit = f"{self._meter_fastest}, the fastest the Scanlight meters cleanly" if self._rgb_mode else self._meter_fastest
@@ -1286,11 +1293,7 @@ class ScanlightSidebar(QWidget):
             self.lv_window.shutter_stepper.setCurrentIndex(index)
         note = f"; the preset scans at {label} until you pick it again" if self._adopt_metered_shutter(label, raw) else ""
         self._apply_gating()
-        if reading.clipped and reading.region == "base":
-            self._set_status(
-                f"Meter: {where} clipped at {reading.shutter}; set {label} ({reading.stops:+.1f} st), meter again{note}", pinned=pinned
-            )
-        elif reading.clipped:
+        if reading.clipped:
             self._set_status(
                 f"Meter: {where} clipped on {reading.clipped_fraction:.1%} of the picture at {reading.shutter}; "
                 f"set {label} ({reading.stops:+.1f} st), meter again{note}",

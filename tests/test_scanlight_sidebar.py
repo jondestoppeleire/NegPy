@@ -678,6 +678,28 @@ def test_meter_asks_the_worker_with_the_body_shutter_and_ladder_and_gates_scan(t
     assert w.controller.start_exposure_probe.call_count == 1
 
 
+def test_a_negative_without_a_readable_base_says_so_and_still_sets_the_shutter(tmp_path, monkeypatch):
+    w, _ = _metering_sidebar(tmp_path, monkeypatch)
+    w._on_meter()
+
+    w._on_meter_finished(_reading(region="highlights", ring_saturated=True))
+
+    assert w.lv_window.status.text() == "Meter: negative, thin end (base unreadable) at 62% → 1/60 (+0.5 st)"
+    w.controller.set_camera_setting.assert_called_once_with("shutter", 1, "1/60")
+
+
+def test_a_dark_probe_is_reported_not_exposed_for(tmp_path, monkeypatch):
+    from negpy.services.capture.calibration import CLIP_CEILING
+
+    w, _ = _metering_sidebar(tmp_path, monkeypatch)
+    w._on_meter()
+
+    w._on_meter_finished(_reading(measured=0.001 * CLIP_CEILING, recommended="1/5", stops=4.0))
+
+    assert "too dark to meter" in w.lv_window.status.text()
+    assert not w.controller.set_camera_setting.called and not w._metering
+
+
 def test_meter_reading_writes_the_shutter_as_a_counted_exposure_write(tmp_path, monkeypatch):
     w, _ = _metering_sidebar(tmp_path, monkeypatch)
     w._on_meter()

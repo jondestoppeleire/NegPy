@@ -77,7 +77,9 @@ CAMERA EXPOSURE on the card, to take one RAW probe at the current exposure. The 
 opens Live View when it is closed. On **White Light, B&W Negative**, **White Light, Color
 Negative**, or a color negative on the AUTO preset, the clear base (read in the rebate around
 the picture) goes to 90% of the range in the brightest channel, the same target as Calibrate.
-A white-light frame imports with the camera's white balance, so that gain is in its target. On **White Light, Slide** the
+A negative with no clear base in frame, or a base the probe cannot read unclipped, meters its
+thinnest picture instead and says so. A white-light frame imports with the camera's white
+balance, so that gain is in its target. On **White Light, Slide** the
 picture's brightest highlights go there. AUTO classifies the probe as an import does, so it
 meters a misread slide as a negative until you pick the Slide preset. With no rebate, or a
 rebate no brighter than the picture, Meter uses the picture's highlights.

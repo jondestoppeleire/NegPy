@@ -60,12 +60,41 @@ def test_a_negative_whose_rebate_is_not_brighter_than_its_picture_meters_the_pic
     assert reading.measured == pytest.approx(0.25 * CLIP_CEILING, rel=0.02)
 
 
-def test_a_clipped_base_is_a_floor_and_steps_down():
+def test_a_saturated_ring_is_light_or_a_clipped_base_so_the_picture_sets_the_exposure():
+    # Light through a gap and a clipped base look the same in one probe; neither can set an
+    # exposure, and stepping down on the ring alone never converges on a frame ringed by light.
     reading = meter_frame(_frame(border=1.0, picture=0.25), "1/30", medium="negative")
 
-    assert reading.region == "base" and reading.clipped
-    assert reading.stops == pytest.approx(CLIPPED_STEP_STOPS, abs=0.2)
-    assert reading.recommended is not None and true_seconds(reading.recommended) <= true_seconds("1/30") / 4
+    assert reading.region == "highlights" and reading.ring_saturated and not reading.clipped
+    assert _is_ceiling(reading.recommended, true_seconds("1/30") * 0.9 / 0.25)
+
+
+def test_a_ring_darker_than_the_thin_end_never_raises_the_exposure_past_it():
+    # A ring that is half holder reads below the base; the picture's thinnest spot must not clip.
+    img = _frame(border=0.3, picture=0.25)
+    img[300:330, 420:470] = np.array([0.55, 0.55 * 0.7, 0.55 * 0.5], np.float32) * CLIP_CEILING
+    reading = meter_frame(img, "1/30", medium="negative")
+
+    assert reading.region == "base" and not reading.clipped
+    assert reading.measured == pytest.approx(0.55 * CLIP_CEILING, rel=0.02)
+    assert _is_ceiling(reading.recommended, true_seconds("1/30") * 0.9 / 0.55)
+
+
+def test_light_through_a_few_holes_in_the_picture_does_not_step_the_exposure_down():
+    img = _frame(border=0.6, picture=0.25)
+    img[200:230, 300:340] = CLIP_CEILING  # a small gap of raw light, under the blown share
+    reading = meter_frame(img, "1/30", medium="negative")
+
+    assert reading.region == "base" and not reading.clipped
+    assert 0 < reading.clipped_fraction < 0.02
+    assert reading.measured == pytest.approx(0.6 * CLIP_CEILING, rel=0.02)
+
+
+def test_a_blown_picture_steps_down_however_bright_its_ring():
+    img = _frame(border=0.6, picture=1.5)  # the picture past saturation on far more than the blown share
+    reading = meter_frame(img, "1/30", medium="negative")
+
+    assert reading.clipped and reading.stops == pytest.approx(CLIPPED_STEP_STOPS, abs=0.4)
 
 
 def test_clipped_highlights_step_down_and_say_how_much():
@@ -87,8 +116,10 @@ def test_fine_clipped_highlights_count_at_the_probe_resolution():
     reading = meter_frame(img, "1/30", medium="positive")
 
     assert reading.clipped_fraction == pytest.approx(8800 / (1680 * 2160), rel=0.1)
-    # p99.9 sees the glints at saturation: a lower bound, so the probe steps down and asks again.
-    assert reading.clipped and reading.stops == pytest.approx(CLIPPED_STEP_STOPS, abs=0.4)
+    # A quarter percent at saturation is light, not film: it is reported, left out of the level,
+    # and the picture itself sets the exposure, so a frame with a pinhole never steps down forever.
+    assert not reading.clipped
+    assert reading.measured == pytest.approx(0.3 * CLIP_CEILING, rel=0.02)
 
 
 def test_a_saturated_p999_is_never_metered_as_a_level():
