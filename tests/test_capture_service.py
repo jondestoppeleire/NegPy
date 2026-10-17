@@ -239,6 +239,30 @@ def test_a_retaken_triplet_keeps_the_replaced_exposures_beside_it(tmp_path):
         assert (tmp_path / f"Roll001_Frame001_{letter}.ARW").stat().st_size == 21 * 1024 * 1024
 
 
+def test_a_second_retake_replaces_the_kept_copy_with_the_file_it_replaces(tmp_path):
+    from negpy.infrastructure.capture.base import Channel
+
+    (tmp_path / "Roll001_Frame001_R.ARW").write_bytes(b"second")
+    (tmp_path / ".previous-Roll001_Frame001_R.ARW").write_bytes(b"first")
+    service = CaptureService(FakeLight(), FakeCamera(), sleep=lambda _s: None)
+
+    path = service.capture_channel(
+        roll_name="Roll001",
+        frame_number=1,
+        output_folder=str(tmp_path),
+        channel=Channel.RED,
+        level=255,
+        shutter=None,
+        iso=None,
+        aperture=None,
+        settle_s=0,
+    )
+
+    assert os.path.basename(path) == "Roll001_Frame001_R.ARW"
+    assert (tmp_path / ".previous-Roll001_Frame001_R.ARW").read_bytes() == b"second"  # one copy per file
+    assert (tmp_path / "Roll001_Frame001_R.ARW").stat().st_size == 21 * 1024 * 1024
+
+
 def test_a_triplet_writes_iso_and_aperture_once_and_the_shutter_when_it_changes(tmp_path):
     camera = FakeCamera()
     service = CaptureService(FakeLight(), camera, sleep=lambda _s: None)

@@ -652,6 +652,98 @@ def test_a_probe_whose_capture_fails_reports_the_lost_camera_with_its_session(tm
     assert failures == [(3, "could not set shutter", True)] and errors == []
 
 
+class _TripletCamera:
+    """Writes every exposure it is asked for; the `_IR` stem fails when `ir_fails` is set."""
+
+    def __init__(self, ir_fails: bool = False, cur: int = 7):
+        self.ir_fails = ir_fails
+        self.cur = cur
+        self.shots: list[tuple[str, object]] = []
+        self.restored: list[int] = []
+
+    def read_settings(self):
+        return {"shutter": {"cur": self.cur, "options": [{"label": "1/60", "raw": 7}]}}
+
+    def set_shutter(self, raw):
+        self.restored.append(raw)
+
+    def capture(self, out_path, shutter=None, iso=None, aperture=None):
+        path = os.path.splitext(out_path)[0] + ".ARW"
+        self.shots.append((os.path.basename(path), shutter))
+        if self.ir_fails and path.endswith("_IR.ARW"):
+            raise RuntimeError("the body refused the infrared shutter")
+        with open(path, "wb") as f:
+            f.write(b"\0" * (9 * 1024 * 1024))
+        return path
+
+    def close(self):
+        pass
+
+
+def _run(worker, **fields):
+    finished, errors, cancelled = [], [], []
+    worker.finished.connect(finished.append)
+    worker.error.connect(errors.append)
+    worker.cancelled.connect(lambda: cancelled.append(True))
+    worker.run_capture(CaptureRequest(**fields))
+    return finished, errors, cancelled
+
+
+def test_a_failed_infrared_exposure_keeps_the_finished_frame(tmp_path, monkeypatch):
+    # The visible exposures are promoted before the infrared one runs, so an infrared failure
+    # must not fail the frame: that path deletes every file of the frame as a partial capture.
+    camera = _TripletCamera(ir_fails=True)
+    worker = CaptureWorker()
+    monkeypatch.setattr(worker, "_acquire_camera", lambda: camera)
+    monkeypatch.setattr(worker, "_ensure_light", lambda _port: FakeLight())
+    statuses = []
+    worker.status.connect(statuses.append)
+
+    finished, errors, _ = _run(
+        worker, roll_name="Roll", frame_number=5, output_folder=str(tmp_path), levels=(255, 255, 255), infrared=True, shutter_ir="4"
+    )
+
+    assert [os.path.basename(p) for p in finished[0]] == ["Roll_Frame005_R.ARW", "Roll_Frame005_G.ARW", "Roll_Frame005_B.ARW"]
+    assert sorted(os.listdir(tmp_path)) == ["Roll_Frame005_B.ARW", "Roll_Frame005_G.ARW", "Roll_Frame005_R.ARW"]
+    assert errors == [] and any("Infrared exposure failed" in s for s in statuses)
+    assert camera.restored == [7]  # the body is back on its own shutter even so
+
+
+def test_a_subset_scan_shoots_each_selected_channel_at_its_own_level_and_shutter(tmp_path, monkeypatch):
+    camera = _TripletCamera()
+    light = FakeLight()
+    worker = CaptureWorker()
+    monkeypatch.setattr(worker, "_acquire_camera", lambda: camera)
+    monkeypatch.setattr(worker, "_ensure_light", lambda _port: light)
+
+    finished, errors, _ = _run(
+        worker,
+        roll_name="Roll",
+        frame_number=2,
+        output_folder=str(tmp_path),
+        levels=(200, 150, 100),
+        shutters=("1/5", "1/10", "1/20"),
+        channels=("G", "B"),
+    )
+
+    assert [os.path.basename(p) for p in finished[0]] == ["Roll_Frame002_G.ARW", "Roll_Frame002_B.ARW"]
+    assert camera.shots == [("Roll_Frame002_G.ARW", "1/10"), ("Roll_Frame002_B.ARW", "1/20")]
+    assert errors == []
+
+
+def test_an_infrared_exposure_leaves_the_body_alone_when_its_shutter_is_unknown(tmp_path, monkeypatch):
+    camera = _TripletCamera(cur=-1)  # the body reports no current shutter
+    worker = CaptureWorker()
+    monkeypatch.setattr(worker, "_acquire_camera", lambda: camera)
+    monkeypatch.setattr(worker, "_ensure_light", lambda _port: FakeLight())
+
+    finished, _, _ = _run(
+        worker, roll_name="Roll", frame_number=1, output_folder=str(tmp_path), levels=(255, 255, 255), infrared=True, shutter_ir="4"
+    )
+
+    assert len(finished[0]) == 4 and camera.restored == []
+
+
 def test_an_infrared_preset_ends_the_frame_with_an_ir_exposure(tmp_path, monkeypatch):
     class WritingCamera:
         def __init__(self):

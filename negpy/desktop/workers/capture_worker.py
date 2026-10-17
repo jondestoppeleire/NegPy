@@ -339,12 +339,18 @@ class CaptureWorker(QObject):
                         camera.set_shutter(before)
 
             def _with_ir(paths: list) -> list:
-                """Append the frame's infrared exposure when the preset asks for one."""
+                """Append the frame's infrared exposure when the preset asks for one. The visible
+                exposures are on disk by now, so a failed infrared one ends the frame without it
+                instead of failing the frame, which would delete them as a partial capture."""
                 if not req.infrared:
                     return paths
                 self.channel.emit("IR")
                 self.status.emit("Capturing IR channel…")
-                paths.append(_capture_ir())
+                try:
+                    paths.append(_capture_ir())
+                except Exception as exc:  # noqa: BLE001
+                    logger.exception("infrared exposure failed")
+                    self.status.emit(f"Infrared exposure failed, frame kept without it: {exc}")
                 self.progress.emit(1.0)
                 return paths
 

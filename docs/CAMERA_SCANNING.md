@@ -151,13 +151,13 @@ older bodies that lock up the USB/PTP link when a new capture command arrives to
 Live View, **R**, **G**, **B** and, on a light with infrared LEDs, **IR** select which
 exposures Scan and Retake shoot, and the framing light shows the selection. Scan shoots them
 into the next frame and never touches an existing file. Retake re-shoots them on the current
-frame, one channel of a triplet shot again, and first keeps each file it replaces as a
-hidden `.previous-` copy beside it. **IR Shutter** on the card sets the infrared exposure's
-shutter, which an IR-cut filter leaves far slower than the visible channels; a step the
-camera does not offer falls back to the camera's shutter. Infrared needs a light with
-infrared LEDs and a camera that passes 850 nm, a full-spectrum or IR-converted body: a stock
-camera's IR-cut filter leaves the infrared frame at noise. An `_IR` file stays its own frame
-in the Film Strip.
+frame, one channel of a triplet shot again, and first keeps the file it replaces as a hidden
+`.previous-` copy beside it, one copy per file that a later Retake replaces in turn. **IR
+Shutter** on the card sets the infrared exposure's shutter, which an IR-cut filter leaves
+far slower than the visible channels; a step the camera does not offer falls back to the
+camera's shutter. Infrared needs a light with infrared LEDs and a camera that passes 850 nm,
+a full-spectrum or IR-converted body: a stock camera's IR-cut filter leaves the infrared
+frame at noise. An `_IR` file stays its own frame in the Film Strip.
 
 **Narrowband Scan.** Narrowband LEDs render more saturated than white light. The **Narrowband** toggle in the Process
 panel, beside **Linear RAW**, corrects this with the bundled RGBScan input profile, in the

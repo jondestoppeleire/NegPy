@@ -361,7 +361,6 @@ class ScanlightSidebar(QWidget):
         self.preset_new_btn.setIcon(qta.icon("fa5s.plus", color=THEME.text_primary, color_disabled=THEME.text_muted))
         self.preset_new_btn.setToolTip(wrap_tooltip("Add a preset: calibrate on the film base, or set one by hand"))
         self.preset_new_btn.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
-        self.preset_new_btn.setStyleSheet("QToolButton {padding: 6px;}")
         self.preset_new_btn.setFixedHeight(default_button_height())
         self.preset_new_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         add_menu = QMenu(self.preset_new_btn)
@@ -553,6 +552,9 @@ class ScanlightSidebar(QWidget):
             ("iso", self.lv_window.iso_stepper),
             ("shutter", self.lv_window.shutter_stepper),
             ("aperture", self.lv_window.aperture_stepper),
+        ):
+            stepper.activated.connect(lambda _i, w=which, c=stepper: self._on_live_view_exposure(w, c))
+        for which, stepper in (
             ("iso", self.calib_window.iso_stepper),  # calibration pop-up drives the same camera
             ("aperture", self.calib_window.aperture_stepper),
         ):
@@ -725,6 +727,14 @@ class ScanlightSidebar(QWidget):
             self._refresh_camera_settings()
             self._update_settings_from_ui()  # seed settings from the freshly populated steppers + sliders
         self._apply_gating()
+
+    def _on_live_view_exposure(self, which: str, stepper) -> None:
+        """A Live View stepper moved. With the exposure editable it is the card's, so the step
+        lands in the settings a scan forces; otherwise it only drives the body."""
+        if self._manual_mode or self._free_exposure:
+            self._on_sidebar_exposure_changed(which, stepper)
+        else:
+            self._on_camera_setting(which, stepper)
 
     def _on_sidebar_exposure_changed(self, which: str, stepper) -> None:
         """A manual-preset exposure stepper moved: copy its label into settings (what Save bakes and a
@@ -1850,7 +1860,7 @@ class ScanlightSidebar(QWidget):
             sensor_profile=preset.sensor_profile if preset is not None else "",
             channels=channels,
             shutter_ir=shutter_ir,
-            infrared=s.infrared and rgb,
+            infrared=s.infrared and rgb and self._light_has_ir,
             capture_delay_s=s.capture_delay_s,
         )
         self._capturing = tuple(channels) + (("IR",) if req.infrared else ()) if triplet else ()
@@ -2070,7 +2080,7 @@ class ScanlightSidebar(QWidget):
             if (
                 not self._settings.white_mode
                 and not self._settings.single_capture
-                and not (self.lv_window.selected_rgb() or self._settings.infrared)
+                and not (self.lv_window.selected_rgb() or (self._settings.infrared and self._light_has_ir))
             ):
                 m.append("select an exposure to shoot in Live View")
         folder = self.output.folder()

@@ -404,6 +404,45 @@ def test_the_live_view_delay_stepper_and_the_card_slider_are_one_setting():
     assert w.lv_window.delay_stepper.currentText() == "5 s"
 
 
+def test_a_live_view_step_under_an_editable_exposure_is_what_the_scan_forces(tmp_path, monkeypatch):
+    # Both steppers show the stepped value; the frame must shoot at it, not at the recipe's.
+    import negpy.desktop.view.sidebar.scanlight as sl
+
+    p = tmp_path / "settings.json"
+    p.write_text(_shutter_json(cur=0))
+    monkeypatch.setattr(sl, "default_settings_path", lambda: str(p))
+    w = _sidebar()
+    w.output.folder_edit.setText(str(tmp_path))
+    w._camera_verified = True
+    idx = w.preset_combo.findData("Trichrome, Color Negative")
+    w.preset_combo.setCurrentIndex(idx)
+    w._on_preset_selected(idx)
+    assert w.shutter_stepper.currentText() == "1/5"
+
+    w.lv_window.shutter_stepper._step(1)  # to 1/60, in the pop-up
+    w._start_capture(retake=False)
+
+    req = w.controller.start_capture.call_args.args[0]
+    assert req.shutters == ("1/60", "1/60", "1/60")
+
+
+def test_infrared_stays_off_on_a_light_without_infrared_leds(tmp_path):
+    w = _sidebar()
+    w.output.folder_edit.setText(str(tmp_path))
+    w._camera_verified = True
+    w._settings = replace(w._settings, infrared=True)  # persisted from a Big Scanlight session
+    w._light_has_ir = False
+    w.lv_window.channel_btns["R"].setChecked(False)
+    w.lv_window.channel_btns["G"].setChecked(False)
+    w.lv_window.channel_btns["B"].setChecked(False)
+    assert "select an exposure to shoot in Live View" in w._missing_requirements()
+
+    w.lv_window.channel_btns["R"].setChecked(True)
+    w._start_capture(retake=False)
+
+    assert w.controller.start_capture.call_args.args[0].infrared is False
+
+
 def test_scan_gated_until_all_requirements(tmp_path):
     w = _sidebar()
     # Nothing ready → Scan and the pop-up Scan are disabled.
@@ -2321,6 +2360,7 @@ def test_built_in_trichrome_presets_scan_without_calibration_and_carry_infrared(
 
 def test_scan_under_an_infrared_preset_asks_for_the_infrared_exposure(tmp_path):
     w = _sidebar()
+    w._light_has_ir = True
     w.output.folder_edit.setText(str(tmp_path))
     w._camera_verified = w._light_verified = True
     w.preset_combo.setCurrentIndex(w.preset_combo.findData("Trichrome + IR, Color Negative"))
