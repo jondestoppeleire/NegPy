@@ -4,6 +4,7 @@ Owns the live Scanlight serial connection (so the RGB sliders stay responsive)
 and one libgphoto2 session, held open across captures and shared with live view.
 """
 
+import math
 import os
 import threading
 import time
@@ -34,7 +35,7 @@ from negpy.services.capture.calibration import (
     normalize_start_point,
     scan_ladder,
 )
-from negpy.services.capture.service import CaptureService, capture_single
+from negpy.services.capture.service import CaptureError, CaptureService, capture_single
 
 logger = get_logger(__name__)
 
@@ -63,6 +64,7 @@ class CaptureRequest:
     channels: tuple[str, ...] = ("R", "G", "B")  # the visible exposures to shoot; a subset shoots alone, into its own files
     shutter_ir: str = ""  # the infrared exposure's own shutter; "" = the body's current
     infrared: bool = False  # end the frame with an infrared exposure at shutter_ir
+    capture_delay_s: float = 0.0  # seconds to hold the first exposure; Stop ends the wait
 
 
 @dataclass(frozen=True)
@@ -138,6 +140,7 @@ class CaptureWorker(QObject):
 
     light_set = pyqtSignal(int, int, int, int)  # r, g, b, w actually applied
     progress = pyqtSignal(float)  # 0.0..1.0
+    countdown = pyqtSignal(int)  # whole seconds left of the Capture Delay; 0 when the shot starts
     channel = pyqtSignal(str)  # "R"/"G"/"B" as each triplet channel starts
     #: One set_camera_setting call ran to completion: verified, rejected, or skipped without a
     #: session. Always fires, so the sidebar's pending-write gate on Scan cannot stick.
@@ -295,6 +298,7 @@ class CaptureWorker(QObject):
                 # Normal white-light scanning, with no Scanlight: one plain camera shot imported
                 # as an ordinary single RAW, with no LED control and no triplet. The operator's
                 # own light stays on, and the shutter is whatever the live-view steppers set.
+                self._wait_before_capture(req.capture_delay_s)
                 self.status.emit("Capturing…")
                 path = capture_single(
                     camera,
@@ -344,6 +348,7 @@ class CaptureWorker(QObject):
                 self.progress.emit(1.0)
                 return paths
 
+            self._wait_before_capture(req.capture_delay_s)  # after the light check, so a dead light fails at once
             if req.white_mode:  # one broadband white exposure (slide / B&W), no RGB triplet
                 self.status.emit("Capturing white frame…")
                 path = service.capture_white(
@@ -423,6 +428,17 @@ class CaptureWorker(QObject):
             self._close_camera()  # discard a possibly-broken held session
             logger.exception("capture failed")
             self.error.emit(str(e))
+
+    def _wait_before_capture(self, delay_s: float) -> None:
+        """Hold the first exposure for `delay_s`; Stop ends the wait as a cancellation."""
+        if delay_s <= 0:
+            return
+        deadline = time.monotonic() + delay_s
+        while (left := deadline - time.monotonic()) > 0:
+            self.countdown.emit(math.ceil(left))
+            if self._cancel.wait(min(left, 1.0)):
+                raise CaptureError("canceled before the first exposure")
+        self.countdown.emit(0)
 
     def _cleanup_partial_frame(self, req: CaptureRequest) -> None:
         """After a cancelled/failed capture, delete this frame's exposures so the output

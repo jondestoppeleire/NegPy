@@ -144,17 +144,20 @@ a **+ IR** preset ends each frame with an infrared exposure at **IR Shutter**. T
 **Scan.** Pick an output folder and a preset, then press **Scan** for each frame. Files go
 to an auto-numbered per-roll subfolder and are imported and merged automatically. A
 single-capture preset writes one file per frame. **Retake** shoots the current frame again
-without advancing the counter. **Delay between exposures** adds a pause between the red,
-green and blue captures, for older bodies that lock up the USB/PTP link when a new capture
-command arrives too soon. In Live View, **R**, **G**, **B** and, on a light with infrared
-LEDs, **IR** select which exposures Scan and Retake shoot, and the framing light shows the
-selection. Scan shoots them into the next frame and never touches an existing file. Retake
-re-shoots them on the current frame, one channel of a triplet shot again, and first keeps
-each file it replaces as a hidden `.previous-` copy beside it. **IR Shutter** on the card
-sets the infrared exposure's shutter, which an IR-cut filter leaves far slower than the
-visible channels; a step the camera does not offer falls back to the camera's shutter. Infrared
-needs a light with infrared LEDs and a camera that passes 850 nm, a full-spectrum or IR-converted
-body: a stock camera's IR-cut filter leaves the infrared frame at noise. An `_IR` file stays its own frame in the Film Strip.
+without advancing the counter. **Capture Delay** holds both for up to 8 s before the first
+exposure, so a table that shakes when you let go of the camera can settle; **Stop** ends the
+wait. **Delay between exposures** adds a pause between the red, green and blue captures, for
+older bodies that lock up the USB/PTP link when a new capture command arrives too soon. In
+Live View, **R**, **G**, **B** and, on a light with infrared LEDs, **IR** select which
+exposures Scan and Retake shoot, and the framing light shows the selection. Scan shoots them
+into the next frame and never touches an existing file. Retake re-shoots them on the current
+frame, one channel of a triplet shot again, and first keeps each file it replaces as a
+hidden `.previous-` copy beside it. **IR Shutter** on the card sets the infrared exposure's
+shutter, which an IR-cut filter leaves far slower than the visible channels; a step the
+camera does not offer falls back to the camera's shutter. Infrared needs a light with
+infrared LEDs and a camera that passes 850 nm, a full-spectrum or IR-converted body: a stock
+camera's IR-cut filter leaves the infrared frame at noise. An `_IR` file stays its own frame
+in the Film Strip.
 
 **Narrowband Scan.** Narrowband LEDs render more saturated than white light. The **Narrowband** toggle in the Process
 panel, beside **Linear RAW**, corrects this with the bundled RGBScan input profile, in the
