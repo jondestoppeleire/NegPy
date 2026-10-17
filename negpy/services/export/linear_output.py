@@ -283,8 +283,7 @@ def wb_bake_block_reason(rgbscan: Optional[RgbScanConfig], process: Optional[Pro
     dialed on the camera, not a correction the light or the film calls for. Channel separation
     for these captures comes from the triplet or the sensor unmix instead.
 
-    Single-Shot Narrowband is flagged by a calibrated sensor matrix (Single-Shot Narrowband
-    Calibration).
+    A Single Exposure under narrowband light is flagged by its calibrated sensor crosstalk matrix.
     """
     if rgbscan is not None and is_rgb_triplet(rgbscan):
         return "trichrome"
