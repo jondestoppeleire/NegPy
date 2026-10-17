@@ -654,15 +654,16 @@ class CaptureWorker(QObject):
     @pyqtSlot(str, int, str)
     def set_camera_setting(self, which: str, raw: int, label: str = "") -> None:
         """Change a live camera setting (iso/shutter/wb/aperture); `raw` is a choice index and
-        `label` the text the panel shows for it, which the body must still list there."""
+        `label` the text the panel shows for it, which the body must still list there. Takes the
+        session like a scan does: the card's steppers write with no Live View window open, after
+        the window's close released it."""
         try:
-            if self._holds_camera():
-                cam = self._camera
-                {
-                    "iso": cam.set_iso,
-                    "shutter": cam.set_shutter,
-                    "aperture": cam.set_aperture,
-                }.get(which, lambda _r, _l=None: None)(*((raw, label) if label else (raw,)))
+            cam = self._acquire_camera()
+            {
+                "iso": cam.set_iso,
+                "shutter": cam.set_shutter,
+                "aperture": cam.set_aperture,
+            }.get(which, lambda _r, _l=None: None)(*((raw, label) if label else (raw,)))
         except Exception as exc:  # noqa: BLE001 — exceptions cannot cross a Qt slot
             self._camera_control_failed("set_camera_setting", exc)
         finally:

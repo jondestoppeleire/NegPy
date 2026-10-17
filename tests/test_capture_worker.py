@@ -380,6 +380,54 @@ def test_poll_self_heals_once_the_other_app_releases_the_camera(monkeypatch):
     assert worker._holds_camera()
 
 
+def test_a_setting_write_takes_the_session_when_live_view_has_released_it(monkeypatch):
+    # Closing the Live View window releases the PTP session on purpose. A card stepper step
+    # after that must still reach the body, so the write opens the session like a scan does.
+    class Body:
+        def __init__(self) -> None:
+            self.writes: list[tuple] = []
+            self._open = False
+
+        def is_open(self) -> bool:
+            return self._open
+
+        def open(self) -> None:
+            self._open = True
+
+        def set_shutter(self, raw, label=None) -> None:
+            self.writes.append(("shutter", raw, label))
+
+        def set_iso(self, raw, label=None) -> None:
+            self.writes.append(("iso", raw, label))
+
+        set_aperture = set_iso
+
+    worker = CaptureWorker()
+    body = Body()
+    monkeypatch.setattr(worker, "_acquire_camera", lambda: (body.open(), body)[1])
+    applied: list[str] = []
+    worker.camera_setting_applied.connect(applied.append)
+
+    worker.set_camera_setting("shutter", 29, "1/20")
+
+    assert body.writes == [("shutter", 29, "1/20")]
+    assert applied == ["shutter"]  # the panel's Scan gate counts this report
+
+
+def test_a_setting_write_with_no_camera_reports_and_still_releases_the_scan_gate(monkeypatch):
+    worker = CaptureWorker()
+    monkeypatch.setattr(worker, "_acquire_camera", lambda: (_ for _ in ()).throw(RuntimeError("unplugged")))
+    errors: list[str] = []
+    applied: list[str] = []
+    worker.error.connect(errors.append)
+    worker.camera_setting_applied.connect(applied.append)
+
+    worker.set_camera_setting("shutter", 29, "1/20")
+
+    assert applied == ["shutter"]
+    assert errors and "Reconnect" in errors[0]
+
+
 def test_poll_identifies_the_body_on_first_sight(monkeypatch):
     # libgphoto2's database labels post-database bodies "USB PTP Class Camera" (the a7C II is
     # not in it, #431); the real name lives on the device. The first poll after a body appears
