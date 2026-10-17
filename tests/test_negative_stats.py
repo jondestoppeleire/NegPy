@@ -52,7 +52,7 @@ class TestNegativeStatistics(unittest.TestCase):
         from negpy.features.exposure.logic import default_grade_range
 
         nominal = default_grade_range()
-        self.assertTrue(_by_name(self._rows(dr=nominal), "Negative").value.startswith("norm · "))
+        self.assertTrue(_by_name(self._rows(dr=nominal), "Negative").value.startswith("nrm · "))
         self.assertTrue(_by_name(self._rows(dr=nominal * 0.5), "Negative").value.startswith("lo · "))
         self.assertTrue(_by_name(self._rows(dr=nominal * 1.5), "Negative").value.startswith("hi · "))
         with_base = negative_statistics(1.82, None, None, None, density_above_base=(0.12, 0.85, 2.1), base_source="picked")

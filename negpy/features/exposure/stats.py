@@ -71,7 +71,7 @@ def _negative_row(
     from negpy.features.exposure.logic import default_grade_range
 
     ratio = float(norm_density_range) / default_grade_range()
-    character = "lo" if ratio < _DIAG_FLAT else "hi" if ratio > _DIAG_CONTRASTY else "norm"
+    character = "lo" if ratio < _DIAG_FLAT else "hi" if ratio > _DIAG_CONTRASTY else "nrm"
     window = f"Δ{float(norm_density_range):.2f}"
     if density_above_base is None:
         return StatRow("Negative", f"{character} · {window}", detail=detail)
