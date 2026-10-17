@@ -343,7 +343,7 @@ Double-click the strip, or press `Shift+Z`, to toggle the canvas **Zone Overlay*
 
 #### Probe
 
-A spot densitometer: hover the image for per-channel density above film base (ΔD), the print density and its zone. **Probe at Cursor** (**Overlays**, or `Shift+I`) shows the same reading in a chip beside the pointer.
+A spot densitometer. Hover the image to read the print density, its zone and ΔD per channel. ΔD is density above the thin end of the normalization window. On a negative that end is the detected thin bound plus the Black Point offset, or the roll's bound under Roll Analysis; the rebate reads below zero. On a slide it is decoder white plus the White Point offset. **Probe at Cursor** (**Overlays**, or `Shift+I`) shows the same reading in a chip beside the pointer.
 
 #### Zone placement
 
