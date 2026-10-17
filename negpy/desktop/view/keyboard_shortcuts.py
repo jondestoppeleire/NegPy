@@ -26,6 +26,12 @@ from negpy.desktop.view.slider_targets import slider_widget_map
 from negpy.desktop.view.widgets.collapsible import hidden_by_gating
 
 
+def _toggle_if_live(button) -> None:
+    """Toggle a panel button only while it can be used: a grayed-out or gated one keeps its setting."""
+    if button.isEnabled() and not hidden_by_gating(button):
+        button.toggle()
+
+
 def _context_undo(controller) -> None:
     """Undo the active retouch tool's last stroke, else the last edit."""
     if controller.session.state.active_tool == ToolMode.CLONE:
@@ -448,6 +454,7 @@ class ShortcutManager:
             "metadata_clear_gear": lambda: right.metadata_sidebar.gear_clear_btn.click(),
             "metadata_clear_process": lambda: right.metadata_sidebar.process_clear_btn.click(),
             "metadata_clear_scanning": lambda: right.metadata_sidebar.scan_clear_btn.click(),
+            "assign_sequential_frame": lambda: right.metadata_sidebar.frame_sequence_btn.click(),
             "scan_setup": lambda: controls.sensor_sidebar.scan_setup_btn.click(),
             "measure_chart": lambda: controls.sensor_sidebar.measure_chart_btn.click(),
             "scan_prescan": (lambda: right.scan_sidebar.prescan_btn.click() if getattr(right, "scan_sidebar", None) is not None else None),
@@ -495,6 +502,8 @@ class ShortcutManager:
             "toggle_zones": controller.toggle_zones_overlay,
             "toggle_clipping_overlay": controller.toggle_clipping_overlay,
             "toggle_zone_hover_highlight": controller.toggle_zone_hover_highlight,
+            "toggle_parade_overlay": lambda: _toggle_if_live(right.parade_overlay_btn),
+            "toggle_scan_parade_base": lambda: _toggle_if_live(right.scan_base_btn),
             "toggle_test_strip": controller.toggle_test_strip,
             "toggle_pick_better": controller.toggle_pick_better,
             "finish_pick_better": controller.pick_better_finish,

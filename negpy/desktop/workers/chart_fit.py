@@ -7,6 +7,7 @@ import numpy as np
 from PyQt6.QtCore import QThread, pyqtSignal
 
 from negpy.domain.models import WorkspaceConfig
+from negpy.features.exposure.papers import DEFAULT_PROFILE_KEY
 from negpy.features.process.chart import ChartSpec, FitCancelled, fit_chart_matrix
 from negpy.features.process.models import ProcessMode
 from negpy.kernel.system.logging import get_logger
@@ -32,8 +33,9 @@ class ChartSource:
 
 
 def chart_fit_config(config: WorkspaceConfig, matrix: np.ndarray) -> WorkspaceConfig:
-    """The frame with *matrix* at full strength, metered on its own: a roll baseline or locked
-    bounds were measured without the matrix."""
+    """The frame with *matrix* at full strength, metered on its own and printed on the Digital
+    stock: a roll baseline or locked bounds were measured without the matrix, and a print stock's
+    dyes would end up in the rig's matrix."""
     process = replace(
         config.process,
         crosstalk_matrix=tuple(float(v) for v in np.ravel(matrix)),
@@ -46,7 +48,7 @@ def chart_fit_config(config: WorkspaceConfig, matrix: np.ndarray) -> WorkspaceCo
         local_floors=(0.0, 0.0, 0.0),
         local_ceils=(0.0, 0.0, 0.0),
     )
-    return replace(config, process=process)
+    return replace(config, process=process, exposure=replace(config.exposure, paper_profile=DEFAULT_PROFILE_KEY))
 
 
 class ChartFitWorker(QThread):

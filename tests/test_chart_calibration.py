@@ -127,12 +127,16 @@ def test_fit_config_meters_the_frame_on_its_own() -> None:
 
     base = WorkspaceConfig()
     base = replace(
-        base, process=replace(base.process, use_luma_average=True, use_cast_average=True, lock_bounds=True, crosstalk_strength=0.3)
+        base,
+        process=replace(base.process, use_luma_average=True, use_cast_average=True, lock_bounds=True, crosstalk_strength=0.3),
+        exposure=replace(base.exposure, paper_profile="kodak_2383"),
     )
     cfg = chart_fit_config(base, np.eye(3) * 2.0)
     p = cfg.process
     assert p.crosstalk_strength == 1.0 and p.crosstalk_matrix[0] == 2.0
     assert not (p.use_luma_average or p.use_color_average or p.use_cast_average or p.lock_bounds)
+    # A stock's dyes are a print look; fitted through them they would land in the rig's matrix.
+    assert cfg.exposure.paper_profile == WorkspaceConfig().exposure.paper_profile
 
 
 def test_worker_renders_through_the_real_pipeline() -> None:

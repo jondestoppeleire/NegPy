@@ -78,6 +78,8 @@ DROPPED_KEYS: frozenset[str] = frozenset(
         "e6_normalize",
         # Batch metadata sync: Metadata cards are roll defaults, so every frame already carries the roll's values.
         "sync_to_batch",
+        # Narrowband and its bundled input profile: the print stocks' dyes set the print's colors.
+        "narrowband_scan",
         # The pixel-grid contact sheet; the darkroom sheet keeps its settings app-wide, not per edit.
         "contact_sheet_cell_px",
         "contact_sheet_gap",
@@ -94,6 +96,8 @@ DROPPED_KEYS: frozenset[str] = frozenset(
         "contact_sheet_default_show_labels",
         "contact_sheet_default_background_color",
         "contact_sheet_default_label_color",
+        # The on-export bake is now an app-global toggle, not a per-edit field.
+        "export_bake_auto_density_grade",
     }
 )
 

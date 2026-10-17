@@ -59,6 +59,35 @@ def test_paper_combo_rebuilt_only_when_entries_change(qapp):
     assert _combo_items(sidebar.paper_combo) == items
 
 
+def _groups(combo) -> dict:
+    """Each choice's key mapped to the header above it."""
+    out, header = {}, None
+    for text, key in _combo_items(combo):
+        if key is None:
+            header = text
+        else:
+            out[key] = header
+    return out
+
+
+def test_print_stock_list_groups_digital_paper_and_print_film(qapp):
+    controller, sidebar = _sidebar()
+    groups = _groups(sidebar.paper_combo)
+    assert groups["neutral"] == groups["pakon"] == "Digital"
+    assert groups["kodak_endura"] == groups["fuji_crystal"] == "Paper"
+    assert groups["kodak_2383"] == groups["kodak_2393"] == "Print film"
+
+    cfg = controller.state.config
+    controller.state.config = replace(cfg, process=replace(cfg.process, process_mode=ProcessMode.BW))
+    sidebar.sync_ui()
+    assert _groups(sidebar.paper_combo)["ilford_mg_rc"] == "Paper"
+
+
+def test_a_print_stock_from_another_mode_shows_the_digital_default(qapp):
+    _controller, sidebar = _sidebar(paper_profile="ilford_mg_rc")
+    assert sidebar.paper_combo.currentData() == "neutral"
+
+
 def test_channel_selector_retargets_and_syncs(qapp):
     _controller, sidebar = _sidebar(
         toe_trim_red=0.4,

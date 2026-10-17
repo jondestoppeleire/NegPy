@@ -14,6 +14,10 @@ from negpy.kernel.image.validation import ensure_image
 if TYPE_CHECKING:
     from negpy.features.process.models import ProcessConfig
 
+# Bump in any change that alters the bounds a frame measures for unchanged settings. Saved
+# per-frame bounds from an older version are dropped at startup (migrations/bounds.py).
+BOUNDS_VERSION = 1
+
 # Above this size the block-median is threaded over row strips (np.median frees the GIL).
 _BLOCK_MEDIAN_PARALLEL_MIN_PIXELS = 2_000_000
 
@@ -538,6 +542,14 @@ def density_above_base(
     dense = float(np.dot(w, np.asarray(bounds.floors, dtype=np.float64)))
     median = float(np.median(np.asarray(prefiltered, dtype=np.float64).reshape(-1, 3) @ w))
     return (base - thin, base - median, base - dense)
+
+
+def base_scan_density(base_log: Optional[Tuple[float, float, float]], unmix: Optional[np.ndarray] = None) -> Optional[np.ndarray]:
+    """Per-channel scan density of the clear base after the crosstalk unmix: the space the scan
+    Parade plots. None without a base."""
+    if base_log is None:
+        return None
+    return -unmix_log_image(np.asarray(base_log, dtype=np.float32).reshape(1, 1, 3), unmix).reshape(3).astype(np.float64)
 
 
 def luminance_density_range(bounds: LogNegativeBounds) -> float:

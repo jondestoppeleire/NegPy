@@ -11,7 +11,15 @@ from PyQt6.QtWidgets import (
 from negpy.desktop.session import ToolMode
 from negpy.desktop.view.sidebar.base import BaseSidebar
 from negpy.desktop.view.sidebar.tone import _CH_LABEL, _CH_SUFFIX, channel_selector
-from negpy.desktop.view.styles.templates import ICON_BUTTON_WIDTH, hint_label, header_row, section_subheader, set_hint_kind, wrap_tooltip
+from negpy.desktop.view.styles.templates import (
+    ICON_BUTTON_WIDTH,
+    clearable_tool_toggle,
+    hint_label,
+    header_row,
+    section_subheader,
+    set_hint_kind,
+    wrap_tooltip,
+)
 from negpy.desktop.view.widgets.stats import CLIPPING_TOOLTIP
 from negpy.features.exposure.stats import clipping_row
 from negpy.services.assets import rolls
@@ -152,33 +160,28 @@ class ProcessSidebar(BaseSidebar):
         self.clipping_hint.setToolTip(wrap_tooltip(CLIPPING_TOOLTIP))
         analysis_col.addWidget(self.clipping_hint)
         self.set_clipping(None, None)
-        analysis_col.addWidget(self.analysis_buffer_slider)
 
-        self.analysis_region_btn = self._tool_toggle(
+        self.analysis_region_btn = clearable_tool_toggle(
             "fa5s.vector-square",
-            " Draw Region",
+            "Draw Region",
             "Draw a freehand analysis region on the image — the meters read exactly that area "
             "(overrides the Analysis Buffer). Double-click inside it to confirm.",
+            "Clear Region: clear the freehand analysis region (fall back to the Analysis Buffer)",
         )
-        self.clear_analysis_region_btn = self._icon_action(
-            "fa5s.times", "Clear Region: clear the freehand analysis region (fall back to the Analysis Buffer)"
-        )
-        region_row = QHBoxLayout()
-        region_row.addWidget(self.analysis_region_btn, 1)
-        region_row.addWidget(self.clear_analysis_region_btn)
-        analysis_col.addLayout(region_row)
-
-        self.film_base_btn = self._tool_toggle(
+        self.clear_analysis_region_btn = self.analysis_region_btn.clear_btn
+        self.film_base_btn = clearable_tool_toggle(
             "fa5s.crosshairs",
-            " Film Base",
+            "Film Base",
             "Film Base: click the clear rebate to set the roll's film base. The Negative row's hover then reads "
             "Dmax, Dmed and Dmin above it. Without one, the base is read from the rebate.",
+            "Clear Film Base: forget the roll's base; the rebate is read instead",
         )
-        self.clear_film_base_btn = self._icon_action("fa5s.times", "Clear Film Base: forget the roll's base; the rebate is read instead")
-        base_row = QHBoxLayout()
-        base_row.addWidget(self.film_base_btn, 1)
-        base_row.addWidget(self.clear_film_base_btn)
-        analysis_col.addLayout(base_row)
+        self.clear_film_base_btn = self.film_base_btn.clear_btn
+        tools_row = QHBoxLayout()
+        tools_row.addWidget(self.analysis_region_btn, 1)
+        tools_row.addWidget(self.film_base_btn, 1)
+        analysis_col.addLayout(tools_row)
+        analysis_col.addWidget(self.analysis_buffer_slider)
 
         initial_luma_slider_val = _luma_range_value_to_slider(conf.luma_range_clip)
         self.luma_range_clip_slider = CompactSlider(
@@ -188,8 +191,6 @@ class ProcessSidebar(BaseSidebar):
         self.color_range_clip_slider = CompactSlider(
             "Color Clip", -100, 100, initial_color_slider_val, precision=1, step=1, has_neutral=True
         )
-        self.tonal_range_header = section_subheader("TONAL RANGE")
-        analysis_col.addWidget(self.tonal_range_header)
         analysis_col.addWidget(self.luma_range_clip_slider)
         analysis_col.addWidget(self.color_range_clip_slider)
 
@@ -369,8 +370,11 @@ class ProcessSidebar(BaseSidebar):
         if not riding:
             return
         if conf.is_locked_initialized:
-            set_hint_kind(self.baseline_source_hint, "muted")
-            self.baseline_source_hint.setText(f"Baseline: {rolls.baseline_label(self.controller.session.repo, conf)}")
+            repo = self.controller.session.repo
+            stale = rolls.frame_baseline_stale(repo, conf)
+            set_hint_kind(self.baseline_source_hint, "warning" if stale else "muted")
+            suffix = ", from an older analysis" if stale else ""
+            self.baseline_source_hint.setText(f"Baseline: {rolls.baseline_label(repo, conf)}{suffix}")
         else:
             set_hint_kind(self.baseline_source_hint, "warning")
             self.baseline_source_hint.setText("No baseline yet: this frame uses its own analysis until Roll Analysis runs")
@@ -444,19 +448,15 @@ class ProcessSidebar(BaseSidebar):
 
             has_region = conf.analysis_rect is not None
             self.analysis_region_btn.setChecked(self.state.active_tool == ToolMode.ANALYSIS_DRAW)
-            self.analysis_region_btn.edited_dot.set_active(has_region)
-            self.clear_analysis_region_btn.setEnabled(has_region)
+            self.clear_analysis_region_btn.setVisible(has_region)
             has_base = self.controller.roll_film_base() is not None
             self.film_base_btn.setChecked(self.state.active_tool == ToolMode.FILM_BASE)
-            self.film_base_btn.edited_dot.set_active(has_base)
-            self.clear_film_base_btn.setEnabled(has_base)
+            self.clear_film_base_btn.setVisible(has_base)
 
             for w in (
                 self.analysis_buffer_slider,
                 self.analysis_region_btn,
-                self.clear_analysis_region_btn,
                 self.film_base_btn,
-                self.clear_film_base_btn,
                 self.avg_header,
                 self.use_luma_avg_btn,
                 self.use_color_avg_btn,

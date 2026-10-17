@@ -169,7 +169,7 @@ CATALOG: list[tuple[str, tuple[SettingRow, ...]]] = [
         _row("Auto Grade", "exposure", "auto_normalize_contrast", sticky=True),
     )),
     ("Paper Response", (
-        _row("Paper Profile", "exposure", "paper_profile", sticky=True),
+        _row("Print Stock", "exposure", "paper_profile", sticky=True),
         _row("Paper Black", "exposure", "paper_black", sticky=True),
         _row("Paper White", "exposure", "paper_dmin", sticky=True),
         _row("Snap", "exposure", "midtone_gamma"),

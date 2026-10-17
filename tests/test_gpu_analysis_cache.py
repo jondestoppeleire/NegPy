@@ -54,7 +54,6 @@ class TestAnalysisCacheKey(unittest.TestCase):
             replace(self.cfg, process=replace(self.cfg.process, black_point_trim_blue=0.02)),
             replace(self.cfg, process=replace(self.cfg.process, hue_trim=5.0)),
             replace(self.cfg, process=replace(self.cfg.process, lock_bounds=True)),
-            replace(self.cfg, process=replace(self.cfg.process, narrowband_scan=True)),
         ):
             self.assertEqual(k0, _analysis_cache_key(cfg, "src"))
 

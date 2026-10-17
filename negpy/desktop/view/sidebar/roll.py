@@ -5,7 +5,7 @@ from PyQt6.QtWidgets import QHBoxLayout, QVBoxLayout, QWidget
 from negpy.desktop.view.confirm import prompt_delete_scene
 from negpy.desktop.view.sidebar.base import BaseSidebar
 from negpy.desktop.view.styles.templates import field_label, hint_label, header_row, section_subheader, set_hint_kind, wrap_tooltip
-from negpy.desktop.view.styles.theme import scene_color
+from negpy.desktop.view.styles.theme import THEME, scene_color
 from negpy.kernel.system.text import count_of
 from negpy.desktop.view.widgets.searchable_gear_combo import SearchableGearCombo
 from negpy.services.assets import rolls
@@ -25,6 +25,8 @@ FROM_FRAME_TOOLTIP = (
     "average. Every frame outside a scene on Use Luma/Color Average follows it, including one loaded later."
 )
 FROM_FRAME_DISABLED_TOOLTIP = "Open this roll first — the baseline is written onto the files currently loaded."
+STALE_ROLL_HINT = "Baseline from an older analysis: run Reanalyze"
+STALE_SCENE_TOOLTIP = "Baseline from an older analysis: run Scene Analysis"
 
 
 class RollAnalysisSidebar(BaseSidebar):
@@ -104,13 +106,14 @@ class RollAnalysisSidebar(BaseSidebar):
         active_id = self.controller.state.active_roll_id
         listed = rolls.all_rolls_sorted(repo)
         analyzed = {rid for rid, entry in listed if entry.get("normalization")}
+        stale = {rid for rid, entry in listed if rolls.baseline_stale(entry.get("normalization"))}
         conf = self.state.config.process
         selected = active_id or ""
         if conf.roll_name:
             matching = next((rid for rid, entry in listed if entry.get("name") == conf.roll_name), None)
             if matching:
                 selected = matching
-        key = (tuple(rid for rid, _entry in listed), tuple(sorted(analyzed)), selected, active_id)
+        key = (tuple(rid for rid, _entry in listed), tuple(sorted(analyzed)), tuple(sorted(stale)), selected, active_id)
         if not force and key == self._roll_sync_key:
             return
         self._roll_sync_key = key
@@ -136,13 +139,16 @@ class RollAnalysisSidebar(BaseSidebar):
                 item.widget().deleteLater()
         for ordinal, (scene_id, entry) in enumerate(scenes, 1):
             count = sum(1 for s in loaded if s and s[1] == scene_id)
-            tick = " · ✓" if entry.get("normalization") else ""
+            stale = rolls.baseline_stale(entry.get("normalization"))
+            tick = f' · <span style="color:{THEME.warn_amber}">✓</span>' if stale else " · ✓" if entry.get("normalization") else ""
             row = QWidget()
             row_layout = QHBoxLayout(row)
             row_layout.setContentsMargins(0, 0, 0, 0)
             label = field_label(
                 f'<span style="color:{scene_color(ordinal)}">●</span> {ordinal}  {entry["name"]} · {count_of(count, "frame")}{tick}'
             )
+            if stale:
+                label.setToolTip(STALE_SCENE_TOOLTIP)
             row_layout.addWidget(label, 1)
             analyze = self._icon_action(
                 "fa5s.tachometer-alt", f"Scene Analysis — measure “{entry['name']}” and give its frames their own baseline"
@@ -163,10 +169,14 @@ class RollAnalysisSidebar(BaseSidebar):
         self.scenes_hint.setVisible(in_roll and not scenes)
 
     def _update_roll_status_hint(self, active_id: Optional[str], selected_id: str) -> None:
-        """Flags a baseline picked from a roll other than the one loaded."""
+        """Flags a baseline picked from a roll other than the one loaded, or one from an older analysis."""
+        entry = rolls.roll_for_id(self.controller.session.repo, selected_id) if selected_id else None
         if active_id and selected_id and selected_id != active_id:
             set_hint_kind(self.roll_status_hint, "warning")
             self.roll_status_hint.setText(f"Using “{self._name_for_id(selected_id)}”, a baseline saved for a different roll")
+        elif entry and rolls.baseline_stale(entry.get("normalization")):
+            set_hint_kind(self.roll_status_hint, "warning")
+            self.roll_status_hint.setText(STALE_ROLL_HINT)
         else:
             self.roll_status_hint.setText("")
 

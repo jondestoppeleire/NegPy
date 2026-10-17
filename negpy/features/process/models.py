@@ -116,9 +116,6 @@ class ProcessConfig:
 
     process_mode: ProcessMode = ProcessMode.C41
     linear_raw: bool = False
-    # Correct narrowband RGB camera scans via the bundled RGBScan input profile
-    # (applied at preview soft-proof / export; an explicit Input ICC overrides it).
-    narrowband_scan: bool = False
     # The source is a finished positive (a scanned print, an export from other software, a
     # scanner's own positive) rather than a raw capture. Slide only, held in __post_init__.
     # It decodes on its embedded profile, sRGB when untagged, instead of as literal linear
@@ -302,11 +299,11 @@ def with_film_fields(config: "WorkspaceConfig", fields: dict) -> "WorkspaceConfi
     return config
 
 
-def scan_setup_values(capture: str, light: str) -> tuple[bool, bool]:
-    """(linear_raw, narrowband_scan) for a scanning rig — capture is "camera"/"scanner",
-    light is "white"/"narrowband". A camera under white light is the only combination that
-    wants the as-shot-WB decode."""
-    return not (capture == "camera" and light == "white"), light == "narrowband"
+def scan_setup_values(capture: str, light: str) -> bool:
+    """linear_raw for a scanning rig — capture is "camera"/"scanner", light is
+    "white"/"narrowband". A camera under white light is the only combination that wants the
+    as-shot-WB decode."""
+    return not (capture == "camera" and light == "white")
 
 
 def per_channel_point_offsets(process: ProcessConfig) -> tuple[tuple[float, float, float], tuple[float, float, float]]:

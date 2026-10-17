@@ -1,5 +1,27 @@
 # Change Log
 
+## 0.65.0
+
+**Try the print stocks:** Exposure → Paper Response → Print stock. Each color paper and print film now prints the dye colors from its datasheet; *Digital (Adobe RGB)* stays the default.
+
+- New: **Print stocks** — color papers and print films print the dye colors fitted to their Kodak and Fuji datasheets; new Kodak Portra, Supra and Ultra Endura and the Vision 2383 and Vision Premier 2393 print films for color, Polymax II RC and Polycontrast IV RC for B&W; Crystal Archive refitted to a measured curve, and the control renamed Print stock.
+- Change: **Normalization** — every channel reaches past its color refs by the same share of its own span, so Luma Range Clip no longer tints; a frame with no crop meters the picture, not the holder; saved bounds re-measure after an analysis change, and a stale roll or scene baseline asks for Reanalyze. @seanharding
+- Change: **Cast Removal** — foliage, sky and water stay out of the gray sets, so green and blue scenes no longer print magenta, cream or pink; a frame with no neutral gets no correction.
+- New: **Crosstalk** — Measure from Chart fits a matrix from a ColorChecker or SpyderCheckr frame and shows each patch's ΔE00; labeled editor rows with terms to ±1; Vision3 250D and 500T re-derived from Kodak's dye curves, the Kodak consumer films re-estimated, and VERITA 200D added. An existing edit keeps its matrix until the profile is picked again.
+- Change: **Narrowband retired** — the print stocks do its job; an old Narrowband edit renders more saturated until a print stock is picked. Linear RAW is a Camera WB | Linear RAW choice, and Scan Setup skips the light question for a film scanner.
+- Change: **Chroma Denoise** — a band split of the color channels that removes color speckle, keeps color edges and leaves grain alone; faster on CPU.
+- New: **Tone** — Hold Black in the Auto menu lifts shadows and keeps the black point; Bake Auto Density/Grade and Bake to Roll freeze the helpers' values into a frame or the whole roll. @kurtwindisch @red-prs
+- New: **Pick Better** — guided tuning: pick the better of two prints round by round to set Filtration, Tone and Paper Response, in an order set with Custom Routing. @red-prs
+- New: **Film Base tool** — click the clear rebate to set the roll's film base; the Negative row's hover reads Dmax, Dmed and Dmin above it, and the probe's ΔD reads up from the frame's thinnest tone. @jondestoppeleire
+- New: **Zone Overlay and Analysis** — False Color, Zone Map and Grid looks with a toolbar legend of each zone's share, and hovering a zone shows it alone; Analysis is pinned above the Roll tab too, refreshes while a slider drags, and keeps its collapse per tab and its height across restarts.
+- New: **Canvas** — a Navigator for zoomed views, Frame Info levels, Probe at Cursor, double-click to toggle Fit and 100%, a Tools menu that arms any canvas tool, and hold-to keys for compare and peeks.
+- New: **Library** — Remove from Roll…, Move to Trash… and Show in Folder in the Film Strip, Sequence for running frame numbers that can skip rejected frames, and Load Metadata for work prints. @thetalkingdrum @kurtwindisch @red-prs
+- New: **Scanning** — nkscan 0.14 cuts frames and nudges from the thumbnail as Nikon Scan does, polls for film, keeps one session per scanner and writes the scanner's color profile and resolution into the TIFF; Keep Light On holds the Scanlight lit between frames. @activexray @kurtwindisch
+- Fix: **Scanning** — every camera setting is written on each capture, so a turned dial cannot change the exposure; Space scans from anywhere in Live View; Plustek 7600i V1 loads on Linux and macOS with pyopticfilm 1.3.6; IR glare at a Plustek 8200i frame edge stays out of dust removal. @jondestoppeleire @jboneng
+- Fix: **Flat Field and DNG** — a carrier's soft shadow edge stays out of the gain, the reference picker offers every supported format, and Adobe DNG Converter files decode the raw image, not the embedded preview. @thetalkingdrum
+- Fix: **Export** — GPU exports keep full size under a texture cap, stitched exports match the preview at the seams, and exported EXIF drops the source's XMP packet and keeps an in-camera rating. @thetalkingdrum @kurtwindisch
+- Fix: **Interface** — Negative Peek frames like the print, Film Strip hover on macOS, Flat Scan peek without Flat output, and Metadata Preview and Presets collapse. @kurtwindisch
+
 ## 0.64.0
 
 - New: **Expanded Analysis** — Waveform and Vectorscope views beside the Curve chart, a Clipping Overlay, zone strip hover that highlights the zone's pixels, a double-click on the zone strip toggles the Zone Overlay, and the step wedge prints through alt process and toning.

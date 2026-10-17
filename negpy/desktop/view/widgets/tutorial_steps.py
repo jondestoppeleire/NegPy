@@ -199,7 +199,7 @@ def build(window: "MainWindow") -> list[TutorialStep]:
             ROLL,
             "Calibration",
             "This card corrects the capture, not the look. The <b>bulb</b> asks how you scan, then sets "
-            "Linear RAW and <b>Narrowband</b> (RGB-LED light). <b>Single-Shot Narrowband Calibration</b> "
+            "<b>Camera WB</b> or <b>Linear RAW</b>. <b>Single-Shot Narrowband Calibration</b> "
             "removes sensor leak between bands. <b>Hue Trim</b> rotates hues for an unusual lamp.",
             lambda w: cp(w).sensor_section,
             focus=lambda w: cp(w).sensor_sidebar.scan_setup_btn,
@@ -210,7 +210,8 @@ def build(window: "MainWindow") -> list[TutorialStep]:
             "Crosstalk",
             "Film dyes absorb outside their own bands, which mutes color. <b>Crosstalk</b> unmixes them "
             "before metering. Pick the matrix for your process and set Strength; <b>+</b> edits a "
-            "matrix. Run Roll Analysis again after a change.",
+            "matrix. A color chart shot on the roll? <b>Measure from Chart…</b> fits one to it. "
+            "Run Roll Analysis again after a change.",
             lambda w: cp(w).sensor_section,
             focus=lambda w: cp(w).sensor_sidebar.crosstalk_combo,
             guide=("sensor", "Calibration"),
@@ -230,7 +231,8 @@ def build(window: "MainWindow") -> list[TutorialStep]:
             "Metering",
             "NegPy meters the black point, white point and orange mask. Keep rebate and holder out: crop "
             f"tight, set an <b>Analysis Buffer</b> or draw a region ({_k('analysis_draw')}). "
-            "<b>Lock Bounds</b> keeps the result; White and Black Point trim it.",
+            "<b>Lock Bounds</b> keeps the result; White and Black Point trim it. <b>Film Base</b>, one "
+            "click on the clear rebate, lets Analysis read Dmax and Dmin above the base.",
             lambda w: cp(w).process_section,
             guide=("process", "Metering"),
         ),
@@ -277,7 +279,8 @@ def build(window: "MainWindow") -> list[TutorialStep]:
             "Straighten, Tilt and Swing",
             "<b>Straighten</b>: draw a line along a horizon and the frame levels to it; Fine Rotation "
             "trims by hand. <b>Tilt</b> and <b>Swing</b> are easel movements for converging verticals "
-            "and horizontals. <b>Crop by Default</b> trims the wedge they leave.",
+            "and horizontals. <b>Crop by Default</b> trims the wedge they leave. <b>Auto Skew</b> squares "
+            "the frame to its film edges.",
             lambda w: cp(w).geometry_section,
             focus=lambda w: cp(w).geometry_sidebar.straighten_btn,
             guide=("geometry", "Geometry"),
@@ -290,6 +293,20 @@ def build(window: "MainWindow") -> list[TutorialStep]:
             "strong ones. Crops you drew stay.",
             lambda w: cp(w).autocrop_section,
             guide=("autocrop", "Crop"),
+        ),
+        step(
+            PRINTING,
+            "Print Stock",
+            "Pick the paper first, as a printer does. <b>Print stock</b> prints on a real RA4 paper or "
+            "print film, such as Kodak Endura Premier, Fujicolor Crystal Archive or Kodak Vision 2383, "
+            "with the curve and dye colors from its datasheet. <b>Digital (Adobe RGB)</b>, the default, "
+            "is an idealized print. A B&amp;W negative lists B&amp;W papers.",
+            lambda w: cp(w).paper_section,
+            focus=lambda w: cp(w).paper_sidebar.paper_combo,
+            task="Pick a print stock other than Digital and compare the print.",
+            watch=lambda w: w.state.config.exposure.paper_profile,
+            guide=("paper", "Paper Response"),
+            offer=_DEMO,
         ),
         step(
             PRINTING,
@@ -319,12 +336,22 @@ def build(window: "MainWindow") -> list[TutorialStep]:
         step(
             PRINTING,
             "Auto and Set Targets",
-            "The <b>Auto</b> menu turns Auto Density and Auto Grade on or off. <b>Set Targets…</b> moves "
-            "their aim: density, contrast, metering band, <b>Shadow Reach</b> and <b>Highlight Hold</b>. "
-            "Targets apply to every image, not to one edit.",
+            "The <b>Auto</b> menu turns Auto Density and Auto Grade on or off; <b>Hold Black</b> keeps "
+            "the black point under a shadow lift. <b>Set Targets…</b> moves their aim (density, contrast, "
+            "<b>Shadow Reach</b>, <b>Highlight Hold</b>) for every image. <b>Bake Auto Density/Grade</b> "
+            "freezes a frame's metered values, so a later target change leaves it alone.",
             lambda w: cp(w).tone_section,
             focus=lambda w: cp(w).tone_sidebar.auto_btn,
             guide=("tone", "Tone"),
+        ),
+        step(
+            PRINTING,
+            "Pick Better",
+            "Not sure which slider to move? <b>Pick Better</b>, the balance scale on the Exposure tab's "
+            "bar, prints two versions beside your edit. Click the better one, or the center to skip. "
+            "Each round tunes one control, then the rounds repeat in finer steps. <b>Custom Routing</b> "
+            "sets the order.",
+            lambda w: cp(w).pick_better_btn,
         ),
         step(
             PRINTING,
@@ -366,12 +393,11 @@ def build(window: "MainWindow") -> list[TutorialStep]:
         step(
             PRINTING,
             "Paper Response",
-            "A <b>paper profile</b> takes a real paper's curve from its datasheet. <b>Toe</b> and "
+            "These controls trim the print stock's curve. <b>Toe</b> and "
             "<b>Shoulder</b> shape the curve's ends, <b>Snap</b> the midtones, <b>Dye Separation</b> the "
             "color strength. <b>Paper White</b> and <b>Paper Black</b> show the paper's base and deepest "
             "black.",
             lambda w: cp(w).paper_section,
-            focus=lambda w: cp(w).paper_sidebar.paper_combo,
             guide=("paper", "Paper Response"),
         ),
         step(
@@ -427,7 +453,8 @@ def build(window: "MainWindow") -> list[TutorialStep]:
             LOOK,
             "Alternative Processes",
             "For B&amp;W negatives. <b>Lith</b> gives creamy warm highlights and sudden hard blacks. "
-            "<b>Cyanotype</b> prints in Prussian blue, with bleach and tannin toning. One selector picks "
+            "<b>Cyanotype</b> prints in Prussian blue, with bleach and tannin toning. <b>Sabattier</b> "
+            "re-exposes the print part-way through development, for partial reversal and Mackie lines. One selector picks "
             "one process, because they exclude each other.",
             lambda w: cp(w).altproc_section,
             guide=("altproc", "Alternative Processes"),
@@ -456,9 +483,10 @@ def build(window: "MainWindow") -> list[TutorialStep]:
         ),
         step(
             LOOK,
-            "Heal, Scratch and Line",
+            "Heal, Clone, Scratch and Line",
             "<b>Heal</b> marks a search area, not a stamp: only pixels that stand out are rebuilt, with "
-            "the frame's own grain. <b>Scratch</b> follows a line you click along a hair. <b>Line</b> "
+            "the frame's own grain. <b>Clone</b> copies film from another area where Heal cannot rebuild. "
+            "<b>Scratch</b> follows a line you click along a hair. <b>Line</b> "
             "traces a whole straight transport scratch from one click.",
             lambda w: cp(w).retouch_section,
             focus=lambda w: cp(w).retouch_sidebar.pick_dust_btn,
@@ -483,8 +511,8 @@ def build(window: "MainWindow") -> list[TutorialStep]:
             SEEING,
             "The Analysis Readout",
             "The densitometer above the tabs: an <b>H&amp;D chart</b> with this frame on the paper curve, "
-            "histograms with clip marks, and a strip of print zones. <b>Probe</b> reads the density "
-            "under the cursor.",
+            "or a <b>Waveform</b> or <b>Vectorscope</b>; histograms with clip marks, and a strip of print "
+            "zones. <b>Probe</b> reads the density under the cursor.",
             lambda w: rp(w).analysis_section,
             guide=("analysis", "Analysis"),
         ),
@@ -495,6 +523,15 @@ def build(window: "MainWindow") -> list[TutorialStep]:
             "<b>Place zones</b> solves Print Density and Grade so the pins print where you want them.",
             lambda w: rp(w).analysis_section,
             guide=("analysis", "Analysis"),
+        ),
+        step(
+            SEEING,
+            "Around the Canvas",
+            "Double-click the picture to switch between Fit and 100% at that spot; zoomed in, the "
+            f"<b>Navigator</b> moves the view. {_k('cycle_frame_info')} cycles the frame info and "
+            f"{_k('toggle_cursor_probe')} puts the density probe beside the pointer. <b>Tools</b> on the "
+            "toolbar arms any canvas tool: crop, pickers, masks and retouching.",
+            lambda w: w.toolbar.btn_tools,
         ),
         step(
             SEEING,
@@ -512,8 +549,8 @@ def build(window: "MainWindow") -> list[TutorialStep]:
             f"Hold {_k('toggle_negative_peek')} for the scan as captured, {_k('toggle_flat_peek')} for "
             f"the flat master, {_k('toggle_embedded_peek')} for the camera's preview. "
             f"{_k('toggle_reference')} pins a frame beside the canvas, to match a roll by eye. "
-            f"{_k('toggle_grain_focuser')} is a grain loupe and {_k('toggle_zones')} shows Adams zones, "
-            "both under <b>Overlays</b> on the toolbar.",
+            f"{_k('toggle_grain_focuser')} is a grain loupe and {_k('toggle_zones')} maps the print's "
+            "zones in color, gray steps or a grid, both under <b>Overlays</b> on the toolbar.",
             lambda w: w.toolbar.source_choice,
             task=f"Hold {_k('toggle_negative_peek')} to see the negative.",
             watch=lambda w: w.state.negative_peek,
