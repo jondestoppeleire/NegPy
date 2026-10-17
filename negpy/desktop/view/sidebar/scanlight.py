@@ -1309,7 +1309,7 @@ class ScanlightSidebar(QWidget):
     def _adopt_metered_shutter(self, label: str, raw: int) -> bool:
         """Under an RGB recipe the metered shutter becomes the scan's, in place of the recipe's,
         until the preset is picked again. A manual preset's stepper takes it, and Save keeps it.
-        True when a read-only preset took the override."""
+        True when a stored preset took the override."""
         if not self._rgb_mode or self._settings.white_mode:
             return False
         index = self.shutter_stepper.findData(raw) if (self._manual_mode or self._free_exposure) else -1
@@ -1318,7 +1318,7 @@ class ScanlightSidebar(QWidget):
         else:
             self._show_lone(self.shutter_stepper, label)
         self._settings = replace(self._settings, shutter_r=label, shutter_g=label, shutter_b=label, shutter_w=label)
-        return not (self._manual_mode or self._free_exposure)
+        return self._preset_selected() and not self._manual_mode
 
     @pyqtSlot(object)
     def _on_probe_finished(self, report) -> None:
@@ -2171,8 +2171,8 @@ class ScanlightSidebar(QWidget):
         self._refresh_preset_ui()
 
     def _refresh_preset_ui(self) -> None:
-        """Sync the preset-area widgets to the current mode. The Live View exposure steppers hide for
-        a calibrated RGB recipe, which locks them. The Capture mode row hides for a white-light preset;
+        """Sync the preset-area widgets to the current mode. The Live View exposure steppers hide in
+        RGB mode while no preset is selected; a recipe keeps them live. The Capture mode row hides for a white-light preset;
         the exposure steppers stay, editable under every built-in and a hand-set recipe. The sliders
         and Save are editable only while building a hand-set recipe."""
         locked = self._rgb_mode and not self._settings.white_mode and not (self._manual_mode or self._free_exposure)

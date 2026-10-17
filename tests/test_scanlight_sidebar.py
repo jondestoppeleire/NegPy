@@ -2295,10 +2295,15 @@ def test_meter_under_an_rgb_preset_shoots_the_scan_light_and_overrides_the_recip
     w, _ = _metering_sidebar(tmp_path, monkeypatch, cur=1)
     w._rgb_mode = True
     w._settings = replace(w._settings, white_mode=False, shutter_r="1/5", shutter_g="1/5", shutter_b="1/5")
+    monkeypatch.setattr(
+        w._presets,
+        "get",
+        lambda _n: ScanlightPreset(r_level=212, g_level=140, b_level=96, shutter_r="1/5", shutter_g="1/5", shutter_b="1/5"),
+    )
     w.preset_combo.addItem("Stock", "Stock")
-    w.preset_combo.setCurrentIndex(w.preset_combo.findData("Stock"))
-    for slider, level in ((w.r_slider, 212), (w.g_slider, 140), (w.b_slider, 96)):
-        w._set_slider(slider, level)
+    idx = w.preset_combo.findData("Stock")
+    w.preset_combo.setCurrentIndex(idx)
+    w._on_preset_selected(idx)  # the real path: a stored recipe, steppers live
 
     w._on_meter()
 

@@ -19,7 +19,7 @@ The Roll tab already asks what the film is, with a Film Mode card of Color, B&W 
 2. A **recipe** is the exposure solved for one film stock under one Light and Infrared state: LED levels, a shutter per channel, ISO and aperture, and for Single RGB an optional sensor profile. Recipes live in an **Exposure** card under a **Film stock** picker that lists only recipes for the current Light and Infrared state. White has no recipe: its exposure stays the Live View steppers and Meter, and the card says so in one hint.
 3. **Calibrate…** is one primary button. The window keeps its name field, base crosshair, ISO and aperture steppers and Create Sensor Profile. It drops its capture dropdown and probes the channels Film, Light and Infrared imply, IR with its own shutter.
 4. A hand-set recipe is the Exposure card's edit toggle, a `header_button`, with save and delete beside it. The dropdown action goes.
-5. Import reads the three choices: process from Film, Trichrome Mode and Narrowband from Light, Linear RAW and the sensor profile from a Single RGB recipe, `ir_dust_remove` from Infrared. The Scanning Setup wizard stays for files scanned outside NegPy.
+5. Import reads the three choices: process from Film, Trichrome Mode from Light, Linear RAW and the sensor profile from a Single RGB recipe, `ir_dust_remove` from Infrared. The Scanning Setup wizard stays for files scanned outside NegPy.
 6. Infrared ships only after a rig check proves the camera sees 850 nm through its IR-cut filter. Until then the toggle is grayed with the reason. The work lands as two pieces: infrared capture under today's card first, as a toggle beside Capture mode, then the card restructure.
 
 ### First-time path

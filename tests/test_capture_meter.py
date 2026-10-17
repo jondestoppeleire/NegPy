@@ -89,6 +89,15 @@ def test_light_through_a_few_holes_in_the_picture_does_not_step_the_exposure_dow
     assert reading.measured == pytest.approx(0.6 * CLIP_CEILING, rel=0.02)
 
 
+def test_a_ring_with_a_light_gap_reads_the_base_from_its_unclipped_pixels():
+    img = _frame(border=0.6, picture=0.25)
+    img[86:90, 180:720] = CLIP_CEILING  # a strip of raw light along the rebate's inner edge, under half the ring
+    reading = meter_frame(img, "1/30", medium="negative")
+
+    assert reading.region == "base" and not reading.ring_saturated and not reading.clipped
+    assert reading.measured == pytest.approx(0.6 * CLIP_CEILING, rel=0.02)
+
+
 def test_a_blown_picture_steps_down_however_bright_its_ring():
     img = _frame(border=0.6, picture=1.5)  # the picture past saturation on far more than the blown share
     reading = meter_frame(img, "1/30", medium="negative")

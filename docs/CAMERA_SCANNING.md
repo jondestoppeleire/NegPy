@@ -292,7 +292,7 @@ light NegPy cannot control.
    green only, blue only, as RAW, exposed just below clipping. In the **Calibration**
    panel, turn **Linear RAW** on, press the calibrate button, pick the three files, name
    the profile and press **Compute and Save**.
-2. Open the roll. In the **Calibration** panel, turn **Linear RAW** and **Narrowband** on.
+2. Open the roll. In the **Calibration** panel, turn **Linear RAW** on.
 3. Pick the profile under **Profile** and press **Roll** on the panel header.
 4. Re-run **Roll Analysis**.
 

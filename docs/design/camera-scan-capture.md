@@ -47,7 +47,7 @@ Findings, each with its consequence:
 4. **Exposure lives in three places.** Live View toolbar steppers for white and camera-only scans, sidebar steppers for a manual preset, calibration-window steppers for ISO and aperture before a run.
 5. **Three save paths.** "+" calibrates and saves, the floppy saves a manual preset through a name prompt, the built-ins cannot be saved.
 6. **No infrared.** The driver sends IR 0. Capture, calibration, import and the triplet model know three channels.
-7. **A fourth place describes the rig.** The Process panel's Scanning Setup wizard asks camera or scanner, white or narrowband, to set Linear RAW and Narrowband. A capture made in the Scan tab already knows both answers.
+7. **A fourth place describes the rig.** The Process panel's Scanning Setup wizard asks camera or scanner, white or narrowband, to set Linear RAW. A capture made in the Scan tab already knows both answers.
 8. **The first-run card is a wall of disabled controls.** With no preset selected, the Preset & Light card shows four grayed sliders, a grayed Capture mode, three grayed steppers reading "—" and two grayed header icons. The only instruction is the gate hint under the footer, "To scan: select or create a preset", and the dropdown it points at lists an action and three white-light entries.
 9. **An action sits in the dropdown as a value.** In manual mode the combo reads "+ Create a manual preset…" as its current selection.
 10. **One light, two numbers.** Under a calibrated recipe the sliders read the scan levels while the status line reads the framing light, dimmed three stops. Nothing says which is which.
@@ -119,13 +119,13 @@ Removed: the five built-in white presets, the `_MANUAL_PRESET` sentinel, the sid
 
 ### 3.5 Import rules
 
-| Film | Light | Process | Trichrome Mode | Narrowband | Linear RAW | Sensor profile | IR Removal |
-|---|---|---|---|---|---|---|---|
-| Color negative | White | C-41 | off | off | off | none | with Infrared |
-| B&W negative | White | B&W | off | off | off | none | never |
-| Slide | White | E-6 | off | off | off | none | with Infrared |
-| any | Trichrome | by Film | on | on | on | none | with Infrared |
-| any | Single RGB | by Film | off | on | on | the recipe's | with Infrared |
+| Film | Light | Process | Trichrome Mode | Linear RAW | Sensor profile | IR Removal |
+|---|---|---|---|---|---|---|
+| Color negative | White | C-41 | off | off | none | with Infrared |
+| B&W negative | White | B&W | off | off | none | never |
+| Slide | White | E-6 | off | off | none | with Infrared |
+| any | Trichrome | by Film | on | on | none | with Infrared |
+| any | Single RGB | by Film | off | on | the recipe's | with Infrared |
 
 Today every RGB capture imports as C-41 and a white capture may autodetect. Film replaces both rules.
 
