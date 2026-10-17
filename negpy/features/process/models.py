@@ -116,9 +116,6 @@ class ProcessConfig:
 
     process_mode: ProcessMode = ProcessMode.C41
     linear_raw: bool = False
-    # Correct narrowband RGB camera scans via the bundled RGBScan input profile
-    # (applied at preview soft-proof / export; an explicit Input ICC overrides it).
-    narrowband_scan: bool = False
     # The source is a finished positive (a scanned print, an export from other software, a
     # scanner's own positive) rather than a raw capture. Slide only, held in __post_init__.
     # It decodes on its embedded profile, sRGB when untagged, instead of as literal linear
@@ -137,6 +134,12 @@ class ProcessConfig:
     # image, the same space as the manual crop rect. When set it is the exact area the
     # black/white-point meters read. None falls back to the analysis_buffer slider.
     analysis_rect: Optional[tuple] = None
+    # On a frame with no crop, the picture box the meters read instead of the whole frame: Auto
+    # Crop's rect, when the film sits in an opaque holder or on bare light (resolve_meter_rect).
+    # None meters the whole frame. meter_key is the detection it was resolved under, frozen like
+    # an auto crop.
+    meter_rect: Optional[tuple] = None
+    meter_key: str = ""
     # Two normalization clip axes: luma sets the black/white-point span, color sets
     # the per-channel balance clip (orange-mask cast removal).
     luma_range_clip: float = 0.0
@@ -222,6 +225,8 @@ class ProcessConfig:
             object.__setattr__(self, "sensor_matrix", tuple(self.sensor_matrix))
         if self.analysis_rect is not None:
             object.__setattr__(self, "analysis_rect", tuple(self.analysis_rect))
+        if self.meter_rect is not None:
+            object.__setattr__(self, "meter_rect", tuple(self.meter_rect))
 
     @property
     def is_local_initialized(self) -> bool:
@@ -294,11 +299,11 @@ def with_film_fields(config: "WorkspaceConfig", fields: dict) -> "WorkspaceConfi
     return config
 
 
-def scan_setup_values(capture: str, light: str) -> tuple[bool, bool]:
-    """(linear_raw, narrowband_scan) for a scanning rig — capture is "camera"/"scanner",
-    light is "white"/"narrowband". A camera under white light is the only combination that
-    wants the as-shot-WB decode."""
-    return not (capture == "camera" and light == "white"), light == "narrowband"
+def scan_setup_values(capture: str, light: str) -> bool:
+    """linear_raw for a scanning rig — capture is "camera"/"scanner", light is
+    "white"/"narrowband". A camera under white light is the only combination that wants the
+    as-shot-WB decode."""
+    return not (capture == "camera" and light == "white")
 
 
 def per_channel_point_offsets(process: ProcessConfig) -> tuple[tuple[float, float, float], tuple[float, float, float]]:

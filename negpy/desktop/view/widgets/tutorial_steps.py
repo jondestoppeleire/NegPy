@@ -199,7 +199,7 @@ def build(window: "MainWindow") -> list[TutorialStep]:
             ROLL,
             "Calibration",
             "This card corrects the capture, not the look. The <b>bulb</b> asks how you scan, then sets "
-            "Linear RAW and <b>Narrowband</b> (RGB-LED light). <b>Single-Shot Narrowband Calibration</b> "
+            "<b>Camera WB</b> or <b>Linear RAW</b>. <b>Single-Shot Narrowband Calibration</b> "
             "removes sensor leak between bands. <b>Hue Trim</b> rotates hues for an unusual lamp.",
             lambda w: cp(w).sensor_section,
             focus=lambda w: cp(w).sensor_sidebar.scan_setup_btn,
@@ -366,7 +366,7 @@ def build(window: "MainWindow") -> list[TutorialStep]:
         step(
             PRINTING,
             "Paper Response",
-            "A <b>paper profile</b> takes a real paper's curve from its datasheet. <b>Toe</b> and "
+            "A <b>print stock</b> takes a real paper's or print film's curve and dyes from its datasheet. <b>Toe</b> and "
             "<b>Shoulder</b> shape the curve's ends, <b>Snap</b> the midtones, <b>Dye Separation</b> the "
             "color strength. <b>Paper White</b> and <b>Paper Black</b> show the paper's base and deepest "
             "black.",

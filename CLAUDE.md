@@ -110,6 +110,7 @@ Every feature lives in `negpy/features/<name>/`:
 
 - **Controls come from a factory**, never a bare `QPushButton` + `setStyleSheet`. All live in `styles/templates.py`; `BaseSidebar._tool_toggle` and friends are thin wrappers.
   - `tool_toggle`: icon-only or icon+label toggle; `align_left=True` for toggles stacked in one column.
+  - `clearable_tool_toggle`: a `tool_toggle` whose tool leaves a saved result (a region, a picked point); its inline × (`clear_btn`) shows while the result exists and clears it.
   - `labeled_toggle` (checkable) and `labeled_action`, its one-shot twin; `primary=True` for the panel's one call to action.
   - `icon_button`: icon-only action. `header_button`: a section header's small flat icon, also a help or row icon in a line of text.
   - `gradient_icon(name, sweep)`: a glyph filled with a `Sweep` (token stops and an angle), for the one icon in a row that must stand out. A sweep shows what its tool changes or paints, and every sweep is a named constant beside `RGB_SWEEP`; never reuse one for a different meaning.

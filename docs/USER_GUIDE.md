@@ -81,7 +81,7 @@ On a slider, click the value to type one, drag the name to scrub (**Shift** for 
 
 ### What carries to the next frame
 
-An unedited frame gets the rig and roll settings: film process, crop ratio, flips, calibration, paper stock, the Lab polish and export preferences. The look (density, filtration, tone curve, toning, dodge and burn) starts clean.
+An unedited frame gets the rig and roll settings: film process, crop ratio, flips, calibration, print stock, the Lab polish and export preferences. The look (density, filtration, tone curve, toning, dodge and burn) starts clean.
 
 **Preferences → Session & Storage → Persistent Settings…** sets which settings carry. **Carry settings between frames** is the master switch; off, new frames get bare defaults.
 
@@ -361,7 +361,7 @@ Pins are proofs, not edits: any other edit or a frame change removes them. Zone 
 
 Rows that measure the scan, not your edit; hover for details.
 
-*   **Negative**: relative density range and development character: flat (≈N−1), normal, contrasty (≈N+1). Comparable across a roll; an estimate, not a densitometer reading.
+*   **Negative**: relative density range and development character: flat (≈N−1), normal, contrasty (≈N+1). Comparable across a roll; an estimate, not a densitometer reading. Hover for Dmax, Dmed and Dmin above the clear base: the one set with **Film Base** on the Metering card, else one read from the rebate, and the hover names which.
 *   **Exposure**: approximate midtone in stops from neutral; positive is high-key, negative low-key.
 *   **Clipping**: share of pixels crushed to black or blown to white, worst channel. Amber above 1%.
 *   **Scan clip**: share of source pixels at or above sensor white. On a negative no edit recovers it: expose the scan lower. Amber above 1%.
@@ -424,6 +424,7 @@ Color timing, like enlarger dichroic filters. The **Global / Shadows / Highlight
 *   **Auto Density**: meters each frame's midtone and anchors print brightness there.
 *   **Auto Grade**: sets the grade partly from the frame's textured density range, harder when textured shadows need it to reach black (Shadow Reach). It opens the shadows of a contrasty frame (Shadow Hold) and holds textured highlights off paper white (Highlight Hold).
 *   **Auto Density and Grade**: turns both helpers on or off together.
+*   **Hold Black** (off, hidden on slides): a negative Shadows Density fades out toward paper black, so the shadows open and the black point barely moves.
 *    **Set Targets…**: the brightness and contrast the helpers aim for, for all frames. Confirming a changed target warns that it moves every frame, including ones not yet baked, and that baking a frame first keeps it fixed; a **Don't show again** box stops the warning.
 *    **Bake Auto Density/Grade**: writes the metered Auto Density and Auto Grade into the frame's settings and turns both helpers off, so the frame keeps the look the helpers chose without them and does not move when the targets change.
 *   With a helper on, its sliders show what prints: **Print Density** the metered density, **ISO-R Grade** the grade the frame prints at, **Highlights Density** with the automatic burn. Moving one trims the helper; a double-click returns to the helper's choice.
@@ -448,7 +449,7 @@ Color timing, like enlarger dichroic filters. The **Global / Shadows / Highlight
 
 The paper's characteristic curve. Its own **Global / R / G / B** selector applies the curve controls to all layers or as per-dye-layer trims.
 
-*   **Paper**: a bundled paper (RA4 and Kodak 2383 print film in Color Negative, B&W papers in B&W Negative) that sets the curve; the other controls trim on top. *Neutral* gives the defaults. Each B&W paper has its own lith color (§6.2).
+*   **Print stock**: a bundled paper or print film (RA4 papers and the Kodak 2383 and 2393 print films in Color Negative, B&W papers in B&W Negative) that sets the curve and, on color stock, the colors its dyes make, taken from the datasheet: less saturated than *Digital*, with reds leaning orange and cyans leaning blue. The other controls trim on top. *Digital (Adobe RGB)*, the default, is an idealized print: NegPy's own curve and perfect dyes. Each B&W paper has its own lith color (§6.2).
 *   **Dye Separation** (0.5 to 1.5, hidden in B&W Negative): saturation through the paper's dyes, easing off at toe and shoulder. 1.0 is off; lower values pull toward neutral. **Chroma** (Look tab) scales color evenly instead.
     *   **Separation Damping** (0 to 1): higher keeps the push on muted color and eases it on saturated color. Grayed out at Dye Separation 1.0.
 *   **Paper White**: simulates paper base density, so whites print at about 0.93.
@@ -491,7 +492,7 @@ What a lab scanner (Frontier or Noritsu) does automatically.
 
 *   **Chroma** (0.0 to 2.0): even color scale after decode; 1.0 is unchanged, 0 grayscale. For print-like saturation use **Dye Separation**.
 *   **Skin Protection** (0.0 to 1.0, default 0.5): caps skin-hued chroma; 1.0 leaves skin matte, 0 is off. Red coats, sunsets and brick stay out; wood, tan leather and sand soften with it.
-*   **Chroma Denoise** (0.0 to 5.0): smooths color noise, mainly in shadows; luminance grain stays.
+*   **Chroma Denoise** (0.0 to 5.0): removes color speckle finer than this radius (px of the full-size scan) and keeps sharp color edges; luminance grain stays.
 
 **Detail:**
 
@@ -513,7 +514,7 @@ Pick **None / Lith / Cyanotype / Sabattier**; only that process's controls show.
 
 #### Lith
 
-Heavily over-exposed lith paper in dilute developer, snatched part-way: creamy warm highlights and an abrupt drop into sooty blacks. The Exposure tab's paper sets the color: *Neutral*, the Ilford and the Kodak papers are almost colorless, Fomatone gives peach and olive. In Toning only Selenium and Gold stay (§6.3).
+Heavily over-exposed lith paper in dilute developer, snatched part-way: creamy warm highlights and an abrupt drop into sooty blacks. The Exposure tab's print stock sets the color: *Digital*, the Ilford and the Kodak papers are almost colorless, Fomatone gives peach and olive. In Toning only Selenium and Gold stay (§6.3).
 
 *   **Exposure** (0 to 5 stops, default 2): over-exposure; real lith uses two to four stops. More gives warmer, more colorful highlights and softer gradation.
 *   **Snatch Point** (0.0 to 1.0, default 0.55): time in the developer. Higher gives deeper, colder blacks; lower stays high-key and warm with weak blacks.
@@ -718,18 +719,16 @@ These controls correct the capture, not the look.
 
 **Capture**:
 
-*   **Scanning setup**: a wizard (*how do you scan?*, *what light source?*) that sets Linear RAW and Narrowband. It runs once after the first-launch tour; open it again when your rig changes.
-*   **Linear RAW** (default off): decodes RAW with neutral multipliers; off uses the as-shot white balance. Locked on for a Trichrome triplet.
-*   **Narrowband**: corrects the oversaturation of narrowband (RGB-LED) capture with a bundled input profile; leave it off for broadband light. An Input ICC in Export overrides it.
+*   **Scanning setup**: a wizard (*how do you scan?*, and for a camera *what light source?*) that sets Camera WB or Linear RAW. It runs once after the first-launch tour; open it again when your rig changes.
+*   **Camera WB / Linear RAW** (default Camera WB): how a RAW file decodes. *Camera WB* applies the camera's as-shot white balance; *Linear RAW* decodes with neutral multipliers. Locked for a Trichrome triplet.
 
 What the wizard sets:
 
-| Capture | Light source | Linear RAW | Narrowband |
-| --- | --- | --- | --- |
-| Digital camera | White light (lightbox, CRI LED panel) | off | off |
-| Digital camera | Narrowband RGB (Scanlight, RGB LED) | on | on |
-| Film scanner | White light (Plustek, Epson, most flatbeds) | on | off |
-| Narrowband Scanner | Nikon Coolscan, Kodak Pakon | on | on |
+| Capture | Light source | Decode |
+| --- | --- | --- |
+| Digital camera | White light (lightbox, CRI LED panel) | Camera WB |
+| Digital camera | Narrowband RGB (Scanlight, RGB LED) | Linear RAW |
+| Film scanner | any | Linear RAW |
 
 Applying it sets the defaults for new files and rewrites every edited frame in the session (Ctrl+Z per frame).
 
@@ -745,6 +744,7 @@ CAMERA_SCANNING.md has a workflow for each way to build and assign a profile.
 
 *   **Matrix**: matrices for the current film process, grouped by source. *Generic C41* is built in; custom `.toml` matrices go in `<Documents>/NegPy/crosstalk/` (see [CROSSTALK.md](CROSSTALK.md)). The slider button opens the editor; **+** makes one for the current process.
 *   **Strength** (0.0 to 1.0): how much unmix to apply.
+*   **Measure from Chart…** (the swatch button, Color Negative only): measures a matrix from a frame of a SpyderCheckr 24 or ColorChecker 24 shot on the film. Drag the four dots onto the corner patches, in any order, with the chart any way up; NegPy fits the six mixing terms through the frame's own render on the Digital print stock, saves a *Measured* profile, applies it at full Strength and shows each patch's color difference to its target (ΔE00 without lightness) on the frame.
 
 > The bundled film matrices, marked *(approx)*, come from spec sheets and describe the dyes alone. They fully correct only a capture that reads each dye cleanly (a Narrowband Scanner, Trichrome, a calibrated single-shot narrowband rig); for broadband light and a Bayer sensor they are a starting point.
 
@@ -752,7 +752,7 @@ CAMERA_SCANNING.md has a workflow for each way to build and assign a profile.
 
 To tune a matrix, adjust its six off-diagonal terms in the editor and save it as your own, named after the *combination* ("Gold 200 + Spectracolor"). Working profiles are welcome [upstream](CROSSTALK.md#contributing-a-matrix).
 
-**Dye balance: Cast Removal** (0.0 to 1.0, color only): removes an overall color cast by balancing each layer against the frame's own grays, so neutrals stay neutral from shadows to highlights. On a negative, leaves never count as gray, so a forest keeps its greens. It starts at 1.0 on Color Negative and at 0 on Transparency, for a faded slide's crossover.
+**Dye balance: Cast Removal** (0.0 to 1.0, color only): removes an overall color cast by balancing each layer against the frame's own grays, so neutrals stay neutral from shadows to highlights. On a negative, leaves, sky and water never count as gray, so a forest keeps its greens and a clear sky stays blue. It starts at 1.0 on Color Negative and at 0 on Transparency, for a faded slide's crossover.
 
 **Light source:**
 
@@ -760,7 +760,7 @@ To tune a matrix, adjust its six off-diagonal terms in the editor and save it as
 
 #### Narrowband and slides
 
-Narrowband and Single-Shot Narrowband Calibration do not apply to Transparency; they stay grayed out with their values for the next negative. For slides on a narrowband rig, use **Hue Trim**.
+Single-Shot Narrowband Calibration does not apply to Transparency; it stays grayed out with its values for the next negative. For slides on a narrowband rig, use **Hue Trim**.
 
 <!-- panel:autocrop -->
 ### 10.4 Crop
@@ -808,18 +808,16 @@ How this frame is measured into a positive's tonal bounds.
 *   **Auto Density** and **Auto Grade** start off on a slide; turn them on to meter a faded or expired one. On a merged bracket **Render exposure** sets the exposure instead.
 *   Lightroom mapping: **Exposure** → Print Density (lower is brighter), **Contrast** → ISO-R Grade (180 is softest), **Shadows** → Shadows Density, **Highlights** → Highlights Density. Positive adds density, so negative Shadows Density opens shadows. **Whites** and **Blacks** have no equivalent.
 *   A source with no camera matrix (a scanner TIFF, a JPEG) passes straight through. An Input ICC in Export replaces the camera matrix.
-*   **Linear RAW** is grayed out except with **Positive** on. **Narrowband** and **Single-Shot Narrowband Calibration** are grayed out ([Narrowband and slides](#narrowband-and-slides)).
+*   **Camera WB / Linear RAW** is grayed out except with **Positive** on. **Single-Shot Narrowband Calibration** is grayed out ([Narrowband and slides](#narrowband-and-slides)).
 
 **Analysis** sets where the black and white points are metered.
 
-*   **Analysis Buffer** (0.0 to 0.25): insets the measurement window so rebate, sprocket holes and scanner borders do not skew it.
 *   **Reanalyze Frame**: measures this frame again from its current crop, buffer and region.
-*   **Draw Region** / **Clear Region**: draw a freehand region to meter *exactly* that area, in place of the buffer. Double-click inside to confirm.
+*   **Draw Region**: draw a freehand region to meter *exactly* that area, in place of the buffer. Double-click inside to confirm. The **×** on the button clears it.
+*   **Film Base**: click the clear rebate once to set the roll's film base. The **Negative** row's hover then reads Dmax, Dmed and Dmin above it on every frame of the roll scanned at the same exposure and light as the one you clicked. A click on edge print, a perforation or bare light is refused. Without a base, the rebate is read when the scan shows a film edge, and the hover says so. The **×** on the button clears the base.
+*   **Analysis Buffer** (0.0 to 0.25): insets the measurement window so rebate, sprocket holes and scanner borders do not skew it. With no crop, the window is the picture Auto Crop would keep when the film sits in a holder or on bare light, so the holder never sets the exposure.
 *   **Clipping**: the print's shadow and highlight clipping shares, as in the Analysis panel's row.
 *   **Lock Bounds**: freezes this frame's bounds against crop and slider changes and against every Roll Analysis run.
-
-**Tonal Range**:
-
 *   **Luma Range Clip** (-100 to 100): how tightly the black/white-point span is set. Positive tightens it, for dense or fogged negatives; negative pushes the bounds *outward*, for lifted blacks and unclipped highlights.
 *   **Color Clip** (-100 to 100): the per-channel color-balance clip (orange-mask removal). Positive tightens; negative samples nearer the extremes.
 
@@ -907,6 +905,7 @@ Searches your own gear (§12). **Other…** opens the full built-in catalog.
 *   **Scanning**: scan method or notes. EXIF `Software` is always `NegPy`.
 *   **Clear**: empties the saved setup and the note.
 *   **Roll / Frame**: the capture roll name and frame number, stamped on capture; filename template fields `{{ roll }}` and `{{ frame }}`.
+*   **Sequence…**: assign a running capture frame number to the selected frames or the whole roll, in film order. Set a start number, a step and ascending or descending order, and each frame gets its own number. Tick **Skip Rejected Frames** to leave frames in the rejected state out of the run.
 
 <!-- panel:metadata_exposure -->
 ### Exposure
@@ -1099,7 +1098,7 @@ Copy-stand capture with a camera in **PC Remote** mode over USB (macOS/Linux): w
 *   **Meter** (white-light and camera-only scanning): one RAW probe sets the shutter so the region that must not clip (a negative's clear base, a slide's brightest highlights) lands just under clipping. The white-light preset's film type decides which. A clipped reading steps down two stops; meter again.
 *   **Scan** and **Retake**: **Scan** shoots the next frame, auto-numbered, and imports it; **Retake** (the redo arrow beside **Live View**) shoots the last frame again. In the Live View window, `S` scans and `R` retakes.
 *   **Keep Light On** (the bulb beside **Retake**, off by default): the Scanlight goes dark after each scan; this lights it again with the framing light, so you can frame the next shot on the camera's screen. Live View lights it again without this toggle.
-*   **Narrowband**: RGB-lit scans render more saturated; the Calibration card's **Narrowband** toggle corrects this.
+*   **Narrowband**: RGB-lit scans render more saturated than white light; a **Print stock** other than *Digital* prints them through real dyes.
 
 <!-- panel:scan_light -->
 ### Preset & Light

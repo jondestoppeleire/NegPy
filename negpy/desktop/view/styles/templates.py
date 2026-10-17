@@ -3,7 +3,7 @@ import html
 import math
 
 import qtawesome as qta
-from PyQt6.QtCore import QEvent, QPoint, QRect, QSize, Qt
+from PyQt6.QtCore import QEvent, QObject, QPoint, QRect, QSize, Qt
 from PyQt6.QtGui import QColor, QIcon, QIconEngine, QImage, QLinearGradient, QPainter, QPixmap
 from PyQt6.QtWidgets import (
     QDialogButtonBox,
@@ -150,6 +150,35 @@ def tool_toggle(icon_name: str, label: str, tooltip: str, align_left: bool = Fal
     btn.setToolTip(wrap_tooltip(tooltip))
     btn.plain_tooltip = tooltip
     btn.edited_dot = EditedDot(btn)
+    return btn
+
+
+class _PinRight(QObject):
+    """Holds an overlay child centered on its parent's right edge."""
+
+    def __init__(self, child: QWidget, margin: int) -> None:
+        super().__init__(child)
+        self._margin = margin
+        child.parentWidget().installEventFilter(self)
+
+    def eventFilter(self, obj, event) -> bool:  # noqa: N802
+        if event.type() == QEvent.Type.Resize:
+            child = self.parent()
+            child.move(obj.width() - child.width() - self._margin, (obj.height() - child.height()) // 2)
+        return False
+
+
+def clearable_tool_toggle(icon_name: str, label: str, tooltip: str, clear_tooltip: str) -> QPushButton:
+    """tool_toggle for a tool that leaves a saved result. btn.clear_btn, an inline × at its right
+    edge, clears that result; show it while the result exists, in place of the edited dot."""
+    btn = tool_toggle(icon_name, label, tooltip)
+    inset = THEME.space_sm
+    # Both sides, so the label stays centered and never runs under the ×.
+    btn.setStyleSheet(f"QPushButton {{padding-left: {HEADER_BUTTON_SIZE + inset}px; padding-right: {HEADER_BUTTON_SIZE + inset}px;}}")
+    btn.clear_btn = header_button(qta.icon("fa5s.times", color=THEME.text_primary), clear_tooltip)
+    btn.clear_btn.setParent(btn)
+    btn.clear_btn.hide()
+    _PinRight(btn.clear_btn, inset)
     return btn
 
 

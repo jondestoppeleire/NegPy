@@ -462,12 +462,11 @@ class TestRollDefaults:
     def test_a_roll_default_overrides_the_frames_own_value(self):
         repo = _repo()
         roll_id = create_virtual_roll(repo, "Portra", [])
-        set_roll_defaults(repo, roll_id, linear_raw=True, narrowband_scan=True)
+        set_roll_defaults(repo, roll_id, linear_raw=True)
 
         resolved = resolve_roll_config(repo, roll_id, "h1", WorkspaceConfig(process=ProcessConfig(linear_raw=False)))
 
         assert resolved.process.linear_raw is True
-        assert resolved.process.narrowband_scan is True
 
     def test_a_slide_roll_default_carries_the_slide_cast_removal_default(self):
         from negpy.features.process.models import ProcessMode, cast_removal_for_mode

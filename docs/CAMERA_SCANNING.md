@@ -141,10 +141,9 @@ without advancing the counter. **Delay between exposures** adds a pause between 
 green and blue captures, for older bodies that lock up the USB/PTP link when a new capture
 command arrives too soon.
 
-**Narrowband Scan.** Narrowband LEDs render more saturated than white light. The **Narrowband** toggle in the Process
-panel, beside **Linear RAW**, corrects this with the bundled RGBScan input profile, in the
-preview and in every export. An explicit **Input ICC** in the Export settings takes
-precedence while it is set.
+**Narrowband light.** Narrowband LEDs separate the dye layers more cleanly than white light, so
+colors render more saturated. The *Digital (Adobe RGB)* print stock prints them through ideal
+dyes; a paper or print film in **Print stock** prints them through that stock's own dyes.
 
 ### Sensor calibration
 

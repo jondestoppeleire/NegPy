@@ -66,10 +66,12 @@ class ToolMode(Enum):
     STRAIGHTEN = auto()
     KEYSTONE_LINES = auto()
     ZONE_PLACE = auto()
+    FILM_BASE = auto()
 
 
 # These tools' renders carry crop_preview_full, which skips the crop, the border and the filed carrier.
-UNCROPPED_PREVIEW_TOOLS = frozenset({ToolMode.CROP_MANUAL, ToolMode.ANALYSIS_DRAW, ToolMode.KEYSTONE_LINES})
+# Film Base shows the whole scan too: the rebate it reads lies outside the crop.
+UNCROPPED_PREVIEW_TOOLS = frozenset({ToolMode.CROP_MANUAL, ToolMode.ANALYSIS_DRAW, ToolMode.KEYSTONE_LINES, ToolMode.FILM_BASE})
 
 # Zone Overlay looks, by stored key and menu label.
 ZONE_STYLES = {"false_color": "Color", "zone_map": "Grayscale", "grid": "Grid"}
@@ -1278,7 +1280,6 @@ class DesktopSessionManager(QObject):
                 STICKY_CONFIG_KEY: snapshot,
                 "last_export_config": asdict(config.export),
                 "last_linear_raw": config.process.linear_raw,
-                "last_narrowband_scan": config.process.narrowband_scan,
                 "last_demosaic_preview": str(config.process.demosaic_preview),
                 "last_demosaic_export": str(config.process.demosaic_export),
                 BRUSH_SIZE_KEY: int(config.retouch.manual_dust_size),
@@ -1605,6 +1606,56 @@ class DesktopSessionManager(QObject):
             noun = "setting" if n == 1 else "settings"
             self.settings_synced.emit(f"{label}: {n} {noun} to {count} frame{'s' if count != 1 else ''}")
             self.settings_saved.emit()
+            if changed_hashes:
+                self.frames_edited_offscreen.emit(changed_hashes)
+        return count
+
+    def assign_sequential_frame_numbers(self, start: int, step: int, direction: str, scope: str, skip_rejected: bool = False) -> int:
+        """Assign a running capture-frame number to the selection or the whole (visible)
+        roll, in film order. The first frame gets `start` and each later one adds `step`
+        (subtracts it when descending). The active frame is a target too, so it runs through
+        update_config like a normal edit; the rest are written offscreen, each with an undo
+        step. When `skip_rejected` is set, rejected (excluded) frames leave the run and the
+        numbers fill the frames that remain. Returns the frames changed."""
+        if self.state.selected_file_idx == -1:
+            return 0
+        if scope == "roll":
+            target_indices = self.asset_model.visible_actual_indices_ordered()
+        else:
+            # The active frame is the one the user is looking at, so it is always a target
+            # even when the multi-selection was built without it (a Ctrl-toggle range).
+            indices = set(self.state.selected_indices)
+            indices.add(self.state.selected_file_idx)
+            target_indices = sorted(indices)
+        if skip_rejected:
+            target_indices = [
+                i for i in target_indices if 0 <= i < len(self.state.uploaded_files) and not self.state.uploaded_files[i].get("excluded")
+            ]
+        n_frames = len(target_indices)
+        if n_frames == 0:
+            return 0
+        values = [start - i * step if direction == "desc" else start + i * step for i in range(n_frames)]
+        count = 0
+        changed_hashes: list[str] = []
+        for idx, value in zip(target_indices, values):
+            if not (0 <= idx < len(self.state.uploaded_files)):
+                continue
+            asset = self.state.uploaded_files[idx]
+            target_hash = asset["hash"]
+            if idx == self.state.selected_file_idx:
+                new = replace(self.state.config, metadata=replace(self.state.config.metadata, capture_frame=value))
+                self.update_config(new, persist=True, render=False)
+                count += 1
+                continue
+            old = self.repo.load_file_settings(target_hash) or self.config_for_asset(asset)
+            new = replace(old, metadata=replace(old.metadata, capture_frame=value))
+            self.push_external_history(target_hash, old, new)
+            self.repo.save_file_settings(target_hash, new, file_path=asset["path"])
+            changed_hashes.append(target_hash)
+            count += 1
+        if count:
+            self.settings_saved.emit()
+            self.settings_synced.emit(f"Assigned {count} sequential frame numbers")
             if changed_hashes:
                 self.frames_edited_offscreen.emit(changed_hashes)
         return count

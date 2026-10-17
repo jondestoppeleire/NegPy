@@ -12,26 +12,27 @@ def _sidebar():
     return controller, ProcessSidebar(controller)
 
 
-def test_analysis_region_dot_reflects_committed_region_not_just_tool_state(qapp):
+def test_analysis_region_clear_reflects_committed_region_not_just_tool_state(qapp):
     """Confirming a freehand region closes the draw tool (button unchecks), so the
-    dot is the only remaining cue that a region is active and overriding the
+    inline clear is the only remaining cue that a region is active and overriding the
     Analysis Buffer slider — it must track analysis_rect, not active_tool."""
     controller, sidebar = _sidebar()
+    clear = sidebar.clear_analysis_region_btn
 
     sidebar.sync_ui()
-    assert not sidebar.analysis_region_btn.edited_dot.isVisibleTo(sidebar.analysis_region_btn)
+    assert not clear.isVisibleTo(sidebar.analysis_region_btn)
 
     cfg = controller.state.config
     controller.state.config = replace(cfg, process=replace(cfg.process, analysis_rect=(0.1, 0.1, 0.9, 0.9)))
     sidebar.sync_ui()
 
-    assert sidebar.analysis_region_btn.edited_dot.isVisibleTo(sidebar.analysis_region_btn)
+    assert clear.isVisibleTo(sidebar.analysis_region_btn)
     assert not sidebar.analysis_region_btn.isChecked()  # tool itself is closed
     assert not sidebar.analysis_buffer_slider.isEnabled()
 
     controller.state.config = replace(cfg, process=replace(cfg.process, analysis_rect=None))
     sidebar.sync_ui()
-    assert not sidebar.analysis_region_btn.edited_dot.isVisibleTo(sidebar.analysis_region_btn)
+    assert not clear.isVisibleTo(sidebar.analysis_region_btn)
 
 
 def test_mode_buttons_track_config_and_switch_mode(qapp):
@@ -109,15 +110,16 @@ def _row_index_containing(layout, widget) -> int:
 
 def test_the_analysis_bar_holds_everything_that_meters_this_frame(qapp):
     """One ANALYSIS block above the Roll Baseline picker: what the meters read, then
-    how the measurement is clipped, then the nudge on what came out."""
+    how the measurement is clipped, then the nudge on what came out. The region tool
+    comes before the buffer it overrides."""
     _, sidebar = _sidebar()
     col = sidebar.analysis_bar.layout()
 
     order = [
         _row_index_containing(col, w)
         for w in (
-            sidebar.analysis_buffer_slider,
             sidebar.analysis_region_btn,
+            sidebar.analysis_buffer_slider,
             sidebar.luma_range_clip_slider,
             sidebar.ch_btn,
             sidebar.white_point_slider,
@@ -125,23 +127,15 @@ def test_the_analysis_bar_holds_everything_that_meters_this_frame(qapp):
     ]
     assert order == sorted(order)
     assert _row_index_containing(col, sidebar.analysis_header) == 0
-    assert _row_index_containing(col, sidebar.clear_analysis_region_btn) == _row_index_containing(col, sidebar.analysis_region_btn)
-
-
-def test_the_tonal_range_header_opens_the_clip_and_point_controls(qapp):
-    """Marks off what shapes the measurement from what the measurement reads."""
-    _, sidebar = _sidebar()
-    col = sidebar.analysis_bar.layout()
-
-    header_i = col.indexOf(sidebar.tonal_range_header)
-    assert header_i == _row_index_containing(col, sidebar.luma_range_clip_slider) - 1
-    assert header_i > _row_index_containing(col, sidebar.analysis_region_btn)
+    assert _row_index_containing(col, sidebar.film_base_btn) == _row_index_containing(col, sidebar.analysis_region_btn)
+    assert sidebar.clear_analysis_region_btn.parentWidget() is sidebar.analysis_region_btn
+    assert sidebar.clear_film_base_btn.parentWidget() is sidebar.film_base_btn
 
 
 def test_the_region_buttons_carry_their_names(qapp):
     _, sidebar = _sidebar()
     assert sidebar.analysis_region_btn.text().strip() == "Draw Region"
-    assert sidebar.clear_analysis_region_btn.text() == "", "an icon beside the tool it clears"
+    assert sidebar.clear_analysis_region_btn.text() == "", "an icon inside the tool it clears"
 
 
 def test_average_toggles_ride_the_baseline_bar_not_the_analysis(qapp):
@@ -214,7 +208,7 @@ def test_use_color_average_toggle_reaches_the_controller(qapp):
 
 
 def test_white_black_point_retarget_and_sync(qapp):
-    """The Tonal Range block retargets through its own Global/R/G/B selector."""
+    """White/Black Point retarget through their own Global/R/G/B selector."""
     controller, sidebar = _sidebar()
 
     cfg = controller.state.config

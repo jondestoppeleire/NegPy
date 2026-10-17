@@ -448,7 +448,9 @@ class ShortcutManager:
             "metadata_clear_gear": lambda: right.metadata_sidebar.gear_clear_btn.click(),
             "metadata_clear_process": lambda: right.metadata_sidebar.process_clear_btn.click(),
             "metadata_clear_scanning": lambda: right.metadata_sidebar.scan_clear_btn.click(),
+            "assign_sequential_frame": lambda: right.metadata_sidebar.frame_sequence_btn.click(),
             "scan_setup": lambda: controls.sensor_sidebar.scan_setup_btn.click(),
+            "measure_chart": lambda: controls.sensor_sidebar.measure_chart_btn.click(),
             "scan_prescan": (lambda: right.scan_sidebar.prescan_btn.click() if getattr(right, "scan_sidebar", None) is not None else None),
             "scan_meter_frame": (
                 lambda: right.scan_sidebar.exposure_meter_btn.click() if getattr(right, "scan_sidebar", None) is not None else None
@@ -482,6 +484,7 @@ class ShortcutManager:
             "local_oval": lambda: _toggle_tool_button(self.window, "tone", controls.local_sidebar.oval_btn),
             "local_gradient": lambda: _toggle_tool_button(self.window, "tone", controls.local_sidebar.gradient_btn),
             "analysis_draw": lambda: _toggle_tool_button(self.window, "roll", controls.process_sidebar.analysis_region_btn),
+            "film_base": lambda: _toggle_tool_button(self.window, "roll", controls.process_sidebar.film_base_btn),
             "open_tools_menu": lambda: self.window.toolbar.open_tools_menu(),
             "toggle_flat_peek": controller.toggle_flat_peek,
             "toggle_negative_peek": controller.toggle_negative_peek,
@@ -592,6 +595,7 @@ class ShortcutManager:
             "toggle_auto_density": controls.tone_sidebar.auto_density_action.trigger,
             "toggle_auto_grade": controls.tone_sidebar.auto_grade_action.trigger,
             "toggle_auto_both": controls.tone_sidebar.auto_both_action.trigger,
+            "toggle_hold_black": controls.tone_sidebar.hold_black_action.trigger,
             "preset_apply": controls.presets_sidebar.apply_btn.click,
             "preset_save": controls.presets_sidebar.save_btn.click,
         }

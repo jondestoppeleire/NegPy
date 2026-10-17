@@ -17,16 +17,16 @@ if not QApplication.instance():
 
 class TestScanSetupValues(unittest.TestCase):
     def test_camera_white_light_is_the_only_as_shot_wb_decode(self):
-        self.assertEqual(scan_setup_values("camera", "white"), (False, False))
+        self.assertFalse(scan_setup_values("camera", "white"))
 
     def test_camera_narrowband(self):
-        self.assertEqual(scan_setup_values("camera", "narrowband"), (True, True))
+        self.assertTrue(scan_setup_values("camera", "narrowband"))
 
     def test_scanner_white_light(self):
-        self.assertEqual(scan_setup_values("scanner", "white"), (True, False))
+        self.assertTrue(scan_setup_values("scanner", "white"))
 
     def test_scanner_narrowband(self):
-        self.assertEqual(scan_setup_values("scanner", "narrowband"), (True, True))
+        self.assertTrue(scan_setup_values("scanner", "narrowband"))
 
 
 class TestScanSetupDialog(unittest.TestCase):
@@ -46,22 +46,22 @@ class TestScanSetupDialog(unittest.TestCase):
         dlg.back_btn.click()
         self.assertEqual(dlg.pages.currentIndex(), 0)
 
-    def test_light_page_names_the_chosen_hardware_class(self):
+    def test_a_scanner_skips_the_light_page(self):
+        """Every scanner decodes Linear RAW, so its light source is not asked."""
         dlg = ScanSetupDialog(None)
         dlg.capture_group.button(1).setChecked(True)  # film scanner
-        self.assertIn("Plustek", dlg.light_hints[0].text())
-        self.assertIn("Coolscan", dlg.light_hints[1].text())
-
-        dlg.capture_group.button(0).setChecked(True)  # digital camera
-        self.assertIn("lightbox", dlg.light_hints[0].text())
-        self.assertIn("Scanlight", dlg.light_hints[1].text())
+        self.assertEqual(dlg.next_btn.text(), "Apply")
+        self.assertEqual("Sets Linear RAW", dlg.summary.text())
+        dlg.next_btn.click()
+        self.assertEqual(dlg.pages.currentIndex(), 0)
+        self.assertEqual(dlg.result(), QDialog.DialogCode.Accepted)
+        self.assertEqual(dlg.choice()["capture"], "scanner")
 
     def test_choice_round_trips_through_the_pages(self):
         dlg = ScanSetupDialog(None)
-        dlg.capture_group.button(1).setChecked(True)
         dlg.next_btn.click()
         dlg.light_buttons[1].setChecked(True)
-        self.assertEqual(dlg.choice(), {"capture": "scanner", "light": "narrowband"})
+        self.assertEqual(dlg.choice(), {"capture": "camera", "light": "narrowband"})
 
     def test_apply_accepts(self):
         dlg = ScanSetupDialog(None)
@@ -70,18 +70,18 @@ class TestScanSetupDialog(unittest.TestCase):
         self.assertEqual(dlg.result(), QDialog.DialogCode.Accepted)
 
     def test_preselects_the_saved_choice(self):
-        dlg = ScanSetupDialog(None, {"capture": "scanner", "light": "narrowband"})
-        self.assertTrue(dlg.capture_group.button(1).isChecked())
+        dlg = ScanSetupDialog(None, {"capture": "camera", "light": "narrowband"})
+        self.assertTrue(dlg.capture_group.button(0).isChecked())
         self.assertTrue(dlg.light_buttons[1].isChecked())
-        self.assertEqual(dlg.choice(), {"capture": "scanner", "light": "narrowband"})
+        self.assertEqual(dlg.choice(), {"capture": "camera", "light": "narrowband"})
+        self.assertTrue(ScanSetupDialog(None, {"capture": "scanner"}).capture_group.button(1).isChecked())
 
     def test_summary_reports_what_apply_will_set(self):
         dlg = ScanSetupDialog(None)
         dlg.next_btn.click()
-        self.assertIn("Linear RAW off", dlg.summary.text())
+        self.assertEqual("Sets Camera WB", dlg.summary.text())
         dlg.light_buttons[1].setChecked(True)
-        self.assertIn("Linear RAW on", dlg.summary.text())
-        self.assertIn("Narrowband on", dlg.summary.text())
+        self.assertEqual("Sets Linear RAW", dlg.summary.text())
 
 
 class TestApplyScanSetup(unittest.TestCase):
@@ -134,13 +134,12 @@ class TestApplyScanSetup(unittest.TestCase):
         saved = self.repo.save_global_settings.call_args.args[0]
         self.assertEqual(saved["scan_setup"], {"capture": "scanner", "light": "narrowband"})
         self.assertTrue(saved["last_linear_raw"])
-        self.assertTrue(saved["last_narrowband_scan"])
+        self.assertNotIn("last_narrowband_scan", saved)
 
     def test_updates_the_open_frame(self):
         self.controller.apply_scan_setup("camera", "white")
         config = self.mock_session_manager.update_config.call_args.args[0]
         self.assertFalse(config.process.linear_raw)
-        self.assertFalse(config.process.narrowband_scan)
 
     def test_linear_raw_flip_reloads_the_open_frame(self):
         self.controller.apply_scan_setup("scanner", "white")
@@ -157,7 +156,7 @@ class TestApplyScanSetup(unittest.TestCase):
         self.repo.save_file_settings.assert_called_once()
         args, kwargs = self.repo.save_file_settings.call_args
         self.assertEqual(args[0], "h2")
-        self.assertTrue(args[1].process.narrowband_scan)
+        self.assertTrue(args[1].process.linear_raw)
         self.assertEqual(kwargs["file_path"], "/b.dng")
 
     def test_untouched_frames_are_left_to_the_sticky_defaults(self):

@@ -70,6 +70,7 @@ from negpy.desktop.workers.scan_worker import BatchRequest, MeterRequest, Presca
 from negpy.desktop.workers.library import LibrarySearchTask, LibrarySearchWorker
 from negpy.desktop.workers.hdr import HdrTask, HdrWorker
 from negpy.desktop.workers.stitch import StitchTask, StitchWorker
+from negpy.desktop.workers.chart_fit import ChartSource
 from negpy.desktop.workers.frame_merge import FrameMergeTask, FrameMergeWorker
 from negpy.features.hdr.models import ANCHOR_EV_UNSET, hdr_frame_paths, hdr_hash, hdr_name
 from negpy.features.process.capture_color import apply_camera_matrix, camera_to_working_matrix, lightbox_level, wb_only_cam_xyz
@@ -77,7 +78,6 @@ from negpy.features.process.logic import (
     effective_highlight_reconstruction,
     effective_linear_raw,
     highlight_reconstruction_bakes_wb,
-    narrowband_profile_active,
 )
 from negpy.features.stitch.models import stitch_hash, stitch_name
 from negpy.desktop.workers.capture_worker import (
@@ -169,7 +169,14 @@ from negpy.features.geometry.logic import (
     has_manual_crop,
     solve_keystone_from_edges,
 )
-from negpy.features.geometry.models import FINE_ROTATION_LIMIT, AutocropMode, squares_on_arm, with_auto_crop, with_auto_crop_field
+from negpy.features.geometry.models import (
+    FINE_ROTATION_LIMIT,
+    AutocropMode,
+    crops_frame,
+    squares_on_arm,
+    with_auto_crop,
+    with_auto_crop_field,
+)
 from negpy.features.geometry.skew import squared_geometry
 from negpy.features.geometry.processor import CropProcessor, GeometryProcessor
 from negpy.domain.interfaces import PipelineContext
@@ -177,7 +184,6 @@ from negpy.features.lab.models import LabConfig
 from negpy.features.local.models import LocalAdjustmentsConfig
 from negpy.features.process.path import RenderPath, render_path
 from negpy.features.process.models import (
-    ProcessConfig,
     ProcessMode,
     cast_removal_for_mode,
     invalidate_local_bounds,
@@ -197,7 +203,7 @@ from negpy.services.assets.thumbnail_fingerprint import (
     thumbnail_fingerprint,
 )
 from negpy.services.assets import semantic_model
-from negpy.kernel.system.paths import get_default_user_dir, get_resource_path
+from negpy.kernel.system.paths import get_default_user_dir
 from negpy.features.retouch.logic import downsample_ir, trace_scratch
 from negpy.features.retouch.models import HEAL_SIZE_MAX, HEAL_SIZE_MIN, RetouchConfig
 from negpy.features.pickbetter.logic import (
@@ -217,7 +223,7 @@ from negpy.infrastructure.filesystem.watcher import FolderWatchService
 from negpy.infrastructure.gpu.device import GPUDevice
 from negpy.infrastructure.gpu.resources import GPUTexture
 from negpy.infrastructure.storage.local_asset_store import LocalAssetStore
-from negpy.kernel.system.config import APP_CONFIG, DEFAULT_WORKSPACE_CONFIG
+from negpy.kernel.system.config import APP_CONFIG, DEFAULT_WORKSPACE_CONFIG, render_scale_factor
 from negpy.kernel.system.logging import get_logger
 from negpy.services.rendering.prefetch_policy import MIN_RAM_RESERVE_BYTES
 from negpy.services.rendering.preview_manager import PreviewManager
@@ -444,6 +450,10 @@ def _stamp_render_serial(last_metrics: Dict[str, Any], metrics: Dict[str, Any]) 
     identity cannot tell one render's content from the next."""
     if "normalized_log" in metrics:
         last_metrics["render_serial"] = next(_RENDER_SERIALS)
+
+
+#: A Film Base patch whose log luminance varies more than this across its pixels is not flat film.
+_FILM_BASE_FLAT_DECADES = 0.02
 
 
 class AppController(QObject):
@@ -887,6 +897,14 @@ class AppController(QObject):
     def _sample_normalized_log(self, nx: float, ny: float, radius: int = 0) -> Optional[Tuple[float, float, float]]:
         """Mean of the (2·radius+1)² normalized-log patch at content-normalized nx,ny;
         None when no frame is probed. Shared by the hover probe (1×1) and zone pins."""
+        patch = self._sample_normalized_patch(nx, ny, radius)
+        if patch is None:
+            return None
+        val = patch.mean(axis=0)
+        return (float(val[0]), float(val[1]), float(val[2]))
+
+    def _sample_normalized_patch(self, nx: float, ny: float, radius: int = 0) -> Optional[np.ndarray]:
+        """The (n, 3) normalized-log pixels of the patch at content-normalized nx,ny, or None."""
         from negpy.features.exposure.densitometer import map_display_to_norm
 
         metrics = self.state.last_metrics
@@ -920,13 +938,11 @@ class AppController(QObject):
         y0, y1 = max(0, y - radius), min(norm_h, y + radius + 1)
         try:
             if isinstance(nl, np.ndarray):
-                val = nl[y0:y1, x0:x1].reshape(-1, nl.shape[2]).mean(axis=0)
-            else:
-                region = np.asarray(nl.readback_region(x0, y0, x1 - x0, y1 - y0), dtype=np.float32)
-                val = region[..., :3].reshape(-1, 3).mean(axis=0)
+                return np.asarray(nl[y0:y1, x0:x1], dtype=np.float32).reshape(-1, nl.shape[2])[:, :3]
+            region = np.asarray(nl.readback_region(x0, y0, x1 - x0, y1 - y0), dtype=np.float32)
+            return region[..., :3].reshape(-1, 3)
         except Exception:
             return None
-        return (float(val[0]), float(val[1]), float(val[2]))
 
     def set_status(self, message: str, timeout: int = 0, kind: str = "info") -> None:
         """kind: "info" | "warning" | "error" — the HUD colours the toast by it."""
@@ -1884,32 +1900,21 @@ class AppController(QObject):
     def set_rgb_scan_mode(self, enabled: bool) -> None:
         """Persist Trichrome Mode for the active roll and regroup the loaded files in place."""
         self._save_rgb_scan_mode(enabled, self.state.active_roll_id)
-        if enabled:
-            # RGB-scan triplets are captured with narrowband LEDs, and correcting for them
-            # is the point of the toggle, so switch it on together.
-            self.session.repo.save_global_setting("last_narrowband_scan", True)
         files = self.session.state.uploaded_files
         if not files:
             return
-        if enabled and not self.state.config.process.narrowband_scan:
-            self.session.update_config(
-                replace(self.state.config, process=replace(self.state.config.process, narrowband_scan=True)), persist=True
-            )
-            self.request_render()
         self.request_asset_discovery(
             _component_paths(files), replace_existing=True, reselect_path=self.state.current_file_path, announce_rgb=enabled
         )
 
     def apply_scan_setup(self, capture: str, light: str) -> None:
-        """Apply the scanning-setup wizard's answer: Linear RAW and Narrowband are rig
-        properties, so they land on the new-file defaults, the open frame and every
-        already-edited frame at once."""
-        linear_raw, narrowband = scan_setup_values(capture, light)
+        """Apply the scanning-setup wizard's answer: Linear RAW is a rig property, so it
+        lands on the new-file defaults, the open frame and every already-edited frame at once."""
+        linear_raw = scan_setup_values(capture, light)
         self.session.repo.save_global_settings(
             {
                 "scan_setup": {"capture": capture, "light": light},
                 "last_linear_raw": linear_raw,
-                "last_narrowband_scan": narrowband,
             }
         )
 
@@ -1921,7 +1926,6 @@ class AppController(QObject):
                 process=replace(
                     self.state.config.process,
                     linear_raw=linear_raw,
-                    narrowband_scan=narrowband,
                     **invalidate_local_bounds(self.state.config.process),
                 ),
             )
@@ -1944,7 +1948,6 @@ class AppController(QObject):
                 process=replace(
                     saved.process,
                     linear_raw=linear_raw,
-                    narrowband_scan=narrowband,
                     **invalidate_local_bounds(saved.process),
                 ),
             )
@@ -3113,6 +3116,8 @@ class AppController(QObject):
             self._handle_scratch_line_pick(nx, ny)
         elif self.state.active_tool == ToolMode.ZONE_PLACE:
             self._handle_zone_pin(nx, ny)
+        elif self.state.active_tool == ToolMode.FILM_BASE:
+            self._handle_film_base_pick(nx, ny)
 
     def set_active_tool(self, mode: ToolMode) -> None:
         if mode != ToolMode.NONE and self._diptych_blocks_canvas():
@@ -3318,6 +3323,53 @@ class AppController(QObject):
             self.zone_arm_changed.emit(None)
         if not self.state.zone_pins and self.state.active_tool == ToolMode.ZONE_PLACE:
             self.set_active_tool(ToolMode.NONE)
+
+    def _handle_film_base_pick(self, nx: float, ny: float) -> None:
+        """Set the roll's clear film base from the patch under the click, as a densitometer is
+        zeroed on the rebate. The patch is read back through the frame's window and its crosstalk
+        unmix, so the roll keeps a raw base that every render unmixes like the rebate reader's.
+        One click: the tool disarms, and leaving it re-renders the roll's frame above the base."""
+        from negpy.features.exposure.normalization import effective_crosstalk_matrix, log_from_val
+
+        roll_id = self._active_frame_roll()
+        if roll_id is None:
+            self.set_status("Film Base needs a roll: this frame is in none", 4000, "warning")
+            self.set_active_tool(ToolMode.NONE)
+            return
+        bounds = self.state.last_metrics.get("final_bounds") or self.state.last_metrics.get("log_bounds")
+        patch = self._sample_normalized_patch(nx, ny, radius=4)
+        if bounds is None or patch is None:
+            self.set_status("Film Base: click the clear rebate once the frame has rendered", 3000, "warning")
+            return
+        logs = np.asarray([log_from_val(tuple(px), bounds) for px in patch], dtype=np.float64)
+        if float(logs.mean(axis=1).std()) > _FILM_BASE_FLAT_DECADES:
+            # Edge print, a perforation's edge or bare light inside the patch: not the base.
+            self.set_status("Film Base: that spot is not flat film; click the clear rebate", 4000, "warning")
+            return
+        base = logs.mean(axis=0)
+        unmix = effective_crosstalk_matrix(self.state.config.process, self.state.config.process.process_mode)
+        if unmix is not None:
+            try:
+                base = np.linalg.solve(np.asarray(unmix, dtype=np.float64), base)
+            except np.linalg.LinAlgError:
+                pass  # a singular matrix never reaches a render; the unmixed value is the best there is
+        if rolls.set_roll_film_base(self.session.repo, roll_id, tuple(float(v) for v in base)):
+            self.set_status("Film base set for the roll", 3000)
+        else:
+            self.set_status("Film Base: this frame's roll is not in the library", 4000, "warning")
+        self.set_active_tool(ToolMode.NONE)  # leaving the uncropped tool view re-renders
+
+    def roll_film_base(self) -> Optional[tuple]:
+        """The active frame's roll's clear film base, or None."""
+        return rolls.roll_film_base(self.session.repo, self._active_frame_roll())
+
+    def clear_roll_film_base(self) -> None:
+        roll_id = self._active_frame_roll()
+        if roll_id is None:
+            return
+        rolls.set_roll_film_base(self.session.repo, roll_id, None)
+        self.tool_sync_requested.emit()
+        self.request_render()
 
     def _handle_zone_pin(self, nx: float, ny: float) -> None:
         """Armed: the pin takes the zone picked on the strip. Unarmed: it takes the zone
@@ -4339,7 +4391,7 @@ class AppController(QObject):
         return thumbnail_fingerprint(
             config,
             workspace_color_space=self.state.workspace_color_space,
-            input_icc_path=self.effective_input_icc(config.process),
+            input_icc_path=self.effective_input_icc(),
         )
 
     def thumbnail_is_stale(self, asset: dict) -> bool:
@@ -4436,7 +4488,7 @@ class AppController(QObject):
                     file_info=asset,
                     config=config,
                     thumbnail_key=key,
-                    icc_input_active=bool(self.effective_input_icc(config.process)),
+                    icc_input_active=bool(self.effective_input_icc()),
                 )
             )
 
@@ -4487,7 +4539,7 @@ class AppController(QObject):
         asset = next((a for a in self.state.uploaded_files if a.get("hash") == asset_hash), None)
         if asset is None or self._config_for_batch_asset(asset) != frame.config:
             return  # removed, or edited again since dispatch — this render is stale
-        cs, monitor_bytes, proof = self.display_transform_params(process=frame.config.process)
+        cs, monitor_bytes, proof = self.display_transform_params()
         self.thumbnail_update_requested.emit(
             ThumbnailUpdateTask(
                 file_hash=frame.thumbnail_key,
@@ -6740,20 +6792,9 @@ class AppController(QObject):
         proof answers "what will the file look like" until a print is named explicitly."""
         return self.state.proof_icc_path or self.effective_output_icc()
 
-    def effective_input_icc(self, process: Optional[ProcessConfig] = None) -> Optional[str]:
-        """Source profile for color management: an explicit Input ICC wins; else the
-        bundled RGBScan profile when Narrowband Scan applies; else None.
-
-        A transparency never takes the implicit profile — see narrowband_profile_active,
-        which owns that rule. An explicit Input ICC still wins there, being a deliberate
-        user choice about their own source.
-        """
-        p = process if process is not None else self.state.config.process
-        if self.state.icc_input_path:
-            return self.state.icc_input_path
-        if narrowband_profile_active(p):
-            return get_resource_path("icc/RGBScan.icc")
-        return None
+    def effective_input_icc(self) -> Optional[str]:
+        """Source profile for color management: the explicit Input ICC, else None."""
+        return self.state.icc_input_path
 
     def _effective_cam_xyz(self) -> tuple[Optional[list], Optional[list]]:
         """(cam_xyz, camera_wb) for the transparency transfer. With an Input ICC active,
@@ -6764,9 +6805,23 @@ class AppController(QObject):
             cam_xyz = wb_only_cam_xyz(cam_xyz)
         return cam_xyz, self.state.preview_camera_wb
 
-    def display_transform_params(
-        self, splash: bool = False, proofed: bool = True, process: Optional[ProcessConfig] = None
-    ) -> tuple[str, Optional[bytes], Optional[tuple]]:
+    def chart_fit_source(self) -> Optional[ChartSource]:
+        """The open frame as the preview renders it, for Measure from Chart; None with no frame or on a diptych."""
+        raw = self.state.preview_proxy if self.state.preview_proxy is not None else self.state.preview_raw
+        if raw is None or self.active_diptych() is not None:
+            return None
+        cam_xyz, camera_wb = self._effective_cam_xyz()
+        return ChartSource(
+            buffer=raw,
+            config=self.state.config,
+            source_hash=self.state.current_file_hash or "preview",
+            cam_xyz=cam_xyz,
+            camera_wb=camera_wb,
+            gain_slices=self._preview_gain_slices(None),
+            orientation=self.state.preview_orientation,
+        )
+
+    def display_transform_params(self, splash: bool = False, proofed: bool = True) -> tuple[str, Optional[bytes], Optional[tuple]]:
         """Everything the display transform needs for the current render, as
         ``(color_space, monitor_icc_bytes, proof)``.
 
@@ -6778,26 +6833,18 @@ class AppController(QObject):
         untouched. ``splash`` marks the embedded camera thumbnail, already sRGB.
         ``proofed`` is False for a working-space buffer that is not a print: the
         negative peek shows the scan, which a paper simulation would misdescribe.
-        ``process`` overrides the active frame's for a background render of another
-        frame, whose narrowband-profile state can differ.
         """
         if splash:
             return ColorSpace.SRGB.value, self.state.monitor_icc_bytes, None
-        proof = self.proof_profiles(process) if proofed else None
+        proof = self.proof_profiles() if proofed else None
         return self.state.workspace_color_space, self.state.monitor_icc_bytes, proof
 
-    def proof_profiles(self, process: Optional[ProcessConfig] = None) -> Optional[ProofCondition]:
-        """The `ProofCondition` the preview simulates, or None when off.
-
-        Narrowband Scan supplies an implicit *input* profile whether or not the
-        soft-proof toggle is on; the output profile only applies with the toggle.
-        """
-        p = process if process is not None else self.state.config.process
-        proofing = self.state.soft_proof_enabled
-        if not (proofing or narrowband_profile_active(p)):
+    def proof_profiles(self) -> Optional[ProofCondition]:
+        """The `ProofCondition` the preview simulates, or None when off."""
+        if not self.state.soft_proof_enabled:
             return None
-        icc_input = self.effective_input_icc(p)
-        icc_output = self.effective_proof_icc() if proofing else None
+        icc_input = self.effective_input_icc()
+        icc_output = self.effective_proof_icc()
         if not (icc_input or icc_output):
             return None
         st = self.state
@@ -6886,10 +6933,7 @@ class AppController(QObject):
 
     def proof_active(self) -> bool:
         """True when the preview should soft-proof: the toggle is on and an input or
-        output profile is available, or Narrowband Scan supplies an implicit input
-        profile. Off → preview is the edit on the monitor."""
-        if self.effective_input_icc() and narrowband_profile_active(self.state.config.process):
-            return True
+        output profile is available. Off → preview is the edit on the monitor."""
         return self.state.soft_proof_enabled and bool(self.state.icc_input_path or self.effective_proof_icc())
 
     def set_soft_proof(self, enabled: bool) -> None:
@@ -7042,6 +7086,7 @@ class AppController(QObject):
             split_axis=str(dip[0].get("split_axis") or "x") if dip is not None else "x",
             gain_slices=self._preview_gain_slices(dip),
             source_orientation=self.state.preview_orientation,
+            film_base=self.roll_film_base(),
         )
 
         self._cancel_neighbor_prefetch()
@@ -7237,6 +7282,17 @@ class AppController(QObject):
         else:
             self.request_render()
 
+    def _peek_context(self, source: np.ndarray) -> PipelineContext:
+        """A geometry-only context scaled from the buffer the peek crops, as the render scales its own."""
+        height, width = source.shape[:2]
+        return PipelineContext(
+            original_size=(height, width),
+            scale_factor=render_scale_factor(source.shape),
+            process_mode=self.state.config.process.process_mode,
+            crop_preview_full=self.state.active_tool in UNCROPPED_PREVIEW_TOOLS,
+            wants_uv_grid=False,
+        )
+
     def _paint_negative_peek(self) -> None:
         """Put the decoded source on the canvas: un-inverted, un-normalized, no tone edits.
 
@@ -7250,10 +7306,8 @@ class AppController(QObject):
         The source is in camera primaries, so the camera matrix runs here: painting those
         numbers as display RGB flattens the film base, which on a C-41 negative reads as a
         mask far weaker than the one in the file. The multipliers fold into the matrix
-        whenever the decode skipped them, narrowband included. That is wider than
-        `should_fold_camera_wb`, which refuses narrowband because the light has no color
-        temperature to reconstruct; this view only has to show the film the way a raw viewer
-        does, and unbalanced sensor RGB renders the mask green. Reconstruction can override
+        whenever the decode skipped them: unbalanced sensor RGB renders the mask green.
+        Reconstruction can override
         the decode to bake real white balance in instead (`highlight_reconstruction_bakes_wb`);
         folding it again here would double it, so the fold sits out whenever baking did.
         `lightbox_level` supplies the brightness a decode with no auto-brightness never gets.
@@ -7263,14 +7317,7 @@ class AppController(QObject):
         if source is None:
             return
         geometry = self.state.config.geometry
-        original = self.state.original_res if any(self.state.original_res) else source.shape[:2]
-        context = PipelineContext(
-            original_size=(original[0], original[1]),
-            scale_factor=max(original) / float(APP_CONFIG.preview_render_size),
-            process_mode=self.state.config.process.process_mode,
-            crop_preview_full=self.state.active_tool in UNCROPPED_PREVIEW_TOOLS,
-            wants_uv_grid=False,
-        )
+        context = self._peek_context(source)
         img = GeometryProcessor(geometry).process(source, context)
         process = self.state.config.process
         decoded_without_wb = effective_linear_raw(process) and not highlight_reconstruction_bakes_wb(process)
@@ -7345,21 +7392,13 @@ class AppController(QObject):
         clipping, and none of NegPy's decode. Nothing is measured from it: the analysis chart
         keeps reading the frame's own metrics.
 
-        Geometry runs against the preview's own pixel grid, which is not the raw's, so the
-        context is built from its shape rather than `original_res`.
+        Geometry runs against the preview's own pixel grid, which is not the raw's.
         """
         source = self._load_embedded_preview()
         if source is None:
             return
         geometry = self.state.config.geometry
-        height, width = source.shape[:2]
-        context = PipelineContext(
-            original_size=(height, width),
-            scale_factor=max(height, width) / float(APP_CONFIG.preview_render_size),
-            process_mode=self.state.config.process.process_mode,
-            crop_preview_full=self.state.active_tool in UNCROPPED_PREVIEW_TOOLS,
-            wants_uv_grid=False,
-        )
+        context = self._peek_context(source)
         img = GeometryProcessor(geometry).process(source, context)
         if not context.crop_preview_full:
             img = CropProcessor(geometry).process(img, context)
@@ -7579,7 +7618,7 @@ class AppController(QObject):
         tasks = []
         for preset in presets:
             task_params, export_settings = resolve_preset_export(preset, params)
-            export_settings.icc_input_path = self.effective_input_icc(task_params.process)
+            export_settings.icc_input_path = self.effective_input_icc()
             tasks.append(
                 ExportTask(
                     file_info=file_info,
@@ -7814,7 +7853,7 @@ class AppController(QObject):
         export_conf = replace(
             self.state.config.export,
             export_path=export_path,
-            icc_input_path=self.effective_input_icc(params.process),
+            icc_input_path=self.effective_input_icc(),
             icc_output_path=self.state.icc_output_path,
         )
         if self.state.flat_output:
@@ -7907,7 +7946,7 @@ class AppController(QObject):
 
             final_export = replace(
                 params.export,
-                icc_input_path=self.effective_input_icc(params.process),
+                icc_input_path=self.effective_input_icc(),
                 icc_output_path=icc_output,
             )
 
@@ -8411,6 +8450,7 @@ class AppController(QObject):
             self.state.last_metrics["splash"] = False
 
         self._freeze_resolved_auto_crop(metrics)
+        self._freeze_resolved_meter(metrics)
         record_meters(self.state.auto_meters, self.state.current_file_hash or "", metrics)
 
         result = metrics.get("base_positive")
@@ -8502,6 +8542,28 @@ class AppController(QObject):
         self.session.update_config(replace(self.state.config, geometry=new_geo), persist=True, render=False, record_history=False)
         self._carry_render_identity(before)
         self.config_updated.emit()
+
+    def _freeze_resolved_meter(self, metrics: Dict[str, Any]) -> None:
+        """Store the meter rect this render resolved, so nothing detects it a second time. The render
+        metered inside it, so bounds stored from before it are dropped; no render is requested."""
+        box = metrics.get("meter_resolved")
+        # Like measured bounds: a proxy or one diptych half is not this frame's picture.
+        if box is None or metrics.get("ephemeral") or metrics.get("interactive") or metrics.get("diptych"):
+            return
+        geom, proc = self.state.config.geometry, self.state.config.process
+        if crops_frame(geom) or geom.crop_from_auto or proc.analysis_rect is not None:
+            return
+        if autocrop_detection_key(geom) != box.geometry_key or proc.meter_key == box.key:
+            return
+        stale = invalidate_local_bounds(proc) if box.rect != proc.meter_rect else {}
+        before = self.state.config
+        self.session.update_config(
+            replace(before, process=replace(proc, meter_rect=box.rect, meter_key=box.key, **stale)),
+            persist=self._may_persist_measured_bounds(),
+            render=False,
+            record_history=False,
+        )
+        self._carry_render_identity(before)
 
     def _carry_render_identity(self, before: WorkspaceConfig) -> None:
         """Call after a write that leaves the pixels as they are. Identity, not equality: an edit since the render breaks the chain."""

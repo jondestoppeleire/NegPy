@@ -60,7 +60,8 @@ struct ExposureUniforms {
     keyed: array<vec4<f32>, 4>,
     // x = limited mask count, y = frame ISO-R, zw = the ISO-R ladder's ends.
     key_meta: vec4<f32>,
-    // Diffusion: xyz = each channel's log range (channel_density_ranges), w pad.
+    // Diffusion: xyz = each channel's log range (channel_density_ranges), w = the Hold Black
+    // taper span (black_hold_taper, 0 = off).
     diff_range: vec4<f32>,
 };
 
@@ -303,7 +304,12 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
 
         // Zone Density (ΔD), mid-sparing weights; +0.75 / -0.40 / 4.0 mirror
         // the zone_density_* constants in models.py — change together.
-        let w_zsh = fast_sigmoid(4.0 * (v - (params.zone_center + 0.75)));
+        var w_zsh = fast_sigmoid(4.0 * (v - (params.zone_center + 0.75)));
+        // Hold Black: a lift fades to nothing at paper black. Mirrors _black_hold.
+        if (params.diff_range.w > 0.0 && params.shadow_density < 0.0) {
+            let t = clamp((d_max_eff[ch] - v) / params.diff_range.w, 0.0, 1.0);
+            w_zsh = w_zsh * t * t * (3.0 - 2.0 * t);
+        }
         let w_zhi = 1.0 - fast_sigmoid(4.0 * (v - (params.zone_center - 0.40)));
         v = v + params.shadow_density * w_zsh + params.d_min_rgb.w * w_zhi;
 

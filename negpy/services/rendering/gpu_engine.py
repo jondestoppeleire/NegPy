@@ -31,11 +31,12 @@ from negpy.features.exposure.normalization import (
     geometry_kwargs,
     luma_source_bounds,
     normalized_roi,
+    density_above_base,
     luminance_density_range,
+    measure_base_log,
     measure_anchor_from_log,
     measure_clip_fractions,
     measure_neutral_axis_from_log,
-    measure_shadow_refs_from_log,
     effective_crosstalk_matrix,
     unmix_log_image,
     measure_highlight_point_from_log,
@@ -56,8 +57,8 @@ from negpy.features.geometry.logic import (
     compute_geometry_crop_rect,
     get_manual_rect_coords,
 )
-from negpy.features.geometry.models import GeometryConfig
-from negpy.features.lab.logic import gaussian_kernel_1d, rl_iterations
+from negpy.features.geometry.models import GeometryConfig, crops_frame
+from negpy.features.lab.logic import chroma_denoise_sigma, gaussian_kernel_1d, rl_iterations
 from negpy.features.lab.models import SharpenMethod
 from negpy.features.altprocess.models import AltProcess
 from negpy.features.cyanotype.logic import CYANOTYPE_CONSTANTS, sensitizer_constants
@@ -154,6 +155,7 @@ def _build_analysis_source(
     analysis_rect: Optional[tuple],
     tiling_mode: bool,
     max_size: int,
+    meter_rect: Optional[tuple] = None,
 ) -> Tuple[np.ndarray, float]:
     """The shared meter grid's own buffer: oriented, downsampled (only a meter reads it), warped and sliced once for every
     meter reading it. The whole frame is warped before the ROI is cut, as on the CPU and in the print stage: a crop rotated
@@ -179,8 +181,13 @@ def _build_analysis_source(
         sy, sx = analysis_source.shape[0] / full_h, analysis_source.shape[1] / full_w
         y1, y2, x1, x2 = roi
         base_roi = (round(y1 * sy), round(y2 * sy), round(x1 * sx), round(x2 * sx))
+    meter_rect = meter_rect if not tiling_mode else None
     analysis_roi, an_buffer = resolve_analysis_region(
-        analysis_source.shape, base_roi, analysis_buffer, analysis_rect if not tiling_mode else None
+        analysis_source.shape,
+        None if meter_rect is not None else base_roi,
+        analysis_buffer,
+        analysis_rect if not tiling_mode else None,
+        meter_rect,
     )
     if analysis_roi is not None:
         ay1, ay2, ax1, ax2 = analysis_roi
@@ -205,18 +212,20 @@ def _keystone_inverse_bytes(converge_v: float, converge_h: float) -> bytes:
     return struct.pack("ffff", m[0, 0], m[0, 1], m[0, 2], m[1, 0]) + struct.pack("ffff", m[1, 1], m[1, 2], m[2, 0], m[2, 1])
 
 
-def _analysis_cache_key(settings: WorkspaceConfig, analysis_source_hash: str) -> tuple:
+def _analysis_cache_key(settings: WorkspaceConfig, analysis_source_hash: str, film_base: Optional[tuple] = None) -> tuple:
     """Identity of the auto-exposure analysis: only the fields the meter reads, including every geometry field that moves
     which pixels land in the metered region. White/black point offsets and trims apply downstream as uniforms and must not
-    invalidate it."""
+    invalidate it. The roll's film base is in it because the cached densities are read above it."""
     e = settings.exposure
     p = settings.process
     g = settings.geometry
     return (
         analysis_source_hash,
+        film_base,
         p.process_mode,
         p.analysis_buffer,
         p.analysis_rect,
+        p.meter_rect,
         p.luma_range_clip,
         p.color_range_clip,
         p.use_luma_average,
@@ -248,37 +257,37 @@ def _analysis_cache_key(settings: WorkspaceConfig, analysis_source_hash: str) ->
     )
 
 
-def _fill_analysis_overrides(cache, key, bounds, refs, anchor, textural, neutral, shadow, highlight):
+def _fill_analysis_overrides(cache, key, bounds, anchor, textural, neutral, shadow, highlight, density=None):
     """Fill the None overrides from the cache when its key matches; caller overrides win."""
     if cache is None or cache[0] != key:
-        return bounds, refs, anchor, textural, neutral, shadow, highlight
-    _, cb, cr, ca, ct, cn, cs, ch = cache
+        return bounds, anchor, textural, neutral, shadow, highlight, density
+    _, cb, ca, ct, cn, cs, ch, cd = cache
     return (
         bounds if bounds is not None else cb,
-        refs if refs is not None else cr,
         anchor if anchor is not None else ca,
         textural if textural is not None else ct,
         neutral if neutral is not None else cn,
         shadow if shadow is not None else cs,
         highlight if highlight is not None else ch,
+        density if density is not None else cd,
     )
 
 
-def _update_analysis_cache(cache, key, bounds, refs, anchor, textural, neutral, shadow, highlight):
+def _update_analysis_cache(cache, key, bounds, anchor, textural, neutral, shadow, highlight, density=None):
     """Store the resolved analysis under key, merging (a frame may compute only a subset)."""
     if cache is None or cache[0] != key:
-        cb = cr = ca = ct = cn = cs = ch = None
+        cb = ca = ct = cn = cs = ch = cd = None
     else:
-        _, cb, cr, ca, ct, cn, cs, ch = cache
+        _, cb, ca, ct, cn, cs, ch, cd = cache
     return (
         key,
         bounds if bounds is not None else cb,
-        refs if refs is not None else cr,
         anchor if anchor is not None else ca,
         textural if textural is not None else ct,
         neutral if neutral is not None else cn,
         shadow if shadow is not None else cs,
         highlight if highlight is not None else ch,
+        density if density is not None else cd,
     )
 
 
@@ -302,6 +311,8 @@ class GPUEngine:
             "clahe_apply": get_resource_path(os.path.join("negpy", "features", "lab", "shaders", "clahe_apply.wgsl")),
             "lab_sharpen_h": get_resource_path(os.path.join("negpy", "features", "lab", "shaders", "lab_sharpen_h.wgsl")),
             "lab_sharpen_v": get_resource_path(os.path.join("negpy", "features", "lab", "shaders", "lab_sharpen_v.wgsl")),
+            "chroma_lowpass_h": get_resource_path(os.path.join("negpy", "features", "lab", "shaders", "chroma_lowpass_h.wgsl")),
+            "chroma_lowpass_v": get_resource_path(os.path.join("negpy", "features", "lab", "shaders", "chroma_lowpass_v.wgsl")),
             "rl_init": get_resource_path(os.path.join("negpy", "features", "lab", "shaders", "rl_init.wgsl")),
             "rl_blur_h": get_resource_path(os.path.join("negpy", "features", "lab", "shaders", "rl_blur_h.wgsl")),
             "rl_div_v": get_resource_path(os.path.join("negpy", "features", "lab", "shaders", "rl_div_v.wgsl")),
@@ -364,13 +375,15 @@ class GPUEngine:
         self._current_source_hash: Optional[str] = None
         # Once-per-source guard so the analysis timing log fires on load, not every slider.
         self._analysis_timing_hash: Optional[str] = None
-        # (key, bounds, shadow_refs, metered_anchor, textural_range, neutral_axis): the
-        # per-source meter cache, so creative-slider previews skip the analysis.
+        # (key, bounds, metered_anchor, textural_range, neutral_axis, shadow_point,
+        # highlight_point): the per-source meter cache, so creative-slider previews skip the analysis.
         self._analysis_cache: Optional[tuple] = None
         # (analysis_key, per-channel clipped fractions) for the scan-exposure warning.
         self._clip_cache: Optional[tuple] = None
         # (key, prefiltered grid, clip fractions), keyed without the clip sliders.
         self._prefilter_cache: Optional[tuple] = None
+        # The clear base, read off the raw source once per source; every edit reuses it.
+        self._base_cache: Optional[tuple] = None
         self._last_settings: Optional[WorkspaceConfig] = None
         self._last_targets_rev: int = -1
         self._last_scale_factor: float = 1.0
@@ -384,6 +397,10 @@ class GPUEngine:
         self._sabattier_kernel_key: Optional[float] = None
         # (method, radius, dims) of the blur state in the sharpen textures; None once their input moved.
         self._sharpen_state_key: Optional[tuple] = None
+        # The sigma of the Chroma Denoise taps currently in chroma_k.
+        self._chroma_kernel_key: Optional[float] = None
+        # (sigma, dims) of the low-pass in the chroma textures; None once their input moved.
+        self._chroma_state_key: Optional[tuple] = None
 
         # Bind groups reference resources, not contents, so they survive across frames.
         # Cache and reuse them (cleared in cleanup()): about 28 fewer wgpu calls per frame.
@@ -498,6 +515,8 @@ class GPUEngine:
             self._local_ev_key = None
         if labels & {"rl_a", "rl_b", "sharpen_h", "sharpen_v"}:
             self._sharpen_state_key = None
+        if labels & {"chroma_h", "chroma_v"}:
+            self._chroma_state_key = None
         if "contrast_mask" in labels:
             self._mask_tex_key = None
         # Bind groups keyed by id() never match a destroyed view again; drop, don't leak.
@@ -534,6 +553,7 @@ class GPUEngine:
         self._local_ev_key = None
         self._mask_tex_key = None
         self._sharpen_state_key = None
+        self._chroma_state_key = None
 
     def _init_resources(self) -> None:
         """Initializes hardware pipelines and persistent buffers."""
@@ -541,6 +561,7 @@ class GPUEngine:
             return
         # Buffers are recreated below, so force the next kernel upload.
         self._sharpen_kernel_key = None
+        self._chroma_kernel_key = None
         t0 = time.perf_counter()
         device = self.gpu.device
         self._sampler = device.create_sampler(min_filter="linear", mag_filter="linear")
@@ -565,6 +586,8 @@ class GPUEngine:
         )
         # Sharpen blur taps (gaussian_kernel_1d): 1024 f32 covers radius <= 511.
         self._buffers["sharpen_k"] = GPUBuffer(4096, wgpu.BufferUsage.STORAGE | wgpu.BufferUsage.COPY_DST)
+        # Chroma Denoise low-pass taps, the same helper's.
+        self._buffers["chroma_k"] = GPUBuffer(4096, wgpu.BufferUsage.STORAGE | wgpu.BufferUsage.COPY_DST)
         # The Mackie-line blur taps, the same helper's, for the Sabattier passes.
         self._buffers["sabattier_k"] = GPUBuffer(4096, wgpu.BufferUsage.STORAGE | wgpu.BufferUsage.COPY_DST)
         # Filed-carrier jitter profiles are a fixed table, so upload once.
@@ -619,7 +642,6 @@ class GPUEngine:
         global_offset: Tuple[int, int] = (0, 0),
         full_dims: Optional[Tuple[int, int]] = None,
         clahe_cdf_override: Optional[np.ndarray] = None,
-        shadow_refs_override: Optional[Tuple[float, float, float]] = None,
         metered_anchor_override: Optional[float] = None,
         textural_range_override: Optional[float] = None,
         neutral_axis_override: Optional[tuple] = None,
@@ -635,6 +657,7 @@ class GPUEngine:
         cam_xyz: Optional[list] = None,
         camera_wb: Optional[list] = None,
         contrast_mask_override: Optional[Tuple[np.ndarray, float, Tuple[int, int, int, int]]] = None,
+        film_base: Optional[tuple] = None,
         sabattier_sigma_override: Optional[float] = None,
         diffusion_override: Optional[Tuple[np.ndarray, Tuple[int, int, int, int]]] = None,
         # Crop tool preview: toning and finish span the whole rotated frame, with no border or
@@ -722,32 +745,31 @@ class GPUEngine:
         # Reuse the per-source meter across creative-slider previews: fill any missing
         # override from the cache so the needs_* gates below skip the analysis entirely.
         analysis_key = None
+        density_above_base_value = None  # (Dmin, Dmed, Dmax) above the clear base; the cache keeps it across skipped analyses
         if analysis_source_hash is not None and not tiling_mode:
-            analysis_key = _analysis_cache_key(settings, analysis_source_hash)
+            analysis_key = _analysis_cache_key(settings, analysis_source_hash, film_base)
             (
                 bounds_override,
-                shadow_refs_override,
                 metered_anchor_override,
                 textural_range_override,
                 neutral_axis_override,
                 shadow_point_override,
                 highlight_point_override,
+                density_above_base_value,
             ) = _fill_analysis_overrides(
                 self._analysis_cache,
                 analysis_key,
                 bounds_override,
-                shadow_refs_override,
                 metered_anchor_override,
                 textural_range_override,
                 neutral_axis_override,
                 shadow_point_override,
                 highlight_point_override,
+                None,
             )
 
         analysis_t0 = time.perf_counter()
         cast_on = settings.exposure.cast_removal_strength > 0.0 and not tiling_mode
-        # The P98 shadow tie is calibrated for a negative, so it stays Color Negative only.
-        needs_refs = shadow_refs_override is None and cast_on and settings.process.process_mode == ProcessMode.C41
         # The neutral axis runs on both colour processes; B&W has no channels to balance.
         needs_axis = neutral_axis_override is None and cast_on and settings.process.process_mode != ProcessMode.BW
         _roll_luma = settings.process.use_luma_average and settings.process.is_locked_initialized
@@ -771,7 +793,12 @@ class GPUEngine:
         # The transparency curve reads working space, so its meter must too: the same
         # camera matrix TransparencyBaseProcessor applies, on the grid.
         cam_m = camera_to_working_matrix(cam_xyz, camera_wb if should_fold_camera_wb(settings.process) else None) if transfer else None
-        if needs_bounds_analysis or needs_refs or needs_axis or needs_anchor or needs_textural or needs_shadow or needs_highlight:
+        # A drag renders without metrics and caches no densities; the release that reads them
+        # back re-runs the grid once so the cache fills.
+        # A source with no base is known as such, so it never re-enters the grid for it.
+        base_known_empty = self._base_cache is not None and self._base_cache[0] == analysis_source_hash and self._base_cache[1] is None
+        needs_density = readback_metrics and not tiling_mode and not transfer and density_above_base_value is None and not base_known_empty
+        if needs_bounds_analysis or needs_axis or needs_anchor or needs_textural or needs_shadow or needs_highlight or needs_density:
             # Keyed without the clip sliders: a clip drag reuses the grid and
             # re-runs only the percentile analysis.
             p = settings.process
@@ -789,6 +816,7 @@ class GPUEngine:
                     roi,
                     p.analysis_buffer,
                     p.analysis_rect,
+                    p.meter_rect,
                     p.crosstalk_strength,
                     p.crosstalk_matrix,
                     p.crosstalk_process,
@@ -812,6 +840,7 @@ class GPUEngine:
                     settings.process.analysis_rect,
                     tiling_mode,
                     APP_CONFIG.preview_render_size,
+                    meter_rect=None if crops_frame(settings.geometry) else settings.process.meter_rect,
                 )
                 # Shared prefilter, once for all five meters (ROI already applied).
                 # Unmixed like the CPU path so every meter reads the unmixed film.
@@ -860,10 +889,21 @@ class GPUEngine:
         else:
             bounds, base_bounds = resolve_bounds_detailed(settings.process, _analyze_bounds)
             anchor_bounds = luma_source_bounds(settings.process, base_bounds)
-
-        shadow_refs = shadow_refs_override
-        if needs_refs and prefiltered is not None:
-            shadow_refs = measure_shadow_refs_from_log(prefiltered, None, 0.0, sorted_grid=_sorted())
+        if prefiltered is not None and readback_metrics and not transfer and (density_above_base_value is None or needs_bounds_analysis):
+            # Only a preview reads the densities, like the anchor's readback_metrics gate. A base
+            # the user set on the roll wins; else the rebate reader's, a property of the source
+            # read off the raw frame once per source, or per render on a pass with no source
+            # identity (the tiled reference pass).
+            if film_base is not None:
+                density_above_base_value = density_above_base(tuple(film_base), bounds, prefiltered, unmix_m)
+            else:
+                if analysis_source_hash is None:
+                    base_log = measure_base_log(img)
+                else:
+                    if self._base_cache is None or self._base_cache[0] != analysis_source_hash:
+                        self._base_cache = (analysis_source_hash, measure_base_log(img))
+                    base_log = self._base_cache[1]
+                density_above_base_value = density_above_base(base_log, bounds, prefiltered, unmix_m)
 
         # Neutral axis for the two-point Cast Removal; normalized at consumption. The
         # transparency curve renders through the fixed window, so the axis is measured
@@ -872,7 +912,7 @@ class GPUEngine:
         axis_grid = cam_prefiltered if transfer else prefiltered
         if needs_axis and axis_grid is not None:
             axis_bounds = LogNegativeBounds(*transfer_bounds()) if transfer else bounds
-            neutral_axis_refs = measure_neutral_axis_from_log(axis_grid, axis_bounds, None, 0.0, exclude_foliage=not transfer)
+            neutral_axis_refs = measure_neutral_axis_from_log(axis_grid, axis_bounds, None, 0.0, exclude_subjects=not transfer)
             pooled_axis = pooled_neutral_axis(settings.process)
             if pooled_axis is not None:
                 neutral_axis_refs = blend_neutral_axis(neutral_axis_refs, pooled_axis)
@@ -905,12 +945,12 @@ class GPUEngine:
                 self._analysis_cache,
                 analysis_key,
                 bounds,
-                shadow_refs,
                 metered_anchor,
                 textural_range,
                 neutral_axis_refs,
                 shadow_point,
                 highlight_point,
+                density_above_base_value,
             )
 
         # Same helper, same pre-geometry array as the CPU engine, so the two mask alike.
@@ -1026,10 +1066,10 @@ class GPUEngine:
         if analysis_source is not None and analysis_source_hash is not None and analysis_source_hash != self._analysis_timing_hash:
             self._analysis_timing_hash = analysis_source_hash
             logger.info(
-                "load-timing analysis %.0fms (bounds=%s refs=%s anchor=%s textural=%s)",
+                "load-timing analysis %.0fms (bounds=%s axis=%s anchor=%s textural=%s)",
                 (time.perf_counter() - analysis_t0) * 1000,
                 needs_bounds_analysis,
-                needs_refs,
+                needs_axis,
                 needs_anchor,
                 needs_textural,
             )
@@ -1049,7 +1089,6 @@ class GPUEngine:
             scale_factor,
             vignette_full_crop=vignette_full_crop,
             full_frame=full_frame,
-            shadow_refs=shadow_refs,
             metered_anchor=metered_anchor,
             textural_range=textural_range,
             neutral_axis_refs=neutral_axis_refs,
@@ -1301,6 +1340,7 @@ class GPUEngine:
 
         if start_stage <= 2:
             self._sharpen_state_key = None
+            self._chroma_state_key = None
         if start_stage <= 4:
             # Sharpen state (USM blur or RL deconvolution) feeds the lab pass; a 1x1 dummy keeps binding 3 valid when it is
             # off. The blur reads only its input, radius and kernel, so a lab-only change reuses the last one.
@@ -1337,6 +1377,23 @@ class GPUEngine:
                     )
             else:
                 tex_sharpen_v = self._get_intermediate_texture(1, 1, usage, "sharpen_v")
+            # The Chroma Denoise low-pass reads only its input and sigma, so a lab-only change reuses it too.
+            chroma_sigma = chroma_denoise_sigma(settings.lab.chroma_denoise, scale_factor)
+            if chroma_sigma > 0.0:
+                tex_chroma_h = self._get_intermediate_texture(w_rot, h_rot, usage, "chroma_h")
+                tex_chroma_v = self._get_intermediate_texture(w_rot, h_rot, usage, "chroma_v")
+                chroma_key = (chroma_sigma, w_rot, h_rot)
+                if chroma_key != self._chroma_state_key:
+                    ck = self._buffers["chroma_k"]
+                    self._dispatch_pass(
+                        enc, "chroma_lowpass_h", [(0, prev_tex.view), (1, tex_chroma_h.view), (2, lab_u), (3, ck)], w_rot, h_rot
+                    )
+                    self._dispatch_pass(
+                        enc, "chroma_lowpass_v", [(0, tex_chroma_h.view), (1, tex_chroma_v.view), (2, lab_u), (3, ck)], w_rot, h_rot
+                    )
+                    self._chroma_state_key = chroma_key
+            else:
+                tex_chroma_v = self._get_intermediate_texture(1, 1, usage, "chroma_v")
             self._dispatch_pass(
                 enc,
                 "lab",
@@ -1345,6 +1402,7 @@ class GPUEngine:
                     (1, tex_lab.view),
                     (2, lab_u),
                     (3, tex_sharpen_v.view),
+                    (4, tex_chroma_v.view),
                 ],
                 w_rot,
                 h_rot,
@@ -1579,6 +1637,8 @@ class GPUEngine:
             "final_bounds": final_bounds,
             "log_bounds_base": base_bounds,
             "norm_density_range": luminance_density_range(bounds),
+            "density_above_base": density_above_base_value,
+            "base_source": "picked" if film_base is not None else "read",
             "metered_anchor": metered_anchor,
             "contrast_mask_centre": mask_centre,
             "textural_range": textural_range,
@@ -1586,7 +1646,6 @@ class GPUEngine:
             "highlight_point": highlight_point,
             "scan_clip_fractions": scan_clip_fractions,
             # Raw cast refs so the chart can re-solve the exact render curves.
-            "shadow_log_refs": shadow_refs,
             "neutral_axis_refs": neutral_axis_refs,
         }
 
@@ -1676,7 +1735,6 @@ class GPUEngine:
         scale_factor: float,
         vignette_full_crop: Optional[Tuple[int, int, int, int]] = None,
         full_frame: bool = False,
-        shadow_refs: Optional[Tuple[float, float, float]] = None,
         metered_anchor: Optional[float] = None,
         textural_range: Optional[float] = None,
         neutral_axis_refs: Optional[
@@ -1772,6 +1830,7 @@ class GPUEngine:
             per_channel_dye_separation,
             per_channel_toe_shoulder,
             grade_coupled_shape,
+            black_hold_taper,
             channel_density_ranges,
             local_ev_scale,
             paper_dmin_rgb,
@@ -1802,11 +1861,9 @@ class GPUEngine:
         t_wb_c, t_wb_k = wb_split_geometry()
         t_cmy_m = EXPOSURE_CONSTANTS["cmy_max_density"]
         # Cast Removal on the transparency curve: a per-channel affine on density, since
-        # this curve has no per-channel slope to re-solve. Shadow refs stay out — the P98
-        # tie is calibrated for a negative. Identity when there is no axis.
-        t_strength, _t_shadow, t_axis = cast_solve_inputs(
+        # this curve has no per-channel slope to re-solve. Identity when there is no axis.
+        t_strength, t_axis = cast_solve_inputs(
             LogNegativeBounds(adj_floors, adj_ceils),
-            None,
             neutral_axis_refs,
             settings.exposure.cast_removal_strength,
         )
@@ -1899,10 +1956,9 @@ class GPUEngine:
         render_anchor = metered_anchor if exp.auto_exposure else None
         lum_range = luminance_density_range(bounds)
         # adj_floors/adj_ceils (packed above) are the final bounds the shader normalizes
-        # with, shared by the Cast Removal shadow refs.
-        strength, shadow_refs_norm, neutral_axis_norm = cast_solve_inputs(
+        # with, shared by the Cast Removal neutral axis.
+        strength, neutral_axis_norm = cast_solve_inputs(
             LogNegativeBounds(adj_floors, adj_ceils),
-            shadow_refs,
             neutral_axis_refs,
             exp.cast_removal_strength,
         )
@@ -1912,7 +1968,6 @@ class GPUEngine:
             exp.auto_normalize_contrast,
             strength,
             lum_range,
-            shadow_refs_norm,
             textural_range,
             d_min=d_min,
             anchor=render_anchor,
@@ -1996,7 +2051,6 @@ class GPUEngine:
             "textural_range": textural_range,
             "shadow_point": shadow_point,
             "highlight_point": highlight_point,
-            "shadow_log_refs": shadow_refs,
             "neutral_axis_refs": neutral_axis_refs,
         }
         key_params = limited_mask_params(settings.local, exp, settings.process.process_mode, curve_metrics)
@@ -2098,8 +2152,9 @@ class GPUEngine:
             + struct.pack("ffff", plane_rect_v[2], plane_rect_v[3], 0.0, 0.0)
             + key_rows.tobytes()
             + key_meta
-            # Diffusion: each channel's log range, one normalized unit of val in density.
-            + struct.pack("ffff", *channel_density_ranges(LogNegativeBounds(adj_floors, adj_ceils)), 0.0)
+            # Diffusion: each channel's log range, one normalized unit of val in density; w = the
+            # Hold Black taper span (0 = off).
+            + struct.pack("ffff", *channel_density_ranges(LogNegativeBounds(adj_floors, adj_ceils)), black_hold_taper(exp, paper))
         )
 
         cls = float(settings.lab.clahe_strength)
@@ -2128,23 +2183,29 @@ class GPUEngine:
             if self._sharpen_kernel_key != kernel_key:
                 self._buffers["sharpen_k"].upload(kernel)
                 self._sharpen_kernel_key = kernel_key
-        l_data = (
-            struct.pack(
-                "ffffffffff",
-                float(lab.sharpen),
-                float(lab.chroma_denoise),
-                float(lab.saturation),
-                float(lab.glow_amount),
-                float(lab.halation_strength),
-                # Chroma-denoise scales its blur radius by the preview downsample ratio,
-                # like the CPU path (radius * scale_factor).
-                float(scale_factor),
-                float(sharpen_radius_px),
-                float(lab.sharpen_masking),
-                1.0 if lab.sharpen_method == SharpenMethod.RL else 0.0,
-                float(lab.skin_protection),
-            )
-            + b"\x00" * 8
+        chroma_radius_px = 0
+        chroma_sigma = chroma_denoise_sigma(lab.chroma_denoise, scale_factor)
+        if chroma_sigma > 0.0:
+            chroma_kernel = gaussian_kernel_1d(chroma_sigma)
+            chroma_radius_px = len(chroma_kernel) // 2
+            if self._chroma_kernel_key != chroma_sigma:
+                self._buffers["chroma_k"].upload(chroma_kernel)
+                self._chroma_kernel_key = chroma_sigma
+        l_data = struct.pack(
+            "ffffffffffff",
+            float(lab.sharpen),
+            float(lab.chroma_denoise),
+            float(lab.saturation),
+            float(lab.glow_amount),
+            float(lab.halation_strength),
+            # Chroma Denoise's sigma is chroma_denoise * scale_factor, as on the CPU.
+            float(scale_factor),
+            float(sharpen_radius_px),
+            float(lab.sharpen_masking),
+            1.0 if lab.sharpen_method == SharpenMethod.RL else 0.0,
+            float(lab.skin_protection),
+            float(chroma_radius_px),
+            0.0,
         )
 
         is_bw = 1 if settings.process.process_mode == ProcessMode.BW else 0
@@ -2577,6 +2638,7 @@ class GPUEngine:
         analysis_source_hash: Optional[str] = None,
         memory_bounded: bool = False,
         render_size_ref: Optional[float] = None,
+        film_base: Optional[tuple] = None,
     ) -> Tuple[np.ndarray, Dict[str, Any]]:
         """High-level processing entry point with automatic tiling."""
         self._init_resources()
@@ -2592,6 +2654,7 @@ class GPUEngine:
                 readback_metrics=readback_metrics,
                 memory_bounded=memory_bounded,
                 render_size_ref=render_size_ref,
+                film_base=film_base,
             )
         tex_final, metrics = self.process_to_texture(
             img,
@@ -2604,6 +2667,7 @@ class GPUEngine:
             source_hash=source_hash,
             analysis_source_hash=analysis_source_hash,
             render_size_ref=render_size_ref,
+            film_base=film_base,
         )
         return self._readback_downsampled(tex_final), metrics
 
@@ -2615,6 +2679,7 @@ class GPUEngine:
         bounds_override: Optional[Any] = None,
         cam_xyz: Optional[list] = None,
         camera_wb: Optional[list] = None,
+        film_base: Optional[tuple] = None,
         readback_metrics: bool = True,
         memory_bounded: bool = False,
         render_size_ref: Optional[float] = None,
@@ -2680,6 +2745,7 @@ class GPUEngine:
             camera_wb=camera_wb,
             readback_metrics=readback_metrics,
             apply_layout=False,
+            film_base=film_base,
         )
 
         global_cdfs = self._readback_clahe_cdf()
@@ -2718,8 +2784,13 @@ class GPUEngine:
         analysis_roi = (int(y1 * a_scale), int(y2 * a_scale), int(x1 * a_scale), int(x2 * a_scale))
         analysis_shape = (int(ah * a_scale), int(aw * a_scale))
         # Freehand analysis_rect wins over the crop ROI + centered buffer here too.
+        meter_rect = None if crops_frame(settings.geometry) else settings.process.meter_rect
         meter_roi, meter_buffer = resolve_analysis_region(
-            analysis_shape, analysis_roi, settings.process.analysis_buffer, settings.process.analysis_rect
+            analysis_shape,
+            None if meter_rect is not None else analysis_roi,
+            settings.process.analysis_buffer,
+            settings.process.analysis_rect,
+            meter_rect,
         )
         analysis_small: Optional[np.ndarray] = None
 
@@ -2783,13 +2854,10 @@ class GPUEngine:
 
         meter_bounds = LogNegativeBounds(*transfer_bounds()) if transfer else global_anchor_bounds
 
-        global_shadow_refs = None
         global_neutral_axis = None
         if settings.exposure.cast_removal_strength > 0.0 and settings.process.process_mode != ProcessMode.BW:
-            if settings.process.process_mode == ProcessMode.C41:
-                global_shadow_refs = measure_shadow_refs_from_log(_prefiltered(), None, 0.0, sorted_grid=_sorted())
             axis_bounds = meter_bounds if transfer else global_bounds
-            global_neutral_axis = measure_neutral_axis_from_log(_meter_grid(), axis_bounds, None, 0.0, exclude_foliage=not transfer)
+            global_neutral_axis = measure_neutral_axis_from_log(_meter_grid(), axis_bounds, None, 0.0, exclude_subjects=not transfer)
             pooled_axis = pooled_neutral_axis(settings.process)
             if pooled_axis is not None:
                 global_neutral_axis = blend_neutral_axis(global_neutral_axis, pooled_axis)
@@ -2859,9 +2927,10 @@ class GPUEngine:
             halo = max(halo, int(np.ceil(max(3.0, 15.0 * scale_factor))))
         if settings.lab.halation_strength > 0.0:
             halo = max(halo, int(np.ceil(max(5.0, 25.0 * scale_factor))))
-        # Chroma Denoise taps reach 2 * chroma_denoise * scale_factor px (lab.wgsl).
-        if settings.lab.chroma_denoise > 0.0:
-            halo = max(halo, int(np.ceil(2.0 * settings.lab.chroma_denoise * scale_factor)) + 1)
+        # Chroma Denoise reads its low-pass kernel's half-width, plus one for the edge test's neighbors.
+        chroma_sigma = chroma_denoise_sigma(settings.lab.chroma_denoise, scale_factor)
+        if chroma_sigma > 0.0:
+            halo = max(halo, len(gaussian_kernel_1d(chroma_sigma)) // 2 + 2)
         # The Mackie-line blur reads its kernel's half-width each side, sigma from the whole
         # frame's short side, so every tile draws the frame's line.
         sabattier_sigma = None
@@ -2904,7 +2973,6 @@ class GPUEngine:
                     scale_factor=scale_factor,
                     tiling_mode=True,
                     bounds_override=global_bounds,
-                    shadow_refs_override=global_shadow_refs,
                     metered_anchor_override=global_metered_anchor,
                     textural_range_override=global_textural_range,
                     neutral_axis_override=global_neutral_axis,

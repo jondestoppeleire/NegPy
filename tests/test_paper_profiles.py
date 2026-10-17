@@ -38,7 +38,6 @@ class TestPaperProfiles(unittest.TestCase):
             auto_normalize_contrast=False,
             strength=0.0,
             lum_range=1.3,
-            shadow_refs_norm=None,
             textural_range=None,
             d_min=d_min,
             paper=paper,
@@ -58,6 +57,11 @@ class TestPaperProfiles(unittest.TestCase):
         self.assertEqual(PAPER_PROFILES[DEFAULT_PROFILE_KEY].kind, "default")
         kinds = {p.kind for p in PAPER_PROFILES.values()}
         self.assertTrue({"bw", "ra4"} <= kinds)
+
+    def test_dye_matrices_keep_neutrals(self):
+        # resolve_dye_matrix renormalizes rows, so a mistyped fitted coefficient would pass unseen.
+        for key, p in PAPER_PROFILES.items():
+            np.testing.assert_allclose(np.array(p.dye_matrix).sum(axis=1), 1.0, atol=2e-4, err_msg=key)
 
     def test_midtone_gamma_leaves_snap_headroom(self):
         # Snap and its per-layer trims add to the profile's gamma below the kernel's |gamma| < 1.
@@ -103,14 +107,14 @@ class TestPaperProfiles(unittest.TestCase):
 
     def test_ra4_introduces_color_divergence(self):
         # Per-channel gamma + tint must make a neutral ramp non-grey on RA4 papers.
-        out = self._render("fuji_crystal")
+        out = self._render("kodak_ultra_endura")
         chan_spread = np.max(np.abs(out[..., 0] - out[..., 2]))
         self.assertGreater(float(chan_spread), 1e-3)
 
     def test_channel_gamma_scales_slopes(self):
-        paper = PAPER_PROFILES["fuji_crystal"]
-        slopes, _, _ = per_channel_curve_params(115.0, 1.0, False, False, 1.3, None, None, paper=paper)
-        base, _, _ = per_channel_curve_params(115.0, 1.0, False, False, 1.3, None, None)
+        paper = PAPER_PROFILES["kodak_ultra_endura"]
+        slopes, _, _ = per_channel_curve_params(115.0, 1.0, False, False, 1.3, None, paper=paper)
+        base, _, _ = per_channel_curve_params(115.0, 1.0, False, False, 1.3, None)
         # Blue channel gamma > 1 → steeper blue slope than the neutral baseline.
         self.assertGreater(slopes[2], base[2])
 

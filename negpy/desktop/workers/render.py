@@ -128,6 +128,9 @@ class RenderTask:
     gain_slices: tuple = ()
     # EXIF orientation the decode baked into `buffer`, for the flat-field gain to take first.
     source_orientation: int = 1
+    # The roll's clear film base set with the Film Base tool, per-channel log10 transmittance;
+    # None lets the rebate reader stand in.
+    film_base: Optional[tuple] = None
 
 
 @dataclass(frozen=True)
@@ -250,9 +253,8 @@ class ThumbnailRenderInput:
     file_info: dict
     config: WorkspaceConfig
     thumbnail_key: str
-    # Whether an Input ICC (explicit override or the implicit Narrowband Scan profile)
-    # applies to this frame — mirrors AppController.effective_input_icc, resolved at
-    # dispatch since the worker has no session state to check it itself.
+    # Whether an Input ICC applies to this frame — mirrors AppController.effective_input_icc,
+    # resolved at dispatch since the worker has no session state to check it itself.
     icc_input_active: bool = False
 
 
@@ -394,6 +396,7 @@ class RenderWorker(QObject):
                 crop_preview_full=task.crop_preview_full,
                 cam_xyz=task.cam_xyz,
                 camera_wb=task.camera_wb,
+                film_base=task.film_base,
                 gain_slices=task.gain_slices + ((n, task.split_x, None, task.gutter_thickness, task.split_axis),),
                 source_orientation=task.source_orientation,
             )
@@ -436,6 +439,7 @@ class RenderWorker(QObject):
                     camera_wb=task.camera_wb,
                     gain_slices=task.gain_slices,
                     source_orientation=task.source_orientation,
+                    film_base=task.film_base,
                 )
 
             # CPU renders have no in-shader histogram; bin the float output here.
@@ -2012,6 +2016,7 @@ class NormalizationWorker(QObject):
             unmix_log_image,
         )
         from negpy.features.process.models import ProcessMode
+        from negpy.features.geometry.logic import meter_detection_key, resolve_meter_rect
         from negpy.features.geometry.processor import GeometryProcessor
 
         total = len(task.frames)
@@ -2065,8 +2070,15 @@ class NormalizationWorker(QObject):
                     )
                     transformed = await asyncio.to_thread(GeometryProcessor(geometry).process, raw, ctx)
                     has_crop = ctx.active_roi is not None
-                    # A frame's own freehand region is where it meters, the same as in its render.
-                    roi, buffer = resolve_analysis_region(transformed.shape, ctx.active_roi, analysis_buffer, params.process.analysis_rect)
+                    # A frame's own freehand region or meter rect is where it meters, the same as in its render.
+                    meter = None
+                    if not has_crop and not geometry.crop_from_auto and params.process.analysis_rect is None:
+                        meter = params.process.meter_rect
+                        if params.process.meter_key != meter_detection_key(geometry, raw.shape):
+                            meter = await asyncio.to_thread(resolve_meter_rect, raw, geometry, APP_CONFIG.preview_render_size)
+                    roi, buffer = resolve_analysis_region(
+                        transformed.shape, ctx.active_roi, analysis_buffer, params.process.analysis_rect, meter
+                    )
 
                     # Each frame's own unmix, as its render applies it.
                     unmix = effective_crosstalk_matrix(params.process, process_mode)

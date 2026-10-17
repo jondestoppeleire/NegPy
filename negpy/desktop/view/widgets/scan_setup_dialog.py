@@ -22,21 +22,16 @@ _CAPTURE = (
     ("scanner", "Film scanner", "A dedicated film scanner"),
 )
 
-_LIGHT = {
-    "camera": (
-        ("white", "White light", "A lightbox or high-CRI LED panel — one broadband exposure"),
-        ("narrowband", "Narrowband RGB", "A Scanlight or RGB-LED source — pure red, green and blue bands"),
-    ),
-    "scanner": (
-        ("white", "White light", "A cold-cathode or white-LED lamp — Plustek, Epson, most flatbeds"),
-        ("narrowband", "Narrowband RGB", "RGB-LED illumination — Nikon Coolscan, Kodak Pakon"),
-    ),
-}
+# Only a camera is asked: a scanner decodes Linear RAW under any light.
+_LIGHT = (
+    ("white", "White light", "A lightbox or high-CRI LED panel — one broadband exposure"),
+    ("narrowband", "Narrowband RGB", "A Scanlight or RGB-LED source — pure red, green and blue bands"),
+)
 
 
 class ScanSetupDialog(QDialog):
-    """Two-page wizard asking what rig the negatives were scanned on, so Linear RAW and
-    Narrowband can be set from the answer instead of by trial and error."""
+    """Wizard asking what rig the negatives were scanned on, so Camera WB or Linear RAW can be
+    set from the answer instead of by trial and error."""
 
     def __init__(self, parent, saved: Optional[dict] = None, *, repo=None):
         super().__init__(parent)
@@ -95,16 +90,14 @@ class ScanSetupDialog(QDialog):
         layout.addWidget(title)
 
         self.light_buttons: list[QRadioButton] = []
-        self.light_hints: list[QLabel] = []
-        for i in range(2):
-            btn = QRadioButton()
+        for i, (key, label, blurb) in enumerate(_LIGHT):
+            btn = QRadioButton(label)
+            btn.setChecked(key == self._light)
             self.light_group.addButton(btn, i)
-            hint = hint_label()
             self.light_buttons.append(btn)
-            self.light_hints.append(hint)
             layout.addWidget(btn)
-            layout.addWidget(hint)
-        self.light_group.idToggled.connect(lambda i, on: self._set_light(_LIGHT[self._capture][i][0]) if on else None)
+            layout.addWidget(hint_label(blurb))
+        self.light_group.idToggled.connect(lambda i, on: self._set_light(_LIGHT[i][0]) if on else None)
         layout.addStretch()
         return page
 
@@ -132,7 +125,7 @@ class ScanSetupDialog(QDialog):
         self._sync()
 
     def _advance(self) -> None:
-        if self.pages.currentIndex() == 0:
+        if self.pages.currentIndex() == 0 and self._capture == "camera":
             self.pages.setCurrentIndex(1)
             self._sync()
         else:
@@ -143,23 +136,14 @@ class ScanSetupDialog(QDialog):
         self._sync()
 
     def _sync(self) -> None:
-        """Re-label the light page for the chosen capture and refresh the footer/summary."""
-        options = _LIGHT[self._capture]
-        for i, (key, label, blurb) in enumerate(options):
-            self.light_buttons[i].setText(label)
-            self.light_hints[i].setText(blurb)
-            self.light_buttons[i].blockSignals(True)
-            self.light_buttons[i].setChecked(key == self._light)
-            self.light_buttons[i].blockSignals(False)
-
+        """Refresh the footer and the summary for the current page and answers."""
         on_light_page = self.pages.currentIndex() == 1
+        last_page = on_light_page or self._capture != "camera"
         self.back_btn.setVisible(on_light_page)
-        self.next_btn.setText("Apply" if on_light_page else "Next →")
-        linear_raw, narrowband = scan_setup_values(self._capture, self._light)
+        self.next_btn.setText("Apply" if last_page else "Next →")
+        linear_raw = scan_setup_values(self._capture, self._light)
         self.summary.setText(
-            f"Sets Linear RAW {'on' if linear_raw else 'off'} · Narrowband {'on' if narrowband else 'off'}"
-            if on_light_page
-            else "Two questions — they set Linear RAW and Narrowband for your rig."
+            f"Sets {'Linear RAW' if linear_raw else 'Camera WB'}" if last_page else "The light source decides Camera WB or Linear RAW."
         )
 
     def choice(self) -> dict:

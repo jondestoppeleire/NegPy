@@ -36,18 +36,26 @@ _IDENTITY_DYE: DyeMatrix = ((1.0, 0.0, 0.0), (0.0, 1.0, 0.0), (0.0, 0.0, 1.0))
 # signature of a lith print on warmtone paper.
 LithPath = Tuple[Tuple[float, float], Tuple[float, float], Tuple[float, float], Tuple[float, float]]
 
-# The default belongs to the *Neutral* profile, so it stays restrained: a hint of warmth,
+# The default belongs to the *Digital* profile, so it stays restrained: a hint of warmth,
 # not a look. Pick a warmtone paper to get the color.
 _DEFAULT_LITH_PATH: LithPath = ((4.0, 8.0), (2.0, 8.0), (-1.0, 4.0), (0.0, 0.0))
 
-# Kodak Endura dye coupling, estimated, not measured: cyan absorbs some green, magenta some blue.
-# Shared by every Kodak RA4 paper. A matrix integrated from a datasheet's dye-density curves
-# holds the unwanted absorptions but not the interimage effects that offset them, so it renders
-# duller than the print.
+# Dye couplings are fitted by scripts/fit_print_dyes.py to a datasheet's spectral dye density
+# curves, so the print read as Adobe RGB takes that medium's colors. Ultra Endura borrows E-4070
+# Endura Premier's: its E-4020 sheet draws each dye over a density floor in every band, which
+# fitted as-is desaturates past any RA4 print, and spektrafilm's Ultra Endura is the later High
+# Definition paper (E-4044).
 _ENDURA_DYE: DyeMatrix = (
-    (0.95, 0.04, 0.01),
-    (0.08, 0.88, 0.04),
-    (0.04, 0.14, 0.82),
+    (0.8363, 0.1960, -0.0322),
+    (0.1469, 0.7744, 0.0787),
+    (0.0272, 0.1056, 0.8671),
+)
+
+# E-4021 Portra and Supra Endura: spektrafilm's trace of the 2009 sheet (CC BY-SA 4.0, NOTICE.md).
+_E4021_DYE: DyeMatrix = (
+    (0.8545, 0.1800, -0.0345),
+    (0.1649, 0.7673, 0.0678),
+    (0.0454, 0.0981, 0.8565),
 )
 
 # Paper-character keys a profile overrides in the effective constants dict.
@@ -72,7 +80,7 @@ class PaperProfile:
     channel_gamma — per-channel (R, G, B) slope multipliers (dye-layer contrast
     crossover). base_tint_cmy — per-channel (C, M, Y) additions to the minimum
     density floor (base tint, shows in highlights). dye_matrix — dye coupling
-    D_rgb = M · D_dye above base (unwanted absorptions), row-normalized at use.
+    D_rgb = M · D_dye above base, row-normalized at use.
     lith_path — the paper's lith color path, read by the Lith stage.
     kind drives dropdown grouping.
     """
@@ -94,7 +102,7 @@ class PaperProfile:
 
 
 PAPER_PROFILES: Dict[str, PaperProfile] = {
-    DEFAULT_PROFILE_KEY: PaperProfile(label="Neutral (default)", kind="default"),
+    DEFAULT_PROFILE_KEY: PaperProfile(label="Digital (Adobe RGB)", kind="default"),
     # ── B&W (tonal only) ──────────────────────────────────────────────────────
     "ilford_mg_rc": PaperProfile(
         label="Ilford Multigrade RC",
@@ -176,23 +184,23 @@ PAPER_PROFILES: Dict[str, PaperProfile] = {
         channel_gamma=(1.04, 1.0, 0.98),
         dye_matrix=_ENDURA_DYE,
     ),
+    # Fuji publishes no characteristic curve. Fitted to the grey wedge koraks.nl measured on ADOX
+    # Color Mission, a Crystal Archive paper, with Dmax pinned to Fuji's AF3-198E calibration
+    # target. One neutral curve, so no layer crossover or tint.
     "fuji_crystal": PaperProfile(
         label="Fujicolor Crystal Archive",
-        toe_sharpness_base=4.0,
         kind="ra4",
-        # No published curve, so this is a rough estimate: brilliant whites, vivid blue and
-        # green, a slightly cool base. The tint is a per-channel density offset, where positive
-        # darkens that channel, so a negative M/Y lifts green and blue for the vivid look.
-        d_max=2.35,
-        d_min=0.03,
-        paper_midtone_gamma=0.15,
-        channel_gamma=(1.0, 1.03, 1.05),
-        base_tint_cmy=(0.0, -0.01, -0.015),
-        # Estimated, not measured: slightly cleaner dyes than Endura.
+        d_max=2.00,
+        d_min=0.120,
+        toe_sharpness_base=5.96,
+        shoulder_sharpness_base=2.89,
+        paper_midtone_gamma=-0.203,
+        paper_gamma_width=0.62,
+        # Dyes from AF3-198E's spectral dye density curves.
         dye_matrix=(
-            (0.96, 0.03, 0.01),
-            (0.06, 0.91, 0.03),
-            (0.03, 0.11, 0.86),
+            (0.8280, 0.1932, -0.0212),
+            (0.1244, 0.8230, 0.0526),
+            (0.0349, 0.1113, 0.8539),
         ),
     ),
     # Fitted to Kodak E-4021 (Status A R/G/B, shared with Supra Endura).
@@ -207,7 +215,7 @@ PAPER_PROFILES: Dict[str, PaperProfile] = {
         paper_gamma_width=0.89,
         channel_gamma=(0.968, 1.0, 1.013),
         base_tint_cmy=(-0.002, 0.012, -0.009),
-        dye_matrix=_ENDURA_DYE,
+        dye_matrix=_E4021_DYE,
     ),
     "kodak_supra_endura": PaperProfile(
         label="Kodak Supra Endura",
@@ -220,7 +228,7 @@ PAPER_PROFILES: Dict[str, PaperProfile] = {
         paper_gamma_width=0.62,
         channel_gamma=(1.008, 1.0, 1.0),
         base_tint_cmy=(0.011, -0.009, -0.003),
-        dye_matrix=_ENDURA_DYE,
+        dye_matrix=_E4021_DYE,
     ),
     # Fitted to Kodak E-4020 (Status A R/G/B).
     "kodak_ultra_endura": PaperProfile(
@@ -239,9 +247,9 @@ PAPER_PROFILES: Dict[str, PaperProfile] = {
     # ── Color print film (kind "ra4": the kind gates the C-41 mode) ─────────
     # Fitted to Kodak H-1-2383 (Status A R/G/B) with the `print` fit, which scales the
     # projection Dmax (near 4) into the paper range. The datasheet draws one shared base, so
-    # no tint. No 2383 dye coupling is published as a matrix, so it borrows Endura's estimate.
+    # no tint. Dyes from its spectral dye density curves, viewed under a xenon projector.
     "kodak_2383": PaperProfile(
-        label="Kodak Vision Color Print 2383",
+        label="Kodak Vision 2383",
         kind="ra4",
         d_max=2.29,
         d_min=0.065,
@@ -250,13 +258,35 @@ PAPER_PROFILES: Dict[str, PaperProfile] = {
         paper_midtone_gamma=-0.019,
         paper_gamma_width=0.31,
         channel_gamma=(1.034, 1.0, 0.989),
-        dye_matrix=_ENDURA_DYE,
+        dye_matrix=(
+            (0.7810, 0.2337, -0.0147),
+            (0.1421, 0.7897, 0.0682),
+            (0.0685, 0.1249, 0.8066),
+        ),
+    ),
+    # Fitted like 2383 to Kodak H-1-2393t (1998); its curves and dyes are spektrafilm's trace of
+    # that sheet (CC BY-SA 4.0, NOTICE.md). The base tint is within the trace's noise.
+    "kodak_2393": PaperProfile(
+        label="Kodak Vision Premier 2393",
+        kind="ra4",
+        d_max=2.25,
+        d_min=0.025,
+        toe_sharpness_base=3.22,
+        shoulder_sharpness_base=2.28,
+        paper_midtone_gamma=0.074,
+        paper_gamma_width=0.58,
+        channel_gamma=(1.075, 1.0, 1.049),
+        dye_matrix=(
+            (0.7676, 0.2591, -0.0267),
+            (0.1406, 0.7832, 0.0762),
+            (0.0733, 0.1207, 0.8060),
+        ),
     ),
 }
 
 
 def resolve_paper(key: str) -> PaperProfile:
-    """Profile for `key`, falling back to the neutral default on unknown keys."""
+    """Profile for `key`, falling back to the Digital default on unknown keys."""
     return PAPER_PROFILES.get(key, PAPER_PROFILES[DEFAULT_PROFILE_KEY])
 
 
@@ -314,13 +344,13 @@ def compose_density_matrices(dye: Optional[np.ndarray], sat: Optional[np.ndarray
 
 
 # Which paper kind each process mode exposes. E-6 (slide) has no entry and gets only the
-# neutral default. Keyed by ProcessMode, a StrEnum, so plain-string process_mode values
+# Digital default. Keyed by ProcessMode, a StrEnum, so plain-string process_mode values
 # look up fine.
 _MODE_KIND: Dict[str, str] = {ProcessMode.C41: "ra4", ProcessMode.BW: "bw"}
 
 
 def profiles_for_mode(process_mode: str) -> List[Tuple[str, PaperProfile]]:
-    """Selectable (key, profile) pairs for `process_mode`: neutral default first,
+    """Selectable (key, profile) pairs for `process_mode`: the Digital default first,
     then the papers whose kind matches the mode (default only for E-6)."""
     allowed = _MODE_KIND.get(process_mode)
     out = [(DEFAULT_PROFILE_KEY, PAPER_PROFILES[DEFAULT_PROFILE_KEY])]
@@ -331,7 +361,7 @@ def profiles_for_mode(process_mode: str) -> List[Tuple[str, PaperProfile]]:
 
 def effective_paper_profile(key: str, process_mode: str | None) -> PaperProfile:
     """Mode-aware resolve: the stored profile only when its kind matches the mode,
-    otherwise the neutral default. E-6 and any cross-mode/stale value collapse to
+    otherwise the Digital default. E-6 and any cross-mode/stale value collapse to
     default, so an incompatible `paper_profile` can never leak into a render."""
     paper = resolve_paper(key)
     if paper.kind == "default":
@@ -344,7 +374,7 @@ def effective_paper_profile(key: str, process_mode: str | None) -> PaperProfile:
 def effective_constants(paper: PaperProfile | None) -> Dict[str, Any]:
     """
     EXPOSURE_CONSTANTS with the profile's tonal overrides applied. Returns the
-    shared dict unchanged when paper is None or the neutral default, so the
+    shared dict unchanged when paper is None or the Digital default, so the
     common path stays allocation-free and byte-for-byte identical.
     """
     if paper is None or paper.kind == "default":

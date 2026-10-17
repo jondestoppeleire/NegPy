@@ -58,14 +58,16 @@ class PaperSidebar(BaseSidebar):
 
         self.paper_combo = QComboBox()
         self.paper_combo.setToolTip(
-            "Darkroom paper profile — re-shapes the H&D curve (and color, on RA4) to a classic "
-            "stock as a baseline; Grade / Density / toe / shoulder still trim on top."
+            "Print stock: the paper or print film the negative is printed on. It sets the H&D curve and, "
+            "on color stock, the colors its dyes make, from the datasheet; Grade, Density, Toe and "
+            "Shoulder still trim on top. Digital (Adobe RGB) is an idealized print: NegPy's own curve "
+            "and perfect dyes."
         )
         self._populate_paper_combo(self.state.config.process.process_mode)
         idx = self.paper_combo.findData(conf.paper_profile)
         if idx >= 0:
             self.paper_combo.setCurrentIndex(idx)
-        paper_row = field_row("Paper", self.paper_combo)
+        paper_row = field_row("Print stock", self.paper_combo)
         self.paper_label = paper_row.itemAt(0).widget()
         self.layout.addLayout(paper_row)
 
@@ -124,7 +126,7 @@ class PaperSidebar(BaseSidebar):
 
     def _populate_paper_combo(self, process_mode: str) -> None:
         """Fill the paper dropdown with the papers valid for the current process
-        mode (neutral default + the mode's kind)."""
+        mode (the Digital default + the mode's kind)."""
         from negpy.features.exposure.papers import profiles_for_mode
 
         entries = [(prof.label, key) for key, prof in profiles_for_mode(process_mode)]

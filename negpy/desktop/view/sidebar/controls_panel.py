@@ -76,7 +76,7 @@ _SENSOR_FIELDS = (
 )
 # ProcessConfig is split across five cards. Each tuple is both the card's reset scope and
 # its modified count, so a field is resettable from the one card that counts it.
-# Linear RAW, Narrowband and the two demosaic choices are in none: they come from the scanning
+# Linear RAW and the two demosaic choices are in none: they come from the scanning
 # setup, which no card or frame reset changes (_with_scan_setup).
 # locked_floors/locked_ceils/locked_neutral_axis are in none: they are Roll Analysis's measured result.
 _FILM_FIELDS = (
@@ -569,6 +569,7 @@ class ControlsPanel(QWidget):
             (self.tone_sidebar.auto_density_action, "toggle_auto_density"),
             (self.tone_sidebar.auto_grade_action, "toggle_auto_grade"),
             (self.tone_sidebar.auto_both_action, "toggle_auto_both"),
+            (self.tone_sidebar.hold_black_action, "toggle_hold_black"),
             (self.presets_sidebar.apply_btn, "preset_apply"),
             (self.presets_sidebar.save_btn, "preset_save"),
         ):
@@ -807,7 +808,7 @@ class ControlsPanel(QWidget):
         )
         lab.chroma_denoise_slider.setToolTip(
             tooltip_with_shortcut(
-                "Chroma denoise in Lab space — smooths color noise while preserving luminance grain",
+                "Removes color speckle finer than this radius and keeps color edges; luminance grain stays",
                 ["chroma_denoise_inc", "chroma_denoise_dec"],
             )
         )
@@ -828,7 +829,7 @@ class ControlsPanel(QWidget):
         paper.dye_separation_slider.setToolTip(
             tooltip_with_shortcut(
                 "Pushes density apart before decode. On a print, in the same matrix slot as the "
-                "paper's own dye crosstalk — so it responds to the paper profile and eases off where the "
+                "paper's own dye crosstalk — so it responds to the print stock and eases off where the "
                 "curve is already compressed at toe and shoulder, and takes per-layer R/G/B trims. On a "
                 "slide, applied directly with no paper matrix or trims. Chroma in "
                 "Color is the flat version: an even a*/b* scale after decode. 1.0 = off/identity",
