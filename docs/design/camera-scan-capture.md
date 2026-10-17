@@ -4,7 +4,7 @@ Status: draft, written 2026-10-16 against commit `9672ab72`. The decision goes i
 
 ## 1. Context and scope
 
-The Scan tab's Camera side captures film with a tethered camera and, when one is connected, a [Scanlight](https://github.com/jackw01/scanlight). One dropdown, **Preset**, carries three decisions: what the film is, which exposures one Scan shoots, and how each exposure is set. Its entries are five built-in white-light film types, the user's calibrated per-stock recipes, and an action, "Create a manual preset…". The capture pattern, Triplet or Single Capture, is a read-only field of a recipe.
+The Scan tab's Camera side captures film with a tethered camera and, when one is connected, a [Scanlight](https://github.com/jackw01/scanlight). One dropdown, **Preset**, carries three decisions: what the film is, which exposures one Scan shoots, and how each exposure is set. Its entries are five built-in white-light film types, the user's calibrated per-stock recipes, and an action, "Create a manual preset…". The capture pattern, Trichrome or Single Exposure, is a read-only field of a recipe.
 
 Infrared does not exist on the Camera side. The Big Scanlight carries 16 infrared LEDs at 850 nm ([big.md](https://github.com/jackw01/scanlight/blob/main/big.md)) and its firmware drives them from byte 4 of `SET_COLOR` ([control interface](https://github.com/jackw01/scanlight/blob/main/automation/bsl_control_interface.md)). NegPy's encoder sends that byte as 0. The consumer side exists: Retouch's **IR Removal** runs on any `metadata["ir"]` plane and is gated by `state.has_ir`.
 
@@ -35,14 +35,14 @@ Non-goals:
 | What the user sees | What it is | Where |
 |---|---|---|
 | Presets that are only B&W, Slide, or both | Five built-in white-light modes. They set the W LED and the process on import. No calibration. | `_BUILTIN_WHITE_PRESETS` in `sidebar/scanlight.py` |
-| "Create a manual preset…" | A dropdown entry that unlocks the R/G/B sliders and the ISO, shutter and aperture steppers. Its **Capture mode** offers Triplet or Single Capture, one exposure with all three LEDs lit. | `_MANUAL_PRESET`, `_set_manual_mode` |
+| "Create a manual preset…" | A dropdown entry that unlocks the R/G/B sliders and the ISO, shutter and aperture steppers. Its **Capture mode** offers Trichrome or Single Exposure, one exposure with all three LEDs lit. | `_MANUAL_PRESET`, `_set_manual_mode` |
 | "+" opens a window with a sample light | The calibration window. It lights a fixed reference mix, the user clicks the clear base, and it solves LED levels plus one shutter for the stock. | `calibration_window.py`, `_on_preset_new` |
-| Triplet in that window, then save | The window's own Triplet / Single Capture dropdown. **Calibrate & Save** stores a preset with the solved levels. Infrared is never shot. | `CAPTURE_MODES`, `_on_calibration_finished` |
+| Triplet in that window, then save | The window's own Trichrome / Single Exposure dropdown. **Calibrate & Save** stores a preset with the solved levels. Infrared is never shot. | `CAPTURE_MODES`, `_on_calibration_finished` |
 
 Findings, each with its consequence:
 
 1. **Three kinds of entry in one list.** Film type, exposure recipe and an edit action share the Preset dropdown. A new user cannot tell which entries scan and which configure.
-2. **The capture pattern is a property of a recipe, not a choice.** Triplet or Single Capture is set in two places, the sidebar's disabled Capture mode and the calibration window's dropdown, and is visible in neither until a calibration runs.
+2. **The capture pattern is a property of a recipe, not a choice.** Trichrome or Single Exposure is set in two places, the sidebar's disabled Capture mode and the calibration window's dropdown, and is visible in neither until a calibration runs.
 3. **Film type is asked differently per scanner.** The Film Scanner card has **Film** and an **IR** toggle from one vocabulary, `FILM_TYPES` in `infrastructure/scanners/params.py`. The Camera card folds film type into preset names, and any RGB preset implies color negative, so a B&W roll under RGB light imports as C-41.
 4. **Exposure lives in three places.** Live View toolbar steppers for white and camera-only scans, sidebar steppers for a manual preset, calibration-window steppers for ISO and aperture before a run.
 5. **Three save paths.** "+" calibrates and saves, the floppy saves a manual preset through a name prompt, the built-ins cannot be saved.
@@ -64,10 +64,10 @@ Three decisions, each one control:
 | Decision | Control | Owns |
 |---|---|---|
 | What the film is | **Film** | the process mode on import, and whether infrared can see dust through it |
-| Which exposures one Scan shoots | **Light** | White: one frame under the W LED. Trichrome: R, G, B. Single RGB: one frame with the three LEDs lit. |
+| Which exposures one Scan shoots | **Light** | White: one frame under the W LED. Trichrome: R, G, B. Single Exposure: one frame with the three LEDs lit. |
 | Whether to add an infrared frame | **Infrared** | one more exposure under the IR LEDs, stored beside the frame, and IR Removal on for the frames it captures |
 
-A **recipe** is the exposure solved for one film stock under one Light and Infrared state: LED levels, a shutter per channel, ISO and aperture, and for Single RGB an optional sensor profile. White has no recipe: its exposure stays the Live View steppers and Meter.
+A **recipe** is the exposure solved for one film stock under one Light and Infrared state: LED levels, a shutter per channel, ISO and aperture, and for Single Exposure an optional sensor profile. White has no recipe: its exposure stays the Live View steppers and Meter.
 
 ### 3.3 Cards
 
@@ -80,7 +80,7 @@ A **recipe** is the exposure solved for one film stock under one Light and Infra
 └──────────────────────────────────────────────┘
 ┌ Film & Light ─────────────────────────── ⓘ ─┐
 │ Film      [ Color | B&W | Slide ]            │
-│ Light     [ White | Trichrome | Single RGB ] │
+│ Light     [ White | Trichrome | Single Exposure ] │
 │ [ ✓ Infrared ]  a separate IR plane; turns   │
 │                 on IR Removal for the frames │
 └──────────────────────────────────────────────┘
@@ -108,12 +108,12 @@ Factories: `SegmentedChoice` for Film and Light, `labeled_toggle` for Infrared, 
 | Control | Choices | Effect |
 |---|---|---|
 | Film | the Roll tab's Film Mode choices, Color, B&W and Slide, with the same icons | Process on import, and the captured roll's Film Mode card shows the same value. Grays Infrared for B&W with the Film Scanner card's "blocks infrared" hint. |
-| Light | White, Trichrome, Single RGB | The exposures one Scan shoots. Only White without a Scanlight, with today's "connect the Scanlight to scan in RGB" hint. Trichrome Mode on the roll follows it. |
+| Light | White, Trichrome, Single Exposure | The exposures one Scan shoots. Only White without a Scanlight, with today's "connect the Scanlight to scan in RGB" hint. Trichrome Mode on the roll follows it. |
 | Infrared | toggle; needs a Scanlight with IR LEDs | A fourth exposure under the IR LEDs, saved as `<frame>_IR`, and `ir_dust_remove` on for those frames. One toggle: the only reason to shoot infrared is removal, and Retouch turns it off per frame. |
 | Film stock | recipes solved for the current Light and Infrared state | Recall of levels, shutters, ISO and aperture, read-only. With no recipe the card is grayed under one hint, "Calibrate on the film base, or edit by hand". Under White the card holds one hint instead: "Exposure is set in Live View; Meter sets the shutter from the film base." |
-| Calibrate… | primary action | The existing window without its Triplet / Single dropdown. It probes the channels Light and Infrared imply and saves under the typed name. **Create Sensor Profile** stays, for Single RGB. |
+| Calibrate… | primary action | The existing window without its Trichrome / Single Exposure dropdown. It probes the channels Light and Infrared imply and saves under the typed name. **Create Sensor Crosstalk Profile** stays, for Single Exposure. |
 | ✎ on the Exposure header | edit toggle | Replaces "Create a manual preset…": unlocks the sliders and steppers; 💾 saves as a named stock; 🗑 deletes the selected stock. |
-| Channel Delay | slider | Unchanged. Hidden under White and Single RGB. |
+| Channel Delay | slider | Unchanged. Hidden under White and Single Exposure. |
 
 Removed: the five built-in white presets, the `_MANUAL_PRESET` sentinel, the sidebar's disabled Capture mode, the calibration window's capture dropdown. The status line's light echo names its subject, "Framing light" or "Scan light". The gate hint's missing item, such as the output folder, scrolls its card into view on click. The Scanning Setup wizard stays for files scanned elsewhere.
 
@@ -125,7 +125,7 @@ Removed: the five built-in white presets, the `_MANUAL_PRESET` sentinel, the sid
 | B&W negative | White | B&W | off | off | none | never |
 | Slide | White | E-6 | off | off | none | with Infrared |
 | any | Trichrome | by Film | on | on | none | with Infrared |
-| any | Single RGB | by Film | off | on | the recipe's | with Infrared |
+| any | Single Exposure | by Film | off | on | the recipe's | with Infrared |
 
 Today every RGB capture imports as C-41 and a white capture may autodetect. Film replaces both rules.
 
@@ -154,8 +154,8 @@ Title "Calibrate Exposure". The name field, the ROI image, the ISO and aperture 
 | White | on | 2 | W, IR | `<frame>.<raw>`, `<frame>_IR.<raw>` |
 | Trichrome | off | 3 | R, G, B | `<frame>_R`, `_G`, `_B` |
 | Trichrome | on | 4 | R, G, B, IR | `_R`, `_G`, `_B`, `_IR` |
-| Single RGB | off | 1 | R+G+B | `<frame>.<raw>` |
-| Single RGB | on | 2 | R+G+B, IR | `<frame>.<raw>`, `<frame>_IR.<raw>` |
+| Single Exposure | off | 1 | R+G+B | `<frame>.<raw>` |
+| Single Exposure | on | 2 | R+G+B, IR | `<frame>.<raw>`, `<frame>_IR.<raw>` |
 
 The IR RAW decodes to one gray plane, aligns to the primary with `estimate_shift`, and lands in `metadata["ir"]`. From there `has_ir`, IR Removal, the IR overlay and the `_ir.tiff` linear export work unchanged.
 
@@ -193,7 +193,7 @@ Order: the rig check, then Piece A, then Piece B.
 
 | Alternative | Cost | Why it lost |
 |---|---|---|
-| "RGB + IR" as a fourth Light choice | Trichrome and Single RGB each need an IR twin: five entries | a toggle composes with every light |
+| "RGB + IR" as a fourth Light choice | Trichrome and Single Exposure each need an IR twin: five entries | a toggle composes with every light |
 | Two toggles, Infrared and IR Removal | a second decision nobody makes differently at scan time | Retouch already turns removal off per frame |
 | Keep the one Preset list and add IR entries | the three kinds stay mixed and the list grows | finding 1 stays |
 | Film only as a roll property on the Roll tab | the scan cannot pick the process at import; today's white presets do | loses function |

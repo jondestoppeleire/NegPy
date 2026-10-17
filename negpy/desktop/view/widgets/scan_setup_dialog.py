@@ -25,7 +25,7 @@ _CAPTURE = (
 # Only a camera is asked: a scanner decodes Linear RAW under any light.
 _LIGHT = (
     ("white", "White light", "A lightbox or high-CRI LED panel — one broadband exposure"),
-    ("narrowband", "Narrowband RGB", "A Scanlight or RGB-LED source — pure red, green and blue bands"),
+    ("narrowband", "Narrowband light", "A Scanlight or a light with one red, one green and one blue LED band"),
 )
 
 

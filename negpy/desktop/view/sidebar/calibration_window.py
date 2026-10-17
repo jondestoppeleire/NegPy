@@ -78,7 +78,7 @@ class CalibrationWindow(QDialog):
         self._running = False
         self.capture_btn = ChoiceButton(CAPTURE_MODES, CAPTURE_MODE_TOOLTIP)
         name_row.addWidget(self.capture_btn)
-        self._sensor_profile_wanted = True  # the operator's pick, kept while Triplet shows the toggle off
+        self._sensor_profile_wanted = True  # the operator's pick, kept while Trichrome shows the toggle off
         self.sensor_profile_btn = labeled_toggle("fa5s.vials", " Create Sensor Crosstalk Profile", True, SENSOR_PROFILE_TOOLTIP)
         _reserve_checked_width(self.sensor_profile_btn)
         self.sensor_profile_btn.clicked.connect(self._on_sensor_profile_clicked)
@@ -145,7 +145,7 @@ class CalibrationWindow(QDialog):
         self.sensor_profile_btn.setToolTip(SENSOR_PROFILE_TOOLTIP if single else _SENSOR_PROFILE_OFF_TOOLTIP)
 
     def wants_sensor_profile(self) -> bool:
-        """Whether a finished run saves a sensor profile with the preset."""
+        """Whether a finished run saves a sensor crosstalk profile with the preset."""
         return self.capture_btn.currentIndex() == 1 and self._sensor_profile_wanted
 
     def set_inputs_locked(self, locked: bool) -> None:

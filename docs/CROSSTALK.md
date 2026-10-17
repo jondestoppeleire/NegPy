@@ -207,7 +207,7 @@ chroma difference, with lightness left out because the print curve sets it. Gree
 amber within 5, red beyond. Moving a dot clears them.
 
 A matrix measured on one stock under one light describes that pair only. The sensor unmix runs
-before Crosstalk, so the fit measures only what the frame's sensor profile leaves; measure again
+before Crosstalk, so the fit measures only what the frame's sensor crosstalk profile leaves; measure again
 if you change that profile.
 
 ## Contributing a matrix

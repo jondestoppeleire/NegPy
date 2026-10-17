@@ -69,7 +69,7 @@ class TrichromeSidebar(BaseSidebar):
                 parts = [os.path.basename(p) for p in (self.state.current_file_path or "", conf.green_path, conf.blue_path) if p]
                 self.hint.setText(f"Assembled from {', '.join(parts[:-1])} and {parts[-1]}.")
             else:
-                self.hint.setText("This frame is a single exposure.")
+                self.hint.setText("This frame is one exposure, not a Trichrome triplet.")
         finally:
             self.block_signals(False)
 

@@ -200,7 +200,7 @@ def build(window: "MainWindow") -> list[TutorialStep]:
             "Calibration",
             "This card corrects the capture, not the look. The <b>bulb</b> asks how you scan, then sets "
             "<b>Camera WB</b> or <b>Linear RAW</b>. A <b>Sensor Crosstalk Profile</b> "
-            "removes sensor leak between the bands of a narrowband light on a Single Exposure. <b>Hue Trim</b> rotates hues for an unusual lamp.",
+            "removes the sensor's leak between a narrowband light's bands on a Single Exposure. <b>Hue Trim</b> rotates hues for an unusual lamp.",
             lambda w: cp(w).sensor_section,
             focus=lambda w: cp(w).sensor_sidebar.scan_setup_btn,
             guide=("sensor", "Calibration"),

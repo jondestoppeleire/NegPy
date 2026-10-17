@@ -731,7 +731,7 @@ What the wizard sets:
 | Capture | Light source | Decode |
 | --- | --- | --- |
 | Digital camera | White light (lightbox, CRI LED panel) | Camera WB |
-| Digital camera | Narrowband RGB (Scanlight, RGB LED) | Linear RAW |
+| Digital camera | Narrowband light (Scanlight, one red, one green and one blue LED band) | Linear RAW |
 | Film scanner | any | Linear RAW |
 
 Applying it sets the defaults for new files and rewrites every edited frame in the session (Ctrl+Z per frame).
@@ -740,7 +740,7 @@ Applying it sets the defaults for new files and rewrites every edited frame in t
 
 *   **Profile**: the sensor matrix. Custom `.toml` matrices go in `<Documents>/NegPy/sensor/`.
 *   **Method**: *Two-Scale* (default) subtracts the leak like *Linear* where the calibration can be trusted, and stops the speckle where a color is mostly leak (neon, deep blue). *Linear* subtracts the leak exactly and prints those colors speckled and fully saturated. *Density* has no speckle, but strong colors are slightly less vivid. A scan with a clipped film base uses Linear.
-*   **Calibrate**: builds a profile from three bare-light R/G/B exposures. Pick them as files, or press **Capture from Camera…** to shoot them with a tethered camera and a Scanlight, no film in the holder. A Single Capture Scanlight preset can save a profile during its own calibration.
+*   **Calibrate**: builds a profile from three bare-light R/G/B exposures. Pick them as files, or press **Capture from Camera…** to shoot them with a tethered camera and a Scanlight, no film in the holder. A Single Exposure Scanlight preset can save a profile during its own calibration.
 
 CAMERA_SCANNING.md has a workflow for each way to build and assign a profile.
 
@@ -1104,11 +1104,11 @@ Copy-stand capture with a camera in **PC Remote** mode over USB (macOS/Linux): w
 *   **Camera** / **Light**: connection status, found automatically; the light turns amber once it runs warm. On Linux, the Scanlight's serial port needs your user in the `dialout` group (`sudo usermod -aG dialout $USER`, then log out and back in).
 *   **Live View**: click the image to aim the focus magnifier. Turn the focus ring past best focus, then back until the **Focus meter** reads **at peak**. ISO, shutter and aperture are set from its toolbar or from the card; both follow the camera. With a Scanlight, **R**, **G**, **B** and, on a light with infrared LEDs, **IR** select which exposures Scan and Retake shoot, and the framing light shows the selection. Scan shoots them into the next frame and never touches an existing file; Retake re-shoots them on the current frame and first keeps the file it replaces as a hidden `.previous-` copy beside it, one copy per file that a later Retake replaces in turn, which a rename brings back. A frame whose three visible exposures exist stays one triplet. An `_IR` file stays its own frame in the Film Strip.
 *   **Histogram** and **Zebras**: the frame's RGB histogram, and hatching on pixels at the top (red) and bottom (blue) of the preview range. The preview clips before the RAW does, so a zebra is an early warning.
-*   **Meter**: one RAW probe sets the shutter so the region that must not clip (a negative's clear base, a slide's brightest highlights) lands just under clipping. The white-light preset's film type decides which. An RGB preset meters its base under the scan light, and the metered shutter replaces the preset's until you pick the preset again. A negative with no clear base in frame, or a base the probe cannot read unclipped, meters its thinnest picture instead and says so. A white-light frame imports with the camera's white balance, so its target allows for that gain. A clipped picture steps down two stops; meter again.
+*   **Meter**: one RAW probe sets the shutter so the region that must not clip (a negative's clear base, a slide's brightest highlights) lands just under clipping. The white-light preset's film type decides which. A narrowband preset meters its base under the scan light, and the metered shutter replaces the preset's until you pick the preset again. A negative with no clear base in frame, or a base the probe cannot read unclipped, meters its thinnest picture instead and says so. A white-light frame imports with the camera's white balance, so its target allows for that gain. A clipped picture steps down two stops; meter again.
 *   **Scan** and **Retake**: **Scan** shoots the next frame, auto-numbered, and imports it; **Retake** (the redo arrow beside **Live View**) shoots the last frame again. In the Live View window, `Space` or `S` scans and `R` retakes.
 *   **Capture Delay** (off, or 0.1 to 10 s on a log scale, default off): **Scan** and **Retake** wait this long before the first exposure, so a table that shakes when you let go can settle. The box takes two decimals. The panel counts down; **Stop** ends the wait. The same delay is a stepper beside **Scan** in the Live View window, in rungs of 0.1, 0.25, 0.5, 1, 2.5, 5 and 10 s.
 *   **Keep Light On** (the bulb beside **Retake**, off by default): the Scanlight goes dark after each scan; this lights it again with the framing light, so you can frame the next shot on the camera's screen. Live View lights it again without this toggle.
-*   **Narrowband**: RGB-lit scans render more saturated than white light; a **Print stock** other than *Digital* prints them through real dyes.
+*   **Narrowband**: scans under narrowband light render more saturated than under white light; a **Print stock** other than *Digital* prints them through real dyes.
 
 <!-- panel:scan_light -->
 ### Preset
