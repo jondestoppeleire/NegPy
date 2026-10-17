@@ -549,6 +549,11 @@ class CaptureWorker(QObject):
                 # claim, is not usable. Surface that instead of a healthy "connected" dot.
                 status["usb_ok"], status["usb_model"] = True, self._model or found[0]["model"]
                 status["usb_claimed_elsewhere"] = self._claimed_elsewhere
+                # Nothing republishes the body's settings while no preview streams, so the poll
+                # does: the card's exposure steppers fill before Live View ever opens.
+                publish = getattr(self._camera, "publish_settings", None) if self._holds_camera() else None
+                if publish is not None:
+                    publish()
                 if self._caps is not None:
                     status["camera_preview"], status["camera_config"] = self._caps.preview, self._caps.config
             elif self._claimed_elsewhere:

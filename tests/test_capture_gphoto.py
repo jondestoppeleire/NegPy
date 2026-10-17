@@ -855,6 +855,21 @@ def test_preview_survives_a_still_that_leaves_late_events(fake, tmp_path):
     camera.close()
 
 
+def test_an_idle_session_publishes_on_request_and_a_streaming_one_leaves_it_to_the_preview(fake, tmp_path):
+    settings = tmp_path / "lv.json"
+    camera = GphotoCamera(gp_module=fake, jpeg_path=str(tmp_path / "lv.jpg"), settings_path=str(settings))
+    camera.publish_settings()
+    assert not settings.exists()  # closed: nothing to read
+    camera.open()
+    camera.publish_settings()
+    assert set(json.loads(settings.read_text())) == {"iso", "shutter", "magnifier", "pid"}
+    settings.unlink()
+    camera.is_running = lambda: True  # the preview thread owns the publish while it streams
+    camera.publish_settings()
+    assert not settings.exists()
+    camera.close()
+
+
 def test_refusing_live_view_still_publishes_the_camera_settings(tmp_path):
     """The preview loop is what normally writes them, so a body that never streams would leave
     the scan window's ISO/shutter steppers empty and its preset exposure unresolvable."""

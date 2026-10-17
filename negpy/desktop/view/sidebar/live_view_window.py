@@ -146,6 +146,7 @@ class LiveViewWindow(QDialog):
     retakeRequested = pyqtSignal()
     meterRequested = pyqtSignal()
     channelsChanged = pyqtSignal(str)  # the letter whose toggle moved: R, G, B or IR
+    captureDelayChanged = pyqtSignal(int)  # seconds, stepped on the toolbar's delay stepper
 
     def __init__(self, parent=None, *, repo=None) -> None:
         super().__init__(parent)
@@ -161,6 +162,16 @@ class LiveViewWindow(QDialog):
         self.scan_btn.setFixedHeight(SCAN_BUTTON_HEIGHT)
         self.retake_btn = labeled_action("fa5s.redo", " Retake", "Re-capture the current frame without advancing the counter")
         bar.addWidget(self.scan_btn, 2)
+        # The card's Capture Delay, where Scan is pressed. Mirrored both ways by the panel.
+        self.delay_stepper = SettingStepper()
+        for seconds in range(9):
+            self.delay_stepper.addItem(f"{seconds} s", seconds)
+        self.delay_stepper.setToolTip(
+            "Capture Delay: wait this long after Scan or Retake before the shot, so a table that shakes when you let go can settle. "
+            "Stop ends the wait."
+        )
+        self.delay_stepper.activated.connect(self.captureDelayChanged.emit)
+        bar.addWidget(self.delay_stepper)
         bar.addWidget(self.retake_btn, 1)
         # Which exposures Scan and Retake shoot: toggles in the channel colors. The panel shows
         # R, G and B for a triplet preset and IR with infrared LEDs.
@@ -415,6 +426,9 @@ class LiveViewWindow(QDialog):
         self.progress.setVisible(False)
         self.progress.setStyleSheet("")
         self.progress.setFormat("Capturing… %p%")
+
+    def set_capture_delay(self, seconds: int) -> None:
+        self.delay_stepper.setCurrentIndex(int(seconds))
 
     def set_scanning(self, active: bool) -> None:
         """Mirror the panel's Scan/Stop toggle on the pop-up button."""

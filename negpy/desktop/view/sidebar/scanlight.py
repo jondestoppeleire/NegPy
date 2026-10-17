@@ -517,6 +517,9 @@ class ScanlightSidebar(QWidget):
         self.output.changed.connect(self._apply_gating)
         self.inter_exposure_delay_slider.valueChanged.connect(self._update_settings_from_ui)
         self.capture_delay_slider.valueChanged.connect(self._update_settings_from_ui)
+        self.capture_delay_slider.valueChanged.connect(lambda v: self.lv_window.set_capture_delay(round(v)))
+        self.lv_window.captureDelayChanged.connect(self._on_lv_capture_delay)
+        self.lv_window.set_capture_delay(round(self._settings.capture_delay_s))
 
         self.controller.capture_light_set.connect(self._on_light_set)
         self.controller.capture_progress.connect(self._on_progress)
@@ -1863,6 +1866,10 @@ class ScanlightSidebar(QWidget):
         self.status_strip.set_progress(_CAPTURE_BAR, progress)
         self.lv_window.set_progress(progress)
 
+    def _on_lv_capture_delay(self, seconds: int) -> None:
+        self.capture_delay_slider.setValue(seconds)  # emits nothing, so the settings write is explicit
+        self._update_settings_from_ui()
+
     @pyqtSlot(int)
     def _on_countdown(self, seconds: int) -> None:
         # The strip shows its bar, not messages, while a scan runs, so the countdown is a bar too.
@@ -1990,6 +1997,12 @@ class ScanlightSidebar(QWidget):
             # frame on screen looking live.
             self.lv_btn.setChecked(False)  # → _on_live_view_toggled(False) tears it down
             self._set_status("Camera disconnected")
+        if self._camera_verified and not self._lv_timer.isActive():
+            # No preview streams, so the poll's publish is the only fresh read of the body: the
+            # steppers fill from it before Live View opens, and a preset's exposure reaches the body.
+            if not was_verified:
+                self._apply_active_preset_camera_settings()
+            self._refresh_camera_settings()
         self._apply_gating()
 
     @pyqtSlot(object)

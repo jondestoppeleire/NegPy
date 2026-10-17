@@ -1009,6 +1009,11 @@ class GphotoCamera:
             handle.write(data)
         os.replace(tmp, self._jpeg_path)  # atomic: the UI only ever sees a whole frame
 
+    def publish_settings(self) -> None:
+        """Publish the body's settings while idle; the preview thread publishes while it streams."""
+        if self.is_open() and not self.is_running():
+            self._publish_settings()
+
     def _publish_settings(self) -> None:
         # The preview thread and the worker both publish. Read and write under the camera's lock,
         # so the newest read is the last written and one writer owns the temp file.

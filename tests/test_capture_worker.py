@@ -389,6 +389,33 @@ def test_poll_identifies_the_body_on_first_sight(monkeypatch):
     assert cam.open_calls == 1  # identified once, not per tick
 
 
+def test_poll_publishes_the_held_bodys_settings_while_idle(monkeypatch):
+    # Only the preview thread publishes the settings file, so a preset picked before Live View
+    # opened showed every exposure stepper empty. The poll publishes from the session it holds.
+    import negpy.desktop.workers.capture_worker as capture_worker_module
+
+    class HeldCamera:
+        model = "ILCE-7RM5"
+
+        def __init__(self) -> None:
+            self.published = 0
+
+        def is_open(self) -> bool:
+            return True
+
+        def publish_settings(self) -> None:
+            self.published += 1
+
+    worker = CaptureWorker()
+    worker._camera = HeldCamera()
+    worker._identify_attempted = True
+    monkeypatch.setattr(capture_worker_module, "list_cameras", lambda: [{"model": "USB PTP Class Camera"}])
+    monkeypatch.setattr(worker, "_ensure_light", lambda _port: (_ for _ in ()).throw(RuntimeError("no light")))
+    worker.poll_connection("")
+    worker.poll_connection("")
+    assert worker._camera.published == 2  # every idle tick, so a dial turn shows within one
+
+
 def test_poll_identify_is_one_shot_for_a_body_that_will_not_open(monkeypatch):
     # A body that fails to open for a non-claim reason must not be hammered with an open
     # attempt every 3 s tick — one try per bus appearance, then the placeholder name stands.

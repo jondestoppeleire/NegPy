@@ -1253,7 +1253,7 @@ def _edge_border_depth(box: np.ndarray, side: str, limit: int, deep_limit: int =
     margin = int(round((1.0 - _EDGE_CORE) * 0.5 * n))
     if n - 2 * margin >= 8:
         lines = lines[:, margin : n - margin]
-    if lines.shape[0] < limit + 8 or lines.shape[1] < 8:
+    if limit <= 0 or lines.shape[0] < limit + 8 or lines.shape[1] < 8:
         return 0
 
     near = _pool_border_depth(_walk_border_depth(lines, limit, _EDGE_BRIDGE, False), limit)

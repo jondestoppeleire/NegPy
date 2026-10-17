@@ -370,6 +370,40 @@ def test_popup_scan_signal_triggers_capture(tmp_path):
     assert w.controller.start_capture.called
 
 
+def test_a_preset_picked_before_live_view_fills_its_steppers_from_the_idle_poll(tmp_path, monkeypatch):
+    import negpy.desktop.view.sidebar.scanlight as sl
+
+    p = tmp_path / "settings.json"
+    monkeypatch.setattr(sl, "default_settings_path", lambda: str(p))
+    w = _sidebar()
+    w._on_poll_status(_poll(usb_ok=True, usb_model="ILCE-7RM5"))  # the body is known, nothing published yet
+    idx = w.preset_combo.findData("Trichrome, Color Negative")
+    w.preset_combo.setCurrentIndex(idx)
+    w._on_preset_selected(idx)
+    assert w.shutter_stepper.currentText() == ""  # shown as the empty placeholder
+    p.write_text(_shutter_json(cur=1))  # the worker's idle poll publishes the body's settings
+
+    w._on_poll_status(_poll(usb_ok=True, usb_model="ILCE-7RM5"))
+
+    assert w.shutter_stepper.currentText() == "1/60"
+    assert w.lv_window.shutter_stepper.currentText() == "1/60"
+
+
+def test_the_live_view_delay_stepper_and_the_card_slider_are_one_setting():
+    w = _sidebar()
+    assert w.lv_window.delay_stepper.currentText() == "0 s"
+
+    w.lv_window.delay_stepper._step(1)
+    w.lv_window.delay_stepper._step(1)
+    assert w._settings.capture_delay_s == 2.0
+    assert w.capture_delay_slider.value() == 2
+
+    w.capture_delay_slider.setValue(5)
+    w.capture_delay_slider.valueChanged.emit(5.0)  # as a drag does
+    assert w._settings.capture_delay_s == 5.0
+    assert w.lv_window.delay_stepper.currentText() == "5 s"
+
+
 def test_scan_gated_until_all_requirements(tmp_path):
     w = _sidebar()
     # Nothing ready → Scan and the pop-up Scan are disabled.
