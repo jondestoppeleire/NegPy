@@ -165,7 +165,7 @@ camera's shutter. Infrared needs a light with infrared LEDs and a camera that pa
 a full-spectrum or IR-converted body: a stock camera's IR-cut filter leaves the infrared
 frame at noise. An `_IR` file stays its own frame in the Film Strip. Each scanned frame
 takes the decode its light implies: white light keeps the camera's white balance, Trichrome
-and Single Capture decode linear with Narrowband on; a frame already edited keeps its own.
+and Single Capture decode Linear RAW; a frame already edited keeps its own.
 
 **Narrowband light.** Narrowband LEDs separate the dye layers more cleanly than white light, so
 colors render more saturated. The *Digital (Adobe RGB)* print stock prints them through ideal

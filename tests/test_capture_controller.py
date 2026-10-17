@@ -119,14 +119,14 @@ def test_explicit_bw_applies_to_import_after_hydration_without_detection():
 
 
 def test_a_capture_sets_the_frames_decode_for_its_light():
-    # A camera under white light wants the as-shot white balance; narrowband light decodes linear.
+    # A camera under white light wants the as-shot white balance; narrowband light decodes Linear RAW.
     c = _run(["slide.ARW"], rgb_mode=True, white_mode=True, white_process_mode=ProcessMode.E6)
     _hydrate_and_load(c, "slide.ARW", ProcessMode.C41, autodetect=True)
-    assert (c.state.config.process.linear_raw, c.state.config.process.narrowband_scan) == (False, False)
+    assert c.state.config.process.linear_raw is False
 
     c = _run(["r.ARW", "g.ARW", "b.ARW"], rgb_mode=True, white_mode=False)
     _hydrate_and_load(c, "r.ARW", ProcessMode.C41, autodetect=True)
-    assert (c.state.config.process.linear_raw, c.state.config.process.narrowband_scan) == (True, True)
+    assert c.state.config.process.linear_raw is True
 
 
 def test_a_white_light_color_negative_imports_as_c41():
