@@ -298,3 +298,13 @@ def test_log_slider_round_trips_the_decades_and_keeps_zero_as_off(qapp):
     assert slider.spin.decimals() == 2
     assert slider._to_int(0.0) == 0 and slider._to_int(10.0) == slider._LOG_STEPS
     assert abs((slider._to_int(1.0) - slider._to_int(0.1)) - (slider._to_int(10.0) - slider._to_int(1.0))) <= 1  # one decade per equal drag
+
+
+def test_log_slider_takes_a_typed_value_under_the_floor_as_the_floor(qapp):
+    from negpy.desktop.view.widgets.sliders import LogSlider
+
+    slider = LogSlider("Capture Delay", 0, 10, 0, log_floor=0.1, unit=" s")
+    slider.spin.setValue(0.05)  # as typing does: the spin box emits, the slider follows
+    assert slider.value() == 0.1
+    slider.spin.setValue(0.0)
+    assert slider.value() == 0.0

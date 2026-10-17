@@ -658,6 +658,8 @@ class CaptureWorker(QObject):
         session like a scan does: the card's steppers write with no Live View window open, after
         the window's close released it."""
         try:
+            if self._claimed_elsewhere and not self._holds_camera():
+                return  # the camera dot already says another app holds it; the poll's retry clears that
             cam = self._acquire_camera()
             {
                 "iso": cam.set_iso,

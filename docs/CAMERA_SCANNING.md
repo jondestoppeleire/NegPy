@@ -87,10 +87,13 @@ rebate no brighter than the picture, Meter uses the picture's highlights.
 The shutter moves to the body's nearest step at or under that exposure, as a counted
 exposure write: Scan waits until the body confirms it. The status line reads, for example,
 `Meter: negative, base at 62% → 1/15 (+0.5 st)` (the stops are the move that step makes),
-and gives the share of the picture that clipped. If the base, or the picture's brightest
-0.1%, is clipped, the shutter steps down two stops and the line asks for another probe. For
-a target past the body's fastest step, the line says to close the aperture or lower the
-ISO, and writes nothing.
+and gives the share of the picture that clipped. A base the probe cannot read unclipped
+meters the picture's thin end and the line says `(base unreadable)`. A picture with two
+percent or more of its pixels saturated steps down two stops and the line asks for another
+probe; fewer saturated pixels are reported and left out of the level. A probe under 0.05% of
+the range in every channel is reported as too dark, and nothing is written. For a target
+past the body's fastest step, the line says to close the aperture or lower the ISO, and
+writes nothing.
 
 Under the Scanlight, Meter needs the shutter between 1/250 s and 2 s, the span Calibrate
 solves on. Camera-only
@@ -160,7 +163,9 @@ Shutter** on the card sets the infrared exposure's shutter, which an IR-cut filt
 far slower than the visible channels; a step the camera does not offer falls back to the
 camera's shutter. Infrared needs a light with infrared LEDs and a camera that passes 850 nm,
 a full-spectrum or IR-converted body: a stock camera's IR-cut filter leaves the infrared
-frame at noise. An `_IR` file stays its own frame in the Film Strip.
+frame at noise. An `_IR` file stays its own frame in the Film Strip. Each scanned frame
+takes the decode its light implies: white light keeps the camera's white balance, Trichrome
+and Single Capture decode linear with Narrowband on; a frame already edited keeps its own.
 
 **Narrowband Scan.** Narrowband LEDs render more saturated than white light. The **Narrowband** toggle in the Process
 panel, beside **Linear RAW**, corrects this with the bundled RGBScan input profile, in the

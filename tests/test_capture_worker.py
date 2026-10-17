@@ -381,8 +381,7 @@ def test_poll_self_heals_once_the_other_app_releases_the_camera(monkeypatch):
 
 
 def test_a_setting_write_takes_the_session_when_live_view_has_released_it(monkeypatch):
-    # Closing the Live View window releases the PTP session on purpose. A card stepper step
-    # after that must still reach the body, so the write opens the session like a scan does.
+    # A closed Live View window releases the session; a card stepper write opens it again.
     class Body:
         def __init__(self) -> None:
             self.writes: list[tuple] = []
@@ -426,6 +425,20 @@ def test_a_setting_write_with_no_camera_reports_and_still_releases_the_scan_gate
 
     assert applied == ["shutter"]
     assert errors and "Reconnect" in errors[0]
+
+
+def test_a_setting_write_stays_quiet_while_another_app_holds_the_body(monkeypatch):
+    worker = CaptureWorker()
+    worker._claimed_elsewhere = True
+    monkeypatch.setattr(worker, "_acquire_camera", lambda: (_ for _ in ()).throw(AssertionError("must not probe")))
+    errors: list[str] = []
+    applied: list[str] = []
+    worker.error.connect(errors.append)
+    worker.camera_setting_applied.connect(applied.append)
+
+    worker.set_camera_setting("shutter", 29, "1/20")
+
+    assert errors == [] and applied == ["shutter"]
 
 
 def test_poll_identifies_the_body_on_first_sight(monkeypatch):

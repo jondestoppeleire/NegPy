@@ -2816,8 +2816,7 @@ class AppController(QObject):
             self.state.config = with_process_mode(self.state.config, pending_import.process_mode)
             self.state.is_dirty = True
         if pending_import is not None and pending_import.linear_raw is not None:
-            # The rig's decode, set on the captured frame itself: a camera under white light wants
-            # the as-shot white balance, which the meter's target allows for; narrowband light does not.
+            # The rig's decode for this capture, over the sticky default.
             self.state.config = replace(
                 self.state.config,
                 process=replace(
@@ -2825,6 +2824,7 @@ class AppController(QObject):
                 ),
             )
             self.state.is_dirty = True
+            self.session.relock_diverged_cards()  # a roll's Calibration default must not take it back on the next open
         if pending_import is not None and pending_import.sensor_matrix is not None:
             # The roll default covers a frame in a roll; this covers one scanned outside any.
             self.state.config = replace(

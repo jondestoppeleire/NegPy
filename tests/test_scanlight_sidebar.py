@@ -694,7 +694,7 @@ def test_a_dark_probe_is_reported_not_exposed_for(tmp_path, monkeypatch):
     w, _ = _metering_sidebar(tmp_path, monkeypatch)
     w._on_meter()
 
-    w._on_meter_finished(_reading(measured=0.001 * CLIP_CEILING, recommended="1/5", stops=4.0))
+    w._on_meter_finished(_reading(measured=0.0002 * CLIP_CEILING, recommended="1/5", stops=4.0))
 
     assert "too dark to meter" in w.lv_window.status.text()
     assert not w.controller.set_camera_setting.called and not w._metering

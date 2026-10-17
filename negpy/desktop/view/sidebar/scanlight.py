@@ -121,8 +121,8 @@ _BUILTIN_WHITE_PRESETS = {name: b.process for name, b in _BUILTIN_PRESETS.items(
 _LED_SETTLE_S = 0.05
 #: Time a body takes to switch between its full and magnified view.
 _MAGNIFIER_SETTLE_MS = 2500
-#: A probe this far under the ceiling in its brightest channel is dark, not a level to expose for.
-_METER_FLOOR = 0.005
+#: A probe this far under the ceiling in its brightest channel is black-level noise, not a level to expose for.
+_METER_FLOOR = 0.0005
 
 
 def _gray_array(pixmap: QPixmap) -> np.ndarray:
@@ -764,7 +764,7 @@ class ScanlightSidebar(QWidget):
             return
         builtin = _BUILTIN_PRESETS.get(name)
         if builtin is not None and builtin.white:
-            # Built-in white-light mode, one white exposure for B&W or slide: white on, RGB off.
+            # Built-in white-light mode, one white exposure: white on, RGB off.
             self._settings = replace(self._settings, white_mode=True, white_process_mode=builtin.process)
             for slider, value in ((self.r_slider, 0), (self.g_slider, 0), (self.b_slider, 0), (self.w_slider, 255)):
                 self._set_slider(slider, value)
@@ -1251,7 +1251,6 @@ class ScanlightSidebar(QWidget):
                 shutter_candidates=candidates,
                 medium=medium,
                 session=self._lv_session,
-                # A white-light or camera-only frame imports with the camera's white balance; the target must hold after it.
                 wb_decode=not (self._rgb_mode and not self._settings.white_mode),
             )
         )
@@ -2172,11 +2171,10 @@ class ScanlightSidebar(QWidget):
         self._refresh_preset_ui()
 
     def _refresh_preset_ui(self) -> None:
-        """Sync the preset-area widgets to the current mode. The scan live-view exposure steppers hide
-        for a calibrated RGB scan (locked to the preset; they stay for white-light and camera-only
-        modes). The sidebar exposure fields hide for a white-light preset. And the sliders + exposure
-        steppers + Save are editable only while building a manual preset — a selected preset is a
-        fixed recipe."""
+        """Sync the preset-area widgets to the current mode. The Live View exposure steppers hide for
+        a calibrated RGB recipe, which locks them. The Capture mode row hides for a white-light preset;
+        the exposure steppers stay, editable under every built-in and a hand-set recipe. The sliders
+        and Save are editable only while building a hand-set recipe."""
         locked = self._rgb_mode and not self._settings.white_mode and not (self._manual_mode or self._free_exposure)
         self.lv_window.settings_widget.setVisible(not locked)
         if not hasattr(self, "inter_exposure_delay_slider"):

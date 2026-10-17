@@ -4,7 +4,7 @@ Status: draft, written 2026-10-16 against commit `9672ab72`. The decision goes i
 
 ## 1. Context and scope
 
-The Scan tab's Camera side captures film with a tethered camera and, when one is connected, a [Scanlight](https://github.com/jackw01/scanlight). One dropdown, **Preset**, carries three decisions: what the film is, which exposures one Scan shoots, and how each exposure is set. Its entries are three built-in white-light film types, the user's calibrated per-stock recipes, and an action, "Create a manual preset…". The capture pattern, Triplet or Single Capture, is a read-only field of a recipe.
+The Scan tab's Camera side captures film with a tethered camera and, when one is connected, a [Scanlight](https://github.com/jackw01/scanlight). One dropdown, **Preset**, carries three decisions: what the film is, which exposures one Scan shoots, and how each exposure is set. Its entries are five built-in white-light film types, the user's calibrated per-stock recipes, and an action, "Create a manual preset…". The capture pattern, Triplet or Single Capture, is a read-only field of a recipe.
 
 Infrared does not exist on the Camera side. The Big Scanlight carries 16 infrared LEDs at 850 nm ([big.md](https://github.com/jackw01/scanlight/blob/main/big.md)) and its firmware drives them from byte 4 of `SET_COLOR` ([control interface](https://github.com/jackw01/scanlight/blob/main/automation/bsl_control_interface.md)). NegPy's encoder sends that byte as 0. The consumer side exists: Retouch's **IR Removal** runs on any `metadata["ir"]` plane and is gated by `state.has_ir`.
 
@@ -34,7 +34,7 @@ Non-goals:
 
 | What the user sees | What it is | Where |
 |---|---|---|
-| Presets that are only B&W, Slide, or both | Three built-in white-light modes. They set the W LED and the process on import. No calibration. | `_BUILTIN_WHITE_PRESETS` in `sidebar/scanlight.py` |
+| Presets that are only B&W, Slide, or both | Five built-in white-light modes. They set the W LED and the process on import. No calibration. | `_BUILTIN_WHITE_PRESETS` in `sidebar/scanlight.py` |
 | "Create a manual preset…" | A dropdown entry that unlocks the R/G/B sliders and the ISO, shutter and aperture steppers. Its **Capture mode** offers Triplet or Single Capture, one exposure with all three LEDs lit. | `_MANUAL_PRESET`, `_set_manual_mode` |
 | "+" opens a window with a sample light | The calibration window. It lights a fixed reference mix, the user clicks the clear base, and it solves LED levels plus one shutter for the stock. | `calibration_window.py`, `_on_preset_new` |
 | Triplet in that window, then save | The window's own Triplet / Single Capture dropdown. **Calibrate & Save** stores a preset with the solved levels. Infrared is never shot. | `CAPTURE_MODES`, `_on_calibration_finished` |
@@ -55,7 +55,7 @@ Findings, each with its consequence:
 12. **The vocabulary exists twice already.** The Roll tab's Film Mode card is a `SegmentedChoice` of Color, B&W and Slide, the process modes a capture imports into. The Film Scanner card's Film & Quality has an **IR** `labeled_toggle`. The Camera side reuses neither.
 13. **The Output card can sit below the fold.** On a laptop-height window the camera cards fill the scroll area and the gate hint names a folder control the user has not seen.
 
-Branch `feat/scan-meter-channel-capture` adds, on top of this state: an **Aperture Priority Meter** beside the CAMERA EXPOSURE subheader, which runs the Live View probe under the scan light and overrides a preset's shutter for the session; **R**, **G**, **B** and **IR** selections in Live View, which Scan shoots into the next frame and Retake re-shoots on the current one, every replaced file first kept as a hidden `.previous-` copy; an **IR Shutter** stepper with an **Infrared** toggle, which ends every Scan with an infrared exposure; three built-in presets that need no calibration, **Trichrome, Color Negative**, **Trichrome + IR, Color Negative** and **White Light + IR, Slide**; and a **+** menu with **Calibrate on the Film Base…** and **Set by Hand** in place of the dropdown's manual entry, so a hand-set recipe scans without a save. The IR byte of `SET_COLOR` is live and gated on the light's hardware id. The exposure steppers are editable under every preset and fill from the connection poll, which publishes the held body's settings while no preview streams, so a preset picked before Live View shows the body's exposure at once. The Capture Delay of the Scanlight card is also a stepper beside Scan in Live View. An `_IR` file stays its own frame; the import of an infrared plane remains Piece A.
+Branch `feat/scan-meter-channel-capture` adds, on top of this state: an **Aperture Priority Meter** beside the CAMERA EXPOSURE subheader, which runs the Live View probe under the scan light and overrides a preset's shutter for the session; **R**, **G**, **B** and **IR** selections in Live View, which Scan shoots into the next frame and Retake re-shoots on the current one, every replaced file first kept as a hidden `.previous-` copy; an **IR Shutter** stepper with an **Infrared** toggle, which ends every Scan with an infrared exposure; five built-in presets that need no calibration, **White Light, Color Negative**, **White Light + IR, Color Negative**, **White Light + IR, Slide**, **Trichrome, Color Negative** and **Trichrome + IR, Color Negative**; and a **+** menu with **Calibrate on the Film Base…** and **Set by Hand** in place of the dropdown's manual entry, so a hand-set recipe scans without a save. The IR byte of `SET_COLOR` is live and gated on the light's hardware id. The exposure steppers are editable under every preset and fill from the connection poll, which publishes the held body's settings while no preview streams, so a preset picked before Live View shows the body's exposure at once. The Capture Delay of the Scanlight card is also a stepper beside Scan in Live View. An `_IR` file stays its own frame; the import of an infrared plane remains Piece A.
 
 ### 3.2 Model
 
@@ -115,7 +115,7 @@ Factories: `SegmentedChoice` for Film and Light, `labeled_toggle` for Infrared, 
 | ✎ on the Exposure header | edit toggle | Replaces "Create a manual preset…": unlocks the sliders and steppers; 💾 saves as a named stock; 🗑 deletes the selected stock. |
 | Channel Delay | slider | Unchanged. Hidden under White and Single RGB. |
 
-Removed: the three built-in white presets, the `_MANUAL_PRESET` sentinel, the sidebar's disabled Capture mode, the calibration window's capture dropdown. The status line's light echo names its subject, "Framing light" or "Scan light". The gate hint's missing item, such as the output folder, scrolls its card into view on click. The Scanning Setup wizard stays for files scanned elsewhere.
+Removed: the five built-in white presets, the `_MANUAL_PRESET` sentinel, the sidebar's disabled Capture mode, the calibration window's capture dropdown. The status line's light echo names its subject, "Framing light" or "Scan light". The gate hint's missing item, such as the output folder, scrolls its card into view on click. The Scanning Setup wizard stays for files scanned elsewhere.
 
 ### 3.5 Import rules
 

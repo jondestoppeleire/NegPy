@@ -6,7 +6,7 @@ Design: [docs/design/camera-scan-capture.md](../design/camera-scan-capture.md)
 
 ## Context
 
-The Scan tab's Camera side drives a tethered camera and an optional Scanlight. One dropdown, **Preset**, holds three kinds of entry: three built-in white-light film types, the user's calibrated per-stock exposure recipes, and the action "Create a manual preset…". The capture pattern, Triplet or Single Capture, is a read-only field of a recipe, set in the calibration window's own dropdown. A first-time user sees a card of grayed sliders and steppers, a dropdown that lists only white-light entries, and a hint at the bottom that says to select or create a preset.
+The Scan tab's Camera side drives a tethered camera and an optional Scanlight. One dropdown, **Preset**, holds three kinds of entry: five built-in white-light film types, the user's calibrated per-stock exposure recipes, and the action "Create a manual preset…". The capture pattern, Triplet or Single Capture, is a read-only field of a recipe, set in the calibration window's own dropdown. A first-time user sees a card of grayed sliders and steppers, a dropdown that lists only white-light entries, and a hint at the bottom that says to select or create a preset.
 
 The Roll tab already asks what the film is, with a Film Mode card of Color, B&W and Slide. The Film Scanner side already asks for infrared with an **IR** toggle. The Camera side repeats neither, and has no infrared at all: the Big Scanlight carries 850 nm LEDs and its firmware lights them from byte 4 of `SET_COLOR`, which NegPy sends as 0. Retouch's IR Removal already consumes any `metadata["ir"]` plane.
 
@@ -36,7 +36,7 @@ The Roll tab already asks what the film is, with a Film Mode card of Color, B&W 
 
 | Today | After |
 |---|---|
-| White Light (B&W or Slide Film) with autodetect, White Light B&W, White Light Slide | Light: White, with Film: B&W or Slide. Autodetect goes: Film is explicit. |
+| White Light (B&W or Slide Film) with autodetect, White Light B&W, White Light Color Negative, White Light Slide, and the + IR pair for Color Negative and Slide | Light: White, with Film: B&W or Slide. Autodetect goes: Film is explicit. |
 | Triplet preset | Light: Trichrome, a recipe |
 | Single Capture preset with Create Sensor Profile | Light: Single RGB, a recipe, Create Sensor Profile in the window |
 | "+" calibrate | Calibrate… |

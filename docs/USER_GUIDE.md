@@ -85,7 +85,7 @@ An unedited frame gets the rig and roll settings: film process, crop ratio, flip
 
 **Preferences → Session & Storage → Persistent Settings…** sets which settings carry. **Carry settings between frames** is the master switch; off, new frames get bare defaults.
 
-An edited frame keeps its look; only export and metadata settings reach it. **Reset Settings** returns bare defaults and, in a roll, sets every Roll-tab card back to **Roll**. No reset changes the scanning setup (Linear RAW, Narrowband, demosaic); **Scanning setup** sets those.
+An edited frame keeps its look; only export and metadata settings reach it. **Reset Settings** returns bare defaults and, in a roll, sets every Roll-tab card back to **Roll**. No reset changes the scanning setup (Linear RAW, Narrowband, demosaic); **Scanning setup** sets those, and a camera Scan sets them per frame from its light.
 
 ### Frame or roll: the scope pair
 
@@ -719,7 +719,7 @@ These controls correct the capture, not the look.
 
 **Capture**:
 
-*   **Scanning setup**: a wizard (*how do you scan?*, *what light source?*) that sets Linear RAW and Narrowband. It runs once after the first-launch tour; open it again when your rig changes.
+*   **Scanning setup**: a wizard (*how do you scan?*, *what light source?*) that sets the Linear RAW and Narrowband defaults for files you open. A camera Scan sets them per frame from its light instead: white light keeps the camera's white balance, Trichrome and Single Capture decode linear with Narrowband on. It runs once after the first-launch tour; open it again when your rig changes.
 *   **Linear RAW** (default off): decodes RAW with neutral multipliers; off uses the as-shot white balance. Locked on for a Trichrome triplet.
 *   **Narrowband**: corrects the oversaturation of narrowband (RGB-LED) capture with a bundled input profile; leave it off for broadband light. An Input ICC in Export overrides it.
 
@@ -1110,9 +1110,9 @@ Copy-stand capture with a camera in **PC Remote** mode over USB (macOS/Linux): w
 
 Shown while a Scanlight is connected. The LED levels, the camera exposure and the infrared row sit on a rail under the preset dropdown: they are the preset's values. Channel Delay, below the rail, is a setting of the rig.
 
-*   **Preset**: forces its RGB levels, ISO, shutter and aperture each frame. Built in, with no calibration: **White Light** (B&W, Color Negative or Slide, autodetected or named), **White Light + IR, Color Negative**, **White Light + IR, Slide**, **Trichrome, Color Negative** and **Trichrome + IR, Color Negative**; every built-in leaves ISO, Shutter and Aperture to the steppers, with the meter beside them; the Trichrome ones shoot at full LED power at the camera's exposure, so their ISO, Shutter and Aperture steppers are live and the meter sets the shutter. **+** offers two ways to add one. **Calibrate on the Film Base…**: place the rectangle on clear film base, name it, run it; it solves a shutter and LED levels just under clipping. **Set by Hand**: unlocks the sliders and steppers; Scan uses them as they stand, and the save button keeps them as a preset.
+*   **Preset**: forces its RGB levels, ISO, shutter and aperture each frame. Built in, with no calibration: **White Light** (B&W, Color Negative or Slide, autodetected or named), **White Light + IR, Color Negative**, **White Light + IR, Slide**, **Trichrome, Color Negative** and **Trichrome + IR, Color Negative**; every built-in shoots at the camera's exposure: ISO, Shutter and Aperture are live steppers and the meter sets the shutter; the Trichrome ones light the LEDs at full power. **+** offers two ways to add one. **Calibrate on the Film Base…**: place the rectangle on clear film base, name it, run it; it solves a shutter and LED levels just under clipping. **Set by Hand**: unlocks the sliders and steppers; Scan uses them as they stand, and the save button keeps them as a preset.
 *   **Red**, **Green**, **Blue**, **White** (0 to 255): LED levels, editable while you build a manual preset. **Light Off** turns every channel off.
-*   **Capture mode**: **Triplet** shoots one exposure per LED and merges them; **Single Capture** shoots one exposure with all three lit and imports it as an ordinary RAW.
+*   **Capture mode**: **Triplet** shoots one exposure per LED and merges them; **Single Capture** shoots one exposure with all three lit and imports it as an ordinary RAW. Hidden under a white-light preset, which shoots one exposure.
 *   **Create Sensor Profile** (Single Capture only, default on): also saves a sensor profile under the preset's name; a roll scanned with the preset takes it and turns Linear RAW on. Other rolls do not get it.
 *   **ISO**, **Shutter**, **Aperture**: the preset's exposure, live under any preset; a step overrides the recipe until you pick the preset again.
 *   **Aperture Priority Meter** (the gauge beside CAMERA EXPOSURE): the Live View **Meter**, from the card. Opens Live View when it is closed.

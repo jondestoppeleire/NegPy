@@ -61,8 +61,7 @@ def test_a_negative_whose_rebate_is_not_brighter_than_its_picture_meters_the_pic
 
 
 def test_a_saturated_ring_is_light_or_a_clipped_base_so_the_picture_sets_the_exposure():
-    # Light through a gap and a clipped base look the same in one probe; neither can set an
-    # exposure, and stepping down on the ring alone never converges on a frame ringed by light.
+    # Light through a gap and a clipped base look the same in one probe; neither sets an exposure.
     reading = meter_frame(_frame(border=1.0, picture=0.25), "1/30", medium="negative")
 
     assert reading.region == "highlights" and reading.ring_saturated and not reading.clipped
@@ -116,8 +115,7 @@ def test_fine_clipped_highlights_count_at_the_probe_resolution():
     reading = meter_frame(img, "1/30", medium="positive")
 
     assert reading.clipped_fraction == pytest.approx(8800 / (1680 * 2160), rel=0.1)
-    # A quarter percent at saturation is light, not film: it is reported, left out of the level,
-    # and the picture itself sets the exposure, so a frame with a pinhole never steps down forever.
+    # A quarter percent at saturation is light, not film: reported, left out of the level; the picture sets the exposure.
     assert not reading.clipped
     assert reading.measured == pytest.approx(0.3 * CLIP_CEILING, rel=0.02)
 

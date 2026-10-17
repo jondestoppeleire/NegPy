@@ -143,16 +143,12 @@ def meter_frame(
     clipped_fraction = float(np.mean(brightest >= _SATURATION))
 
     ring = det[rebate_mask(det.shape[:2], film_roi, gate)]
-    # Saturated pixels are light, a pinhole or a gap, unless there are enough of them to be film:
-    # light keeps its share of the picture at every exposure, film's share grows with it. A few
-    # saturated pixels are left out of the level; a blown picture steps down and meters again.
+    # Saturated pixels are light unless they reach _BLOWN_SHARE of the picture; then the picture is blown.
     saturated = picture.max(axis=1) >= _SATURATION
     blown = bool(saturated.mean() >= _BLOWN_SHARE)
     film_pixels = picture if blown or saturated.all() else picture[~saturated]
     thinnest = np.percentile(film_pixels, 99.9, axis=0)  # the picture's thin end, per channel
-    # The ring is film only where the probe reads it unclipped: light through a gap or a sprocket
-    # hole and a clipped base both saturate, and neither can set an exposure. A ring that is half
-    # holder reads darker than the base, so the base never pulls the level under the thin end.
+    # Only unclipped ring pixels are film: a gap, a sprocket hole and a clipped base all saturate.
     film_ring = ring[ring.max(axis=1) < _SATURATION] if ring.size else ring
     ring_saturated = medium == "negative" and bool(ring.size) and film_ring.shape[0] < 0.5 * ring.shape[0]
     # A negative's base is its thinnest film, so a ring darker than the picture is picture.
@@ -164,6 +160,7 @@ def meter_frame(
     )
     if base_visible:
         region = "base"
+        # A ring that is half holder reads under the base, so the base never sets a level under the thin end.
         levels = np.maximum(np.median(film_ring, axis=0), thinnest)
     else:
         region = "highlights"

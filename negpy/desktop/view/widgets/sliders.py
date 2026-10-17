@@ -555,6 +555,14 @@ class LogSlider(CompactSlider):
             return self._min
         return self._log_floor * math.exp((i - 1) / (self._LOG_STEPS - 1) * self._log_span)
 
+    def _on_spin_changed(self, value: float) -> None:
+        if 0.0 < value < self._log_floor:  # typed under the floor: the floor, since off is 0 alone
+            value = self._log_floor
+            self.spin.blockSignals(True)
+            self.spin.setValue(value)
+            self.spin.blockSignals(False)
+        super()._on_spin_changed(value)
+
 
 class HueSlider(CompactSlider):
     """
