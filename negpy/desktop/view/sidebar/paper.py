@@ -3,7 +3,8 @@ from PyQt6.QtWidgets import QHBoxLayout
 
 from negpy.desktop.view.sidebar.base import BaseSidebar
 from negpy.desktop.view.sidebar.tone import _CH_LABEL, _CH_SUFFIX, channel_selector
-from negpy.desktop.view.styles.templates import ICON_BUTTON_WIDTH, field_row
+from negpy.desktop.view.shortcut_registry import tooltip_with_shortcut
+from negpy.desktop.view.styles.templates import ICON_BUTTON_WIDTH, PAPER_STRIP_SWEEP, field_row, gradient_icon, header_button, wrap_tooltip
 from negpy.desktop.view.styles.theme import THEME
 from negpy.desktop.view.widgets.sliders import CompactSlider, SliderGroup
 from negpy.desktop.view.widgets.step_combo import StepCombo
@@ -66,7 +67,8 @@ class PaperSidebar(BaseSidebar):
         self.paper_combo = StepCombo()
         self.paper_combo.setToolTip(
             "Print stock: the paper or print film the negative is printed on. It sets the H&D curve and, "
-            "on color stock, the colors its dyes make, from the datasheet; Grade, Density, Toe and "
+            "on color stock, the colors its dyes make, from the datasheet or the paper's measured "
+            "Frontier profile; Grade, Density, Toe and "
             "Shoulder still trim on top. Digital (Adobe RGB) is an idealized print: NegPy's own curve "
             "and perfect dyes. Digital (Pakon Minilab) is that curve with a Pakon minilab's colors."
         )
@@ -74,11 +76,15 @@ class PaperSidebar(BaseSidebar):
         idx = self.paper_combo.findData(conf.paper_profile)
         if idx >= 0:
             self.paper_combo.setCurrentIndex(idx)
-        paper_row = field_row("Print stock", self.paper_combo)
+        self.paper_strip_btn = header_button(gradient_icon("mdi.view-column-outline", PAPER_STRIP_SWEEP), self._paper_strip_tooltip())
+        self.paper_strip_btn.setCheckable(True)
+        self.paper_strip_btn.setProperty("value_column", True)
+        self.paper_strip_btn.clicked.connect(lambda checked: self.controller.toggle_paper_strip(force=checked))
+        paper_row = field_row("Print stock", self.paper_combo, self.paper_strip_btn)
         self.paper_label = paper_row.itemAt(0).widget()
         self.layout.addLayout(paper_row)
 
-        # Density-domain saturation in the same dye_mix slot as the paper's real dye crosstalk, not a Lab a*/b* step.
+        # Density-domain saturation on the dye amounts, before the stock's dyes, not a Lab a*/b* step.
         self.dye_separation_slider = CompactSlider("Dye Separation", 0.5, 1.5, conf.dye_separation, has_neutral=True)
         self.dye_separation_trim_slider = CompactSlider("Dye Separation", -0.4, 0.4, 0.0, has_neutral=True)
         self.dye_separation_trim_slider.setToolTip(
@@ -121,11 +127,31 @@ class PaperSidebar(BaseSidebar):
 
         self.layout.addStretch()
 
-        # Global-only controls, grayed while a channel page is active.
+        # Global-only controls, grayed while a channel page is active. The Paper Test Strip button
+        # is one too, synced with the proof in _sync_paper_strip_btn.
         self._global_only = (self.paper_dmin_btn, self.paper_black_btn, self.paper_combo)
 
     def _channel_index(self) -> int:
         return self.ch_btn.currentIndex()
+
+    @staticmethod
+    def _paper_strip_tooltip(printing: bool = False) -> str:
+        if printing:
+            return "Printing the paper test strip…"
+        return tooltip_with_shortcut(
+            "Paper Test Strip: print the frame on every print stock, as a band each or as a grid of "
+            "small frames. Click a paper to see it on the whole frame, step to the next paper, and keep "
+            "the one you like. The 90° rotate controls turn the bands while the strip is up.",
+            "toggle_paper_strip",
+        )
+
+    def _sync_paper_strip_btn(self, _up: bool = False) -> None:
+        # One shared slot, so the kind gates this or the other proofs light this button too.
+        mine = self.state.test_strip_kind == "paper"
+        pending = self.state.test_strip_pending and mine
+        self.paper_strip_btn.setChecked((self.state.test_strip or self.state.test_strip_pending) and mine)
+        self.paper_strip_btn.setEnabled(not pending and self._channel_index() == 0)
+        self.paper_strip_btn.setToolTip(wrap_tooltip(self._paper_strip_tooltip(printing=pending)))
 
     def _curve_field(self, base: str) -> str:
         idx = self._channel_index()
@@ -157,6 +183,8 @@ class PaperSidebar(BaseSidebar):
         self.update_config_section("exposure", render=True, persist=True, readback_metrics=True, paper_profile=key)
 
     def _connect_signals(self) -> None:
+        # Session state, not config, so the button follows the controller rather than sync_ui.
+        self.controller.test_strip_changed.connect(self._sync_paper_strip_btn)
         self.paper_combo.currentIndexChanged.connect(self._on_paper_changed)
         self.ch_btn.currentChanged.connect(lambda _i: self.sync_ui())
 
@@ -231,6 +259,7 @@ class PaperSidebar(BaseSidebar):
             self.paper_combo.setCurrentIndex(paper_idx if paper_idx >= 0 else self.paper_combo.findData(DEFAULT_PROFILE_KEY))
             self.paper_combo.setVisible(mode != ProcessMode.E6)
             self.paper_label.setVisible(mode != ProcessMode.E6)
+            self.paper_strip_btn.setVisible(mode != ProcessMode.E6)
 
             # On the transfer path the render starts from the capture, so the paper model has
             # nothing to act on; Toe and Shoulder drive the transfer curve instead.
@@ -276,6 +305,7 @@ class PaperSidebar(BaseSidebar):
                 self.dye_separation_trim_slider.setValue(getattr(conf, f"dye_separation_trim_{ch}"))
             for w in self._global_only:
                 w.setEnabled(global_mode)
+            self._sync_paper_strip_btn()
 
             for i, fields in enumerate(self._channel_fields, start=1):
                 self.ch_btn.set_edited(i, any(getattr(conf, f) != 0.0 for f in fields))

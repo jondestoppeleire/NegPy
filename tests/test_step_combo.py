@@ -54,17 +54,31 @@ def test_the_arrows_skip_headers_separators_and_grayed_choices(qapp):
     assert combo.currentText() == "Digital (Adobe RGB)"
 
 
-def test_the_arrows_stop_at_the_ends(qapp):
-    combo = _combo("Free", "1:1")
+def test_the_arrows_wrap_past_the_ends(qapp):
+    combo = StepCombo()
+    combo.resize(240, combo.height())
+    combo.add_header("Ratio")
+    combo.addItems(["Free", "1:1", "3:2"])
+    combo.setCurrentIndex(1)
     changed, activated = _record(combo)
 
     _click(combo, "prev")
-    assert combo.currentIndex() == 0
-    combo.setCurrentIndex(1)
+    assert combo.currentText() == "3:2"
     _click(combo, "next")
-    assert combo.currentIndex() == 1
-    assert changed == [1]
-    assert activated == []
+    assert combo.currentText() == "Free"
+    assert changed == [3, 1]
+    assert activated == [3, 1]
+
+
+def test_the_arrows_do_nothing_with_one_choice(qapp):
+    combo = _combo("Free")
+    changed, activated = _record(combo)
+
+    _click(combo, "prev")
+    _click(combo, "next")
+
+    assert combo.currentIndex() == 0
+    assert changed == activated == []
 
 
 def test_a_click_on_the_face_opens_the_list(qapp):

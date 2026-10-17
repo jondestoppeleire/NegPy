@@ -500,6 +500,46 @@ def strip_mosaic(tiles: List[np.ndarray], grid: Tuple[int, int]) -> np.ndarray:
     return out
 
 
+# Calibration knob: past this many columns per row, an even grid draws the papers smaller than
+# a near-square one with a short last row.
+PAPER_GRID_MAX_RATIO = 3
+
+
+def paper_grid(count: int) -> Tuple[int, int]:
+    """(rows, cols) of the paper strip's grid layout: the even grid nearest square, else near square."""
+    for rows in range(int(np.sqrt(count)), 0, -1):
+        if count % rows == 0 and count // rows <= PAPER_GRID_MAX_RATIO * rows:
+            return rows, count // rows
+    cols = int(np.ceil(np.sqrt(count)))
+    return -(-count // cols), cols
+
+
+def paper_grid_cells(count: int) -> List[Tuple[float, float, float, float]]:
+    """(x0, y0, x1, y1) of each paper's cell as fractions of the frame, row-major. Cells are
+    frame-shaped, so a render fills its cell; the block and a short last row are centered."""
+    rows, cols = paper_grid(count)
+    size = 1.0 / max(rows, cols)
+    top = (1.0 - rows * size) / 2
+    cells = []
+    for i in range(count):
+        row, col = divmod(i, cols)
+        x0 = (1.0 - min(cols, count - row * cols) * size) / 2 + col * size
+        y0 = top + row * size
+        cells.append((x0, y0, x0 + size, y0 + size))
+    return cells
+
+
+def paper_grid_mosaic(tiles: Sequence[np.ndarray]) -> np.ndarray:
+    """One frame holding every render whole, each scaled into its `paper_grid_cells` cell; the
+    frame around the block stays black."""
+    out = np.zeros_like(tiles[0])
+    h, w = out.shape[:2]
+    for tile, (x0, y0, x1, y1) in zip(tiles, paper_grid_cells(len(tiles))):
+        top, bottom, left, right = round(y0 * h), round(y1 * h), round(x0 * w), round(x1 * w)
+        out[top:bottom, left:right] = cv2.resize(tile, (right - left, bottom - top), interpolation=cv2.INTER_AREA)
+    return out
+
+
 def strip_patch_rect(h: int, w: int, row: int, col: int, grid: Tuple[int, int]) -> Tuple[int, int, int, int]:
     """(x0, y0, x1, y1) of one patch inside an h×w frame — the bounds `strip_mosaic` filled."""
     rows, cols = grid

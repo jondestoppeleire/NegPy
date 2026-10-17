@@ -212,3 +212,40 @@ def test_mini_curve_paints_base_and_channel_traces(qapp):
     assert not w.grab().isNull()
     w.set_curves([], [])
     assert not w.grab().isNull()
+
+
+def test_paper_strip_button_follows_the_proof(qapp):
+    controller, sidebar = _sidebar()
+    btn = sidebar.paper_strip_btn
+    btn.click()
+    controller.toggle_paper_strip.assert_called_once_with(force=True)
+
+    state = controller.state
+    state.test_strip, state.test_strip_kind = True, "paper"
+    sidebar._sync_paper_strip_btn(True)
+    assert btn.isChecked() and btn.isEnabled()
+
+    state.test_strip_kind = "tone"
+    sidebar._sync_paper_strip_btn(True)
+    assert not btn.isChecked()
+
+    state.test_strip, state.test_strip_pending, state.test_strip_kind = False, True, "paper"
+    sidebar._sync_paper_strip_btn(False)
+    assert btn.isChecked() and not btn.isEnabled()
+
+
+def test_paper_strip_button_sits_beside_print_stock_and_goes_with_it(qapp):
+    controller, sidebar = _sidebar()
+    rows = (sidebar.layout.itemAt(i).layout() for i in range(sidebar.layout.count()))
+    row = next(r for r in rows if r is not None and r.indexOf(sidebar.paper_combo) >= 0)
+    assert row.indexOf(sidebar.paper_strip_btn) == row.indexOf(sidebar.paper_combo) + 1
+
+    sidebar.ch_btn.setCurrentIndex(1)
+    assert not sidebar.paper_strip_btn.isEnabled()
+    sidebar.ch_btn.setCurrentIndex(0)
+    assert sidebar.paper_strip_btn.isEnabled()
+
+    cfg = controller.state.config
+    controller.state.config = replace(cfg, process=replace(cfg.process, process_mode=ProcessMode.E6))
+    sidebar.sync_ui()
+    assert sidebar.paper_strip_btn.isHidden()

@@ -308,3 +308,32 @@ def test_log_slider_takes_a_typed_value_under_the_floor_as_the_floor(qapp):
     assert slider.value() == 0.1
     slider.spin.setValue(0.0)
     assert slider.value() == 0.0
+
+
+def test_a_value_column_button_leaves_the_field_the_whole_track(qapp):
+    from PyQt6.QtWidgets import QComboBox, QHBoxLayout, QPushButton, QVBoxLayout, QWidget
+
+    from negpy.desktop.view.styles.templates import HEADER_BUTTON_SIZE, field_label
+    from negpy.desktop.view.widgets.sliders import align_slider_columns
+
+    card = QWidget()
+    body = QVBoxLayout(card)
+    slider = CompactSlider("Sharpening", 0.0, 1.0, 0.5)
+    body.addWidget(slider)
+    row = QHBoxLayout()
+    combo = QComboBox()
+    button = QPushButton()
+    button.setFixedSize(HEADER_BUTTON_SIZE, HEADER_BUTTON_SIZE)
+    button.setProperty("value_column", True)
+    row.addWidget(field_label("Method"))
+    row.addWidget(combo, 1)
+    row.addWidget(button)
+    body.addLayout(row)
+    align_slider_columns(card)
+    card.resize(400, 100)
+    card.show()
+    qapp.processEvents()
+
+    track_right = slider.x() + slider.slider.geometry().right()
+    assert combo.geometry().right() == track_right
+    assert track_right < button.x() and button.geometry().right() <= card.width()
