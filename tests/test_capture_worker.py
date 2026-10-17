@@ -221,6 +221,36 @@ def test_meter_probes_once_in_scratch_and_reports_the_reading(tmp_path, monkeypa
     assert reading.measured == pytest.approx(0.6 * CLIP_CEILING, rel=0.01)
 
 
+def test_a_white_light_probe_meters_after_the_cameras_white_balance(tmp_path, monkeypatch):
+    import numpy as np
+
+    import negpy.infrastructure.capture.raw_demosaic as demosaic_module
+    from negpy.desktop.workers.capture_worker import ExposureProbeRequest
+    from negpy.services.capture.calibration import CLIP_CEILING
+
+    worker = CaptureWorker()
+
+    class Camera:
+        def capture(self, path, shutter=None, **_kwargs):
+            written = Path(path).with_suffix(".ARW")
+            written.write_bytes(b"probe")
+            return str(written)
+
+    monkeypatch.setattr(worker, "_acquire_camera", lambda: Camera())
+    monkeypatch.setattr(
+        demosaic_module, "linear_demosaic", lambda _path, half_size=False: np.full((60, 90, 3), 0.3 * CLIP_CEILING, np.float32)
+    )
+    monkeypatch.setattr(demosaic_module, "as_shot_wb", lambda _path: [2.0, 1.0, 1.5])
+    readings = []
+    worker.exposure_probe_finished.connect(readings.append)
+
+    worker.run_exposure_probe(ExposureProbeRequest(shutter="1/30", wb_decode=True))
+    worker.run_exposure_probe(ExposureProbeRequest(shutter="1/30"))
+
+    assert readings[0][1].measured == pytest.approx(0.6 * CLIP_CEILING, rel=0.01)  # red, after its 2x gain
+    assert readings[1][1].measured == pytest.approx(0.3 * CLIP_CEILING, rel=0.01)  # a narrowband frame decodes linear
+
+
 def test_a_probe_that_cannot_be_metered_reports_without_dropping_the_session(tmp_path, monkeypatch):
     import numpy as np
 

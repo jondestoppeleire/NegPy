@@ -259,6 +259,8 @@ class _PendingCaptureImport:
     capture_frame: Optional[int] = None
     sensor_profile: str = ""
     sensor_matrix: Optional[tuple] = None
+    linear_raw: Optional[bool] = None  # the rig's decode for this frame; None leaves the sticky default
+    narrowband_scan: bool = False
 
 
 def _interactive_proxy(raw: Optional[Any]) -> Optional[Any]:
@@ -2812,6 +2814,16 @@ class AppController(QObject):
         pending_import = self._pending_capture_imports.pop(_capture_import_key(file_path), None)
         if pending_import is not None and pending_import.process_mode is not None:
             self.state.config = with_process_mode(self.state.config, pending_import.process_mode)
+            self.state.is_dirty = True
+        if pending_import is not None and pending_import.linear_raw is not None:
+            # The rig's decode, set on the captured frame itself: a camera under white light wants
+            # the as-shot white balance, which the meter's target allows for; narrowband light does not.
+            self.state.config = replace(
+                self.state.config,
+                process=replace(
+                    self.state.config.process, linear_raw=pending_import.linear_raw, narrowband_scan=pending_import.narrowband_scan
+                ),
+            )
             self.state.is_dirty = True
         if pending_import is not None and pending_import.sensor_matrix is not None:
             # The roll default covers a frame in a roll; this covers one scanned outside any.
@@ -6788,27 +6800,38 @@ class AppController(QObject):
         capture_frame = getattr(req, "frame_number", None) if req is not None else None
         if white:  # slides / B&W negatives force a positive process
             mode = WhiteCaptureMode(req.white_process_mode)
-            target = {WhiteCaptureMode.E6: ProcessMode.E6, WhiteCaptureMode.BW: ProcessMode.BW}.get(mode)
+            target = {WhiteCaptureMode.E6: ProcessMode.E6, WhiteCaptureMode.BW: ProcessMode.BW, WhiteCaptureMode.C41: ProcessMode.C41}.get(
+                mode
+            )
+            linear_raw, narrowband = scan_setup_values("camera", "white")
             self._pending_capture_imports[_capture_import_key(main[0])] = _PendingCaptureImport(
                 process_mode=target,
                 detect_mode=target is None,
                 capture_roll=capture_roll,
                 capture_frame=capture_frame,
+                linear_raw=linear_raw,
+                narrowband_scan=narrowband,
             )
         elif rgb:
             # Narrowband RGB exposures carry no broadband orange-mask signal for the classifier,
             # so they import as C-41 unless capture metadata says otherwise.
+            linear_raw, narrowband = scan_setup_values("camera", "narrowband")
             self._pending_capture_imports[_capture_import_key(main[0])] = _PendingCaptureImport(
                 process_mode=ProcessMode.C41,
                 capture_roll=capture_roll,
                 capture_frame=capture_frame,
                 sensor_profile=sensor_profile if sensor_matrix is not None else "",
                 sensor_matrix=sensor_matrix,
+                linear_raw=linear_raw,
+                narrowband_scan=narrowband,
             )
         elif req is not None:
+            linear_raw, narrowband = scan_setup_values("camera", "white")
             self._pending_capture_imports[_capture_import_key(main[0])] = _PendingCaptureImport(
                 capture_roll=capture_roll,
                 capture_frame=capture_frame,
+                linear_raw=linear_raw,
+                narrowband_scan=narrowband,
             )
         # The capture shot these three exposures for one frame, in red/green/blue order
         # (CaptureResult.paths), so hand discovery the triplet instead of asking it to

@@ -75,6 +75,7 @@ class ExposureProbeRequest:
     shutter_candidates: tuple[str, ...] = ()  # this body's writable ladder; empty = the built-in one
     medium: Optional[str] = None  # "negative" or "positive" from the preset; None lets the classifier decide
     session: int = 0  # the live-view session that asked, echoed back so a stopped one's report is dropped
+    wb_decode: bool = False  # the import applies the as-shot white balance, so the target must hold after its gain
 
 
 @dataclass(frozen=True)
@@ -724,7 +725,7 @@ class CaptureWorker(QObject):
         # failure that kept the camera, or a capture failure that closed it.
         import tempfile
 
-        from negpy.infrastructure.capture.raw_demosaic import linear_demosaic
+        from negpy.infrastructure.capture.raw_demosaic import as_shot_wb, linear_demosaic
         from negpy.services.capture.meter import meter_frame
 
         try:
@@ -749,7 +750,8 @@ class CaptureWorker(QObject):
                 return
             try:
                 img = linear_demosaic(written, half_size=True)
-                reading = meter_frame(img, req.shutter, req.shutter_candidates, medium=req.medium)
+                wb = as_shot_wb(written) if req.wb_decode else None
+                reading = meter_frame(img, req.shutter, req.shutter_candidates, medium=req.medium, wb=wb)
             except Exception as e:  # the camera session stands; only the decode or the maths failed
                 logger.exception("meter failed")
                 self.exposure_probe_failed.emit((req.session, str(e), False))

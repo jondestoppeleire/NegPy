@@ -113,10 +113,15 @@ def shutter_at_most(seconds: float, candidates: tuple[str, ...]) -> str | None:
     return None
 
 
-def meter_frame(img: np.ndarray, shutter: str, candidates: tuple[str, ...] = (), medium: str | None = None) -> MeterReading:
+def meter_frame(
+    img: np.ndarray, shutter: str, candidates: tuple[str, ...] = (), medium: str | None = None, wb: list | None = None
+) -> MeterReading:
     """Meter one decoded linear probe (`HxWx3`, counts to `CLIP_CEILING`) shot at `shutter`.
-    `medium` is "negative" or "positive" from the preset, or None for the classifier's call."""
+    `medium` is "negative" or "positive" from the preset, or None for the classifier's call.
+    `wb` is the as-shot white balance the import applies to a white-light frame: the target
+    holds after its gain, while the clip test reads the sensor itself."""
     candidates = tuple(candidates) or SHUTTER_CANDIDATES
+    gain = np.asarray(wb, np.float32) / min(wb) if wb else np.ones(3, np.float32)
     linear = np.clip(img.astype(np.float32) / CLIP_CEILING, 0.0, 1.0)
     if medium is None:
         medium = "positive" if detect_process_mode(linear) == ProcessMode.E6 else "negative"
@@ -145,7 +150,7 @@ def meter_frame(img: np.ndarray, shutter: str, candidates: tuple[str, ...] = (),
         # A saturated p99.9 is a lower bound, not a level: step down and meter again, so repeated
         # probes converge on the same shutter whichever side of saturation a few pixels sit.
         clipped = float(levels.max()) >= _SATURATION
-    measured = float(levels.max()) * CLIP_CEILING
+    measured = float((levels * gain).max()) * CLIP_CEILING
 
     probe_seconds = true_seconds(shutter, candidates)
     needed = CLIPPED_STEP_STOPS if clipped else float(np.log2(TARGET_FRACTION * CLIP_CEILING / max(measured, 1.0)))

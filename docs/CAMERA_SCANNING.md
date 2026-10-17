@@ -74,9 +74,10 @@ the picture's highlights must.
 
 **Meter.** Press **Meter** in Live View, or the **Aperture Priority Meter** gauge beside
 CAMERA EXPOSURE on the card, to take one RAW probe at the current exposure. The card's gauge
-opens Live View when it is closed. On **White Light, B&W Negative**, or a color negative on the AUTO
-preset, the clear base (read in the rebate around the picture) goes to 90% of the RAW range
-in the brightest channel, the same target as Calibrate. On **White Light, Slide** the
+opens Live View when it is closed. On **White Light, B&W Negative**, **White Light, Color
+Negative**, or a color negative on the AUTO preset, the clear base (read in the rebate around
+the picture) goes to 90% of the range in the brightest channel, the same target as Calibrate.
+A white-light frame imports with the camera's white balance, so that gain is in its target. On **White Light, Slide** the
 picture's brightest highlights go there. AUTO classifies the probe as an import does, so it
 meters a misread slide as a negative until you pick the Slide preset. With no rebate, or a
 rebate no brighter than the picture, Meter uses the picture's highlights.
@@ -134,9 +135,9 @@ PRESET and pick **Set by Hand** to unlock the sliders and the exposure steppers.
 mode** (triplet or single capture); Scan uses them as they stand, and the save (floppy)
 button keeps them as a preset. Only the
 white-light presets use the White channel, because the Scanlight cannot light it together
-with RGB. The three white-light presets differ only in film type: AUTO classifies each
-capture, **B&W Negative** and **Slide** fix it, for the import and for Meter. **White
-Light, Slide + IR**, **Trichrome, Color Negative** and **Trichrome + IR, Color Negative**
+with RGB. The white-light presets differ only in film type: AUTO classifies each capture,
+**B&W Negative**, **Color Negative** and **Slide** fix it, for the import and for Meter. **White
+Light + IR, Color Negative**, **White Light + IR, Slide**, **Trichrome, Color Negative** and **Trichrome + IR, Color Negative**
 need no calibration either: full LED power at the camera's shutter, which Meter sets, and
 a **+ IR** preset ends each frame with an infrared exposure at **IR Shutter**. The
 **Infrared** toggle beside IR Shutter does the same for any preset.
@@ -144,7 +145,7 @@ a **+ IR** preset ends each frame with an infrared exposure at **IR Shutter**. T
 **Scan.** Pick an output folder and a preset, then press **Scan** for each frame. Files go
 to an auto-numbered per-roll subfolder and are imported and merged automatically. A
 single-capture preset writes one file per frame. **Retake** shoots the current frame again
-without advancing the counter. **Capture Delay** holds both for up to 8 s before the first
+without advancing the counter. **Capture Delay** holds both for up to 10 s before the first
 exposure, so a table that shakes when you let go of the camera can settle; **Stop** ends the
 wait. **Delay between exposures** adds a pause between the red, green and blue captures, for
 older bodies that lock up the USB/PTP link when a new capture command arrives too soon. In

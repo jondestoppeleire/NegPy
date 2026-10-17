@@ -146,7 +146,7 @@ class LiveViewWindow(QDialog):
     retakeRequested = pyqtSignal()
     meterRequested = pyqtSignal()
     channelsChanged = pyqtSignal(str)  # the letter whose toggle moved: R, G, B or IR
-    captureDelayChanged = pyqtSignal(int)  # seconds, stepped on the toolbar's delay stepper
+    captureDelayChanged = pyqtSignal(float)  # seconds, stepped on the toolbar's delay stepper
 
     def __init__(self, parent=None, *, repo=None) -> None:
         super().__init__(parent)
@@ -164,13 +164,12 @@ class LiveViewWindow(QDialog):
         bar.addWidget(self.scan_btn, 2)
         # The card's Capture Delay, where Scan is pressed. Mirrored both ways by the panel.
         self.delay_stepper = SettingStepper()
-        for seconds in range(9):
-            self.delay_stepper.addItem(f"{seconds} s", seconds)
+        self.set_capture_delay(0.0)
         self.delay_stepper.setToolTip(
             "Capture Delay: wait this long after Scan or Retake before the shot, so a table that shakes when you let go can settle. "
             "Stop ends the wait."
         )
-        self.delay_stepper.activated.connect(self.captureDelayChanged.emit)
+        self.delay_stepper.activated.connect(lambda _i: self.captureDelayChanged.emit(float(self.delay_stepper.currentData())))
         bar.addWidget(self.delay_stepper)
         bar.addWidget(self.retake_btn, 1)
         # Which exposures Scan and Retake shoot: toggles in the channel colors. The panel shows
@@ -427,8 +426,17 @@ class LiveViewWindow(QDialog):
         self.progress.setStyleSheet("")
         self.progress.setFormat("Capturing… %p%")
 
-    def set_capture_delay(self, seconds: int) -> None:
-        self.delay_stepper.setCurrentIndex(int(seconds))
+    #: The delay stepper's rungs; the card's slider sets any value, which joins the ladder in place.
+    DELAY_LADDER_S = (0.0, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0)
+
+    def set_capture_delay(self, seconds: float) -> None:
+        seconds = round(float(seconds), 2)
+        self.delay_stepper.blockSignals(True)
+        self.delay_stepper.clear()
+        for rung in sorted(set(self.DELAY_LADDER_S) | {seconds}):
+            self.delay_stepper.addItem(f"{rung:g} s", rung)
+        self.delay_stepper.setCurrentIndex(self.delay_stepper.findData(seconds))
+        self.delay_stepper.blockSignals(False)
 
     def set_scanning(self, active: bool) -> None:
         """Mirror the panel's Scan/Stop toggle on the pop-up button."""

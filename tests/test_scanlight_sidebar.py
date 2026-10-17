@@ -151,6 +151,54 @@ def test_builtin_white_preset_sets_white_mode():
     assert w._settings.white_process_mode is WhiteCaptureMode.AUTO  # B&W/slide merged → NegPy autodetects
 
 
+def test_white_light_color_negative_imports_as_c41_with_live_steppers_and_the_meter(tmp_path, monkeypatch):
+    import negpy.desktop.view.sidebar.scanlight as sl
+
+    p = tmp_path / "settings.json"
+    p.write_text(_shutter_json(cur=1))
+    monkeypatch.setattr(sl, "default_settings_path", lambda: str(p))
+    w = _sidebar()
+    w._camera_verified = True
+    w._set_rgb_mode(True)
+    w.lv_btn.blockSignals(True)
+    w.lv_btn.setChecked(True)  # streaming, so the meter probes at once
+    w.lv_btn.blockSignals(False)
+    idx = w.preset_combo.findData("White Light, Color Negative")
+    w.preset_combo.setCurrentIndex(idx)
+    w._on_preset_selected(idx)
+
+    assert w._settings.white_mode is True
+    assert w._settings.white_process_mode is WhiteCaptureMode.C41
+    assert w._free_exposure and w.shutter_stepper.isEnabled() and w.shutter_stepper.currentText() == "1/60"
+    assert not w._exposure_widget.isHidden()  # the meter and the steppers stay on the card under white light
+    assert w.capture_mode_row.isHidden()  # one white exposure: Triplet/Single does not apply
+
+    w._on_meter()
+    req = w.controller.start_exposure_probe.call_args.args[0]
+    assert req.medium == "negative" and req.wb_decode is True
+
+
+def test_a_trichrome_probe_meters_the_linear_decode(tmp_path, monkeypatch):
+    import negpy.desktop.view.sidebar.scanlight as sl
+
+    p = tmp_path / "settings.json"
+    p.write_text(_shutter_json(cur=1))
+    monkeypatch.setattr(sl, "default_settings_path", lambda: str(p))
+    w = _sidebar()
+    w._camera_verified = True
+    w._set_rgb_mode(True)
+    w.lv_btn.blockSignals(True)
+    w.lv_btn.setChecked(True)
+    w.lv_btn.blockSignals(False)
+    idx = w.preset_combo.findData("Trichrome, Color Negative")
+    w.preset_combo.setCurrentIndex(idx)
+    w._on_preset_selected(idx)
+
+    w._on_meter()
+
+    assert w.controller.start_exposure_probe.call_args.args[0].wb_decode is False
+
+
 def test_white_preset_does_not_inherit_the_rgb_shutter(tmp_path):
     """Issue #746: a white-light frame has no baked exposure — its live-view steppers own it.
     Carrying the previous RGB preset's shutter over forced a narrowband value onto the body,
@@ -394,14 +442,16 @@ def test_the_live_view_delay_stepper_and_the_card_slider_are_one_setting():
     assert w.lv_window.delay_stepper.currentText() == "0 s"
 
     w.lv_window.delay_stepper._step(1)
-    w.lv_window.delay_stepper._step(1)
-    assert w._settings.capture_delay_s == 2.0
-    assert w.capture_delay_slider.value() == 2
+    w.lv_window.delay_stepper._step(1)  # up the ladder: 0.1, 0.25
+    assert w._settings.capture_delay_s == 0.25
+    assert w.capture_delay_slider.value() == 0.25
 
-    w.capture_delay_slider.setValue(5)
-    w.capture_delay_slider.valueChanged.emit(5.0)  # as a drag does
-    assert w._settings.capture_delay_s == 5.0
-    assert w.lv_window.delay_stepper.currentText() == "5 s"
+    w.capture_delay_slider.setValue(0.15)  # a value the ladder has no rung for
+    w.capture_delay_slider.valueChanged.emit(0.15)  # as a drag does
+    assert w._settings.capture_delay_s == 0.15
+    assert w.lv_window.delay_stepper.currentText() == "0.15 s"
+    w.lv_window.delay_stepper._step(1)
+    assert w._settings.capture_delay_s == 0.25  # the next rung, not 0.15 again
 
 
 def test_a_live_view_step_under_an_editable_exposure_is_what_the_scan_forces(tmp_path, monkeypatch):
@@ -1400,7 +1450,7 @@ def test_white_preset_clears_the_exposure_fields():
     w.preset_combo.setCurrentIndex(idx)
     w._on_preset_selected(idx)
     assert w.iso_stepper.currentText() == "" and w._settings.iso == ""  # white-light frees the exposure
-    assert w._exposure_widget.isHidden()  # and the fields hide — you set exposure in the live view
+    assert not w._exposure_widget.isHidden() and w.iso_stepper.isEnabled()  # the steppers stay and drive the body
 
 
 def test_manual_preset_option_unlocks_editing():
@@ -2351,7 +2401,7 @@ def test_built_in_trichrome_presets_scan_without_calibration_and_carry_infrared(
     assert "infrared exposure" in w.preset_hint.text()
     w.ir_toggle.setChecked(False)
     assert not w._settings.infrared
-    combo.setCurrentIndex(combo.findData("White Light, Slide + IR"))
+    combo.setCurrentIndex(combo.findData("White Light + IR, Slide"))
     w._on_preset_selected(combo.currentIndex())
     assert w._settings.white_mode and w._settings.infrared
     w._on_poll_status({**_poll(usb_ok=True), "light_has_ir": False})  # a light without infrared LEDs drops it

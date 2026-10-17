@@ -28,7 +28,7 @@ _UNMIX_CHOICES = (
     ),
     (
         SensorUnmix.DENSITY,
-        "Applies the calibration to densities, linearized at the film base read from the frame. "
+        "Applies the calibration to densities, linearized at the clear film base, the unexposed rebate between frames, read from the frame. "
         "Never reaches zero and gives less grain in saturated colors, which come out slightly less vivid.",
     ),
 )

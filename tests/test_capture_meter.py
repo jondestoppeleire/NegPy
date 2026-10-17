@@ -205,3 +205,15 @@ def test_a_clipped_probe_past_the_fastest_rung_still_steps_to_it():
     assert reading.clipped and reading.recommended == "1/250"
     at_fastest = meter_frame(img, "1/250", ladder, medium="positive")
     assert at_fastest.recommended is None  # nothing faster to step to
+
+
+def test_the_white_light_target_allows_for_the_cameras_white_balance():
+    # The import applies the as-shot multipliers before clipping, so the brightest channel after
+    # that gain is what must land at the target; the sensor itself is not clipped.
+    plain = meter_frame(_frame(border=0.6, picture=0.25), "1/30", medium="negative")
+    balanced = meter_frame(_frame(border=0.6, picture=0.25), "1/30", medium="negative", wb=[2.6, 1.0, 1.66])
+
+    assert balanced.measured == pytest.approx(0.6 * 2.6 * CLIP_CEILING, rel=0.02)
+    assert balanced.clipped is False
+    assert _is_ceiling(balanced.recommended, true_seconds("1/30") * 0.9 / (0.6 * 2.6))
+    assert true_seconds(balanced.recommended) < true_seconds(plain.recommended)

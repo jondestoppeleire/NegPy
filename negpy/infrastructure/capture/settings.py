@@ -9,10 +9,11 @@ from negpy.features.process.models import ProcessMode
 
 
 class WhiteCaptureMode(StrEnum):
-    """What a white-light capture is: a slide, a B&W negative, or left to autodetect."""
+    """What a white-light capture is: a slide, a B&W or color negative, or left to autodetect."""
 
     AUTO = "auto"
     BW = ProcessMode.BW
+    C41 = ProcessMode.C41
     E6 = ProcessMode.E6
 
     @classmethod

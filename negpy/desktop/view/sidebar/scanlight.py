@@ -51,7 +51,7 @@ from negpy.desktop.view.styles.templates import (
 )
 from negpy.desktop.view.styles.theme import THEME
 from negpy.desktop.view.widgets.choice_button import ChoiceButton
-from negpy.desktop.view.widgets.sliders import CompactSlider, SliderGroup
+from negpy.desktop.view.widgets.sliders import CompactSlider, LogSlider, SliderGroup
 from negpy.infrastructure import simulated
 from negpy.infrastructure.capture.gphoto import default_settings_path
 from negpy.infrastructure.capture.settings import ScanlightSettings, WhiteCaptureMode
@@ -104,8 +104,10 @@ class _Builtin:
 _BUILTIN_PRESETS = {
     "White Light (B&W or Slide Film)": _Builtin(white=True),
     "White Light, B&W Negative": _Builtin(white=True, process=WhiteCaptureMode.BW),
+    "White Light, Color Negative": _Builtin(white=True, process=WhiteCaptureMode.C41),
+    "White Light + IR, Color Negative": _Builtin(white=True, process=WhiteCaptureMode.C41, infrared=True),
     "White Light, Slide": _Builtin(white=True, process=WhiteCaptureMode.E6),
-    "White Light, Slide + IR": _Builtin(white=True, process=WhiteCaptureMode.E6, infrared=True),
+    "White Light + IR, Slide": _Builtin(white=True, process=WhiteCaptureMode.E6, infrared=True),
     "Trichrome, Color Negative": _Builtin(white=False),
     "Trichrome + IR, Color Negative": _Builtin(white=False, infrared=True),
 }
@@ -337,7 +339,7 @@ class ScanlightSidebar(QWidget):
         self._rgb_hint = hint_label("You can also connect the Scanlight to scan in RGB.")
         self._rgb_hint.setVisible(False)
         cam.addWidget(self._rgb_hint)
-        self.capture_delay_slider = CompactSlider("Capture Delay", 0, 8, 0, step=1, precision=1, unit=" s")
+        self.capture_delay_slider = LogSlider("Capture Delay", 0, 10, 0, log_floor=0.1, unit=" s")
         self.capture_delay_slider.setValue(self._settings.capture_delay_s)
         self.capture_delay_slider.setToolTip(
             "Wait this long after Scan or Retake before the shot, so a table that shakes when you let go can settle. Stop ends the wait."
@@ -418,7 +420,9 @@ class ScanlightSidebar(QWidget):
         _exp.addLayout(header_row(section_subheader("CAMERA EXPOSURE"), self.meter_btn))
         self.capture_btn = ChoiceButton(CAPTURE_MODES, CAPTURE_MODE_TOOLTIP)
         self.capture_btn.setEnabled(False)  # the preset's mode, editable only while building a manual preset
-        _exp.addLayout(field_row("Capture mode", self.capture_btn))
+        self.capture_mode_row = QWidget()  # a white-light preset has one exposure, so the row hides there
+        self.capture_mode_row.setLayout(field_row("Capture mode", self.capture_btn))
+        _exp.addWidget(self.capture_mode_row)
         self.iso_stepper = SettingStepper()
         self.shutter_stepper = SettingStepper()
         self.aperture_stepper = SettingStepper()
@@ -516,9 +520,9 @@ class ScanlightSidebar(QWidget):
         self.output.changed.connect(self._apply_gating)
         self.inter_exposure_delay_slider.valueChanged.connect(self._update_settings_from_ui)
         self.capture_delay_slider.valueChanged.connect(self._update_settings_from_ui)
-        self.capture_delay_slider.valueChanged.connect(lambda v: self.lv_window.set_capture_delay(round(v)))
+        self.capture_delay_slider.valueChanged.connect(self.lv_window.set_capture_delay)
         self.lv_window.captureDelayChanged.connect(self._on_lv_capture_delay)
-        self.lv_window.set_capture_delay(round(self._settings.capture_delay_s))
+        self.lv_window.set_capture_delay(self._settings.capture_delay_s)
 
         self.controller.capture_light_set.connect(self._on_light_set)
         self.controller.capture_progress.connect(self._on_progress)
@@ -765,6 +769,12 @@ class ScanlightSidebar(QWidget):
             self._show_lone(self.shutter_stepper, "")
             self._apply_preset_exposure("", "")  # white-light doesn't lock exposure — the steppers do
             self._set_infrared(builtin.infrared)
+            # The exposure is the operator's, as under the built-in Trichrome: the steppers fill from
+            # the body and drive it, and the meter sits beside them.
+            self._free_exposure = True
+            self._settings_loaded = False
+            self._manual_populate_pending = True
+            self._refresh_camera_settings()
         elif builtin is not None:
             self._apply_builtin_trichrome()
             self._set_infrared(builtin.infrared)
@@ -805,7 +815,7 @@ class ScanlightSidebar(QWidget):
         if self._manual_mode:
             text = "Set the levels and the exposure. Scan uses them as they stand; the save button keeps them as a preset."
         elif builtin is not None and builtin.white:
-            text = "Single white-light exposure — for B&W or slide film."
+            text = "Single white-light exposure."
         elif builtin is not None:
             text = (
                 "Red, green and blue at full power, at the camera's shutter: the Aperture Priority Meter sets it, or + calibrates a stock."
@@ -1222,7 +1232,7 @@ class ScanlightSidebar(QWidget):
                 int(self.r_slider.value()), int(self.g_slider.value()), int(self.b_slider.value()), 0, self._settings.port
             )
         elif self._rgb_mode:
-            medium = {WhiteCaptureMode.BW: "negative", WhiteCaptureMode.E6: "positive"}.get(
+            medium = {WhiteCaptureMode.BW: "negative", WhiteCaptureMode.C41: "negative", WhiteCaptureMode.E6: "positive"}.get(
                 WhiteCaptureMode(self._settings.white_process_mode)
             )
         else:
@@ -1234,7 +1244,14 @@ class ScanlightSidebar(QWidget):
         self._set_status("Metering…")
         self._meter_fastest = candidates[0]
         self.controller.start_exposure_probe(
-            ExposureProbeRequest(shutter=shutter, shutter_candidates=candidates, medium=medium, session=self._lv_session)
+            ExposureProbeRequest(
+                shutter=shutter,
+                shutter_candidates=candidates,
+                medium=medium,
+                session=self._lv_session,
+                # A white-light or camera-only frame imports with the camera's white balance; the target must hold after it.
+                wb_decode=not (self._rgb_mode and not self._settings.white_mode),
+            )
         )
 
     def _on_meter_finished(self, reading) -> None:
@@ -1876,7 +1893,7 @@ class ScanlightSidebar(QWidget):
         self.status_strip.set_progress(_CAPTURE_BAR, progress)
         self.lv_window.set_progress(progress)
 
-    def _on_lv_capture_delay(self, seconds: int) -> None:
+    def _on_lv_capture_delay(self, seconds: float) -> None:
         self.capture_delay_slider.setValue(seconds)  # emits nothing, so the settings write is explicit
         self._update_settings_from_ui()
 
@@ -2161,10 +2178,10 @@ class ScanlightSidebar(QWidget):
         self.lv_window.settings_widget.setVisible(not locked)
         if not hasattr(self, "inter_exposure_delay_slider"):
             return  # first call lands during __init__, before the RGB section is built
-        self._exposure_widget.setVisible(not self._settings.white_mode)
         editable = self._manual_mode
         exposure_editable = editable or self._free_exposure
         self.capture_btn.setEnabled(editable)
+        self.capture_mode_row.setVisible(not self._settings.white_mode)
         self.inter_exposure_delay_slider.setEnabled(not self._settings.single_capture)
         for slider in (self.r_slider, self.g_slider, self.b_slider):
             slider.setEnabled(editable)
