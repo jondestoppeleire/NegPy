@@ -273,7 +273,7 @@ class SensorSidebar(BaseSidebar):
         """
         config = self.state.config
         triplet = is_rgb_triplet(config.rgbscan) or stitch_has_triplets(config.stitch)
-        reason = unmix_block_reason(conf) or ("triplet" if triplet else "")
+        reason = ("triplet" if triplet else "") or unmix_block_reason(conf)  # the frame's own reason first: a decode change cannot lift it
         available = not reason
         self.sensor_combo.setCurrentText(conf.sensor_profile if available else SensorProfiles.NONE_NAME)
         self.sensor_combo.setEnabled(available)
