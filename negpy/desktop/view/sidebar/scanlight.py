@@ -401,7 +401,9 @@ class ScanlightSidebar(QWidget):
         self.r_slider.setToolTip("Red LED level")
         self.g_slider.setToolTip("Green LED level")
         self.b_slider.setToolTip("Blue LED level")
-        self.w_slider.setToolTip("White LED — used only by the white-light preset; the Scanlight can't light it together with RGB")
+        self.w_slider.setToolTip(
+            "White LED — used only by the white-light preset; the Scanlight can't light it together with the red, green and blue LEDs"
+        )
         for slider in (self.r_slider, self.g_slider, self.b_slider, self.w_slider):
             recipe.addWidget(slider)
         self.off_btn = labeled_action("fa5s.power-off", " Light Off", "Turn all Scanlight channels off")
@@ -815,7 +817,7 @@ class ScanlightSidebar(QWidget):
 
     def _refresh_preset_hint(self) -> None:
         """One-line note under the preset row for the current selection — white-light presets
-        do a single exposure. Empty/hidden for RGB film-stock presets or no selection."""
+        do a single exposure. Empty/hidden for narrowband film-stock presets or no selection."""
         name = self.preset_combo.currentData()
         builtin = _BUILTIN_PRESETS.get(name)
         if self._manual_mode:
@@ -1719,9 +1721,9 @@ class ScanlightSidebar(QWidget):
                 if result.sensor_matrix is not None:
                     SensorProfiles.save(name, list(result.sensor_matrix))
                     sensor_profile = name
-                    profile_note = " and its sensor profile"
+                    profile_note = " and its sensor crosstalk profile"
                 else:
-                    profile_note = ", with no sensor profile: the probe exposures were too dim to measure one"
+                    profile_note = ", with no sensor crosstalk profile: the probe exposures were too dim to measure one"
             self._save_current_as_preset(name, sensor_profile)
             self._lv_target = self.lv_image
             self.calib_window.hide()

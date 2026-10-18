@@ -52,7 +52,7 @@ class SensorSidebar(BaseSidebar):
             (("fa5s.palette", "Camera WB"), ("fa5s.sliders-h", "Linear RAW")),
             "How a RAW file decodes. Camera WB applies the camera's as-shot white balance. Linear RAW "
             "decodes with neutral multipliers (1,1,1,1), a clean starting point for narrowband light, "
-            "and the one Single-Shot Narrowband Calibration needs",
+            "and the one a Sensor Crosstalk Profile needs",
             data=(False, True),
         )
         self.linear_raw_btn.setCurrentIndex(self.linear_raw_btn.findData(conf.linear_raw))
@@ -75,18 +75,18 @@ class SensorSidebar(BaseSidebar):
         self.sensor_combo.addItems(SensorProfiles.list_profiles())
         self.sensor_combo.setToolTip(
             "<table width='280'><tr><td>"
-            "Sensor crosstalk correction for single-shot narrowband scans: un-mixes the camera's "
+            "Sensor crosstalk correction for a single exposure under narrowband light: un-mixes the camera's "
             "cross-channel response in the LINEAR capture, before inversion — a fixed property of "
             "your sensor + light, independent of film. Calibrate it from three bare-light R/G/B "
             "exposures; custom .toml matrices live in the NegPy/sensor folder. Skipped automatically "
-            "for RGB-triplet assets, when Linear RAW is off, and on transparencies — which are not "
+            "for a Trichrome triplet, when Linear RAW is off, and on transparencies — which are not "
             "scanned with narrowband light. Re-run Roll Analysis after changing this."
             "</td></tr></table>"
         )
         self.calibrate_sensor_btn = self._icon_action(
             "fa5s.vials", "Calibrate the sensor from three bare-light R/G/B exposures: files, or the tethered camera"
         )
-        self.layout.addLayout(header_row(section_subheader("SINGLE-SHOT NARROWBAND CALIBRATION"), self.calibrate_sensor_btn))
+        self.layout.addLayout(header_row(section_subheader("SENSOR CROSSTALK PROFILE"), self.calibrate_sensor_btn))
         row.addWidget(self.sensor_label)
         row.addWidget(self.sensor_combo, 1)
         self.layout.addLayout(row)
@@ -110,7 +110,7 @@ class SensorSidebar(BaseSidebar):
         # Muted, not warning: this is the normal state for anyone not using Linear RAW, so it
         # explains the greyed controls rather than flagging a problem. Text and tooltip are set
         # per reason in _apply_gate.
-        self.sensor_hint = hint_label("Requires Linear RAW.")
+        self.sensor_hint = hint_label("")
         self.layout.addWidget(self.sensor_hint)
 
         self.crosstalk_header = section_subheader("CROSSTALK")
@@ -133,8 +133,8 @@ class SensorSidebar(BaseSidebar):
             "are marked (approx) for that reason. They describe the film's dyes alone, so they are only "
             "the whole story where the capture reads each dye cleanly: a Narrowband Scanner (a Coolscan's mono "
             "sensor reads one LED at a time, fully clean; a Pakon's trilinear array comes close, with slight "
-            "residual bleed) or a Trichrome capture, or a Single-Shot Narrowband rig with Single-Shot Narrowband "
-            "Calibration applied. Under a broadband light "
+            "residual bleed) or a Trichrome capture, or a Single Exposure rig with its Sensor Crosstalk "
+            "Profile applied. Under a broadband light "
             "and a Bayer sensor your capture adds its own mixing on top, and a dyes-only matrix will not "
             "describe it.<br><br>"
             "So treat them as starting points and expect to tune: raise Strength until colors separate "
@@ -244,8 +244,8 @@ class SensorSidebar(BaseSidebar):
     # the hint label rather than the combo it describes.
     _SENSOR_BLOCKED = {
         "linear_raw": (
-            "Requires Linear RAW.",
-            "Sensor profiles are calibrated against neutral white balance. With Linear RAW "
+            "Requires Linear RAW, for a Single Exposure under narrowband light.",
+            "A sensor crosstalk profile corrects a single exposure under narrowband light and is calibrated against neutral white balance. With Linear RAW "
             "off, RAW decodes carry the camera's as-shot gains instead, which would misapply "
             "the matrix — so it is skipped. Your selection is remembered.",
         ),

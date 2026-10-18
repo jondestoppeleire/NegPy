@@ -27,9 +27,9 @@ from negpy.desktop.view.widgets.dialog_geometry import remember_dialog_geometry
 from negpy.desktop.view.widgets.floating_panel import float_over_app
 
 # The index is the preset's `single_capture` flag.
-CAPTURE_MODES = (("", "Triplet"), ("", "Single Capture"))
+CAPTURE_MODES = (("", "Trichrome"), ("", "Single Exposure"))
 CAPTURE_MODE_TOOLTIP = (
-    "Triplet takes one exposure per LED and merges them. Single Capture takes one exposure with red, green and blue lit together."
+    "Trichrome takes one exposure per LED and merges them. Single Exposure takes one exposure with red, green and blue lit together."
 )
 
 
@@ -38,11 +38,11 @@ _GUIDE = (
     "Click a patch of clear film base: the gap between frames, the leader or a blank frame. Name the stock, then "
     "Calibrate & Save. The shutter is solved here, so set the ISO and aperture you scan with."
 )
-_SENSOR_PROFILE_OFF_TOOLTIP = "Single Capture only: a triplet reads each LED alone and has no sensor mixing to unmix."
+_SENSOR_PROFILE_OFF_TOOLTIP = "Single Exposure only: a Trichrome triplet reads each LED alone and has no sensor mixing to unmix."
 
 SENSOR_PROFILE_TOOLTIP = (
-    "Also save a sensor profile under the preset's name, measured from the same exposures. "
-    "A roll scanned with the preset takes the profile. Single Capture only."
+    "Also save a sensor crosstalk profile under the preset's name, measured from the same exposures. "
+    "A roll scanned with the preset takes the profile. Single Exposure only."
 )
 
 
@@ -78,8 +78,8 @@ class CalibrationWindow(QDialog):
         self._running = False
         self.capture_btn = ChoiceButton(CAPTURE_MODES, CAPTURE_MODE_TOOLTIP)
         name_row.addWidget(self.capture_btn)
-        self._sensor_profile_wanted = True  # the operator's pick, kept while Triplet shows the toggle off
-        self.sensor_profile_btn = labeled_toggle("fa5s.vials", " Create Sensor Profile", True, SENSOR_PROFILE_TOOLTIP)
+        self._sensor_profile_wanted = True  # the operator's pick, kept while Trichrome shows the toggle off
+        self.sensor_profile_btn = labeled_toggle("fa5s.vials", " Create Sensor Crosstalk Profile", True, SENSOR_PROFILE_TOOLTIP)
         _reserve_checked_width(self.sensor_profile_btn)
         self.sensor_profile_btn.clicked.connect(self._on_sensor_profile_clicked)
         self.capture_btn.currentChanged.connect(lambda _i: self._sync_sensor_profile())
@@ -145,12 +145,12 @@ class CalibrationWindow(QDialog):
         self.sensor_profile_btn.setToolTip(SENSOR_PROFILE_TOOLTIP if single else _SENSOR_PROFILE_OFF_TOOLTIP)
 
     def wants_sensor_profile(self) -> bool:
-        """Whether a finished run saves a sensor profile with the preset."""
+        """Whether a finished run saves a sensor crosstalk profile with the preset."""
         return self.capture_btn.currentIndex() == 1 and self._sensor_profile_wanted
 
     def set_inputs_locked(self, locked: bool) -> None:
         """Freeze the calibration inputs while a run is in progress: film-stock name, capture mode,
-        Create Sensor Profile toggle, base ROI (a click must not move the patch being metered) and the
+        Create Sensor Crosstalk Profile toggle, base ROI (a click must not move the patch being metered) and the
         base ISO/aperture. Re-enabled at any terminal outcome so a failed run can be retried."""
         self._running = locked
         self.name_edit.setEnabled(not locked)
