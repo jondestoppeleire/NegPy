@@ -9,10 +9,11 @@ from negpy.features.process.models import ProcessMode
 
 
 class WhiteCaptureMode(StrEnum):
-    """What a white-light capture is: a slide, a B&W negative, or left to autodetect."""
+    """What a white-light capture is: a slide, a B&W or color negative, or left to autodetect."""
 
     AUTO = "auto"
     BW = ProcessMode.BW
+    C41 = ProcessMode.C41
     E6 = ProcessMode.E6
 
     @classmethod
@@ -40,6 +41,8 @@ class ScanlightSettings:
     white_mode: bool = False
     w_level: int = 0  # RGB scanning uses no white; a white-light preset raises it to 255
     shutter_w: str = ""
+    shutter_ir: str = ""  # the infrared exposure's own shutter, set by hand; "" = the body's current
+    infrared: bool = False  # end every frame with an infrared exposure at shutter_ir
     iso: str = ""  # RGB preset's calibrated ISO/aperture, forced on the body at scan time
     aperture: str = ""  # "" for a manual-aperture lens (set by hand on the ring)
     single_capture: bool = False  # the RGB preset lights R, G and B together for one exposure
